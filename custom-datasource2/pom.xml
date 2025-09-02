@@ -8,13 +8,13 @@
 
     <!-- 项目坐标 -->
     <groupId>com.example</groupId>
-    <artifactId>custom-movie-datasource</artifactId>
+    <artifactId>secondary-movie-datasource</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <!-- 项目描述 -->
-    <name>Custom Movie Datasource</name>
-    <description>自定义电影数据源实现示例</description>
+    <name>Secondary Movie Datasource</name>
+    <description>第二个自定义电影数据源实现示例</description>
 
     <!-- 项目属性 -->
     <properties>

@@ -1,21 +1,17 @@
-package org.example.get_movie_data.model;
+package com.example.custom2;
 
-import javax.xml.bind.annotation.*;
 import java.util.List;
 
 /**
- * 电影信息模型类
+ * 电影信息模型类（第二个外部数据源版本）
  * 
- * 用于表示电影的基本信息，包括名称、描述、是否完结、播放地址、集数和剧集列表等。
- * 该类支持XML序列化和反序列化。
+ * 这是第二个外部数据源使用的电影信息模型类，与主项目中的模型类结构相似但独立。
+ * 适配器会自动将此类转换为主项目中的Movie类。
  * 
- * @author get_movie_data team
+ * @author secondary-datasource team
  * @version 1.0.0
  */
-@XmlRootElement(name = "movie")
-@XmlType(propOrder = {"name", "description", "finished", "playUrl", "episodes", "episodeList"})
 public class Movie {
-    
     /** 电影名称 */
     private String name;
     
@@ -28,7 +24,7 @@ public class Movie {
     /** 播放地址 */
     private String playUrl;
     
-    /** 集数 */
+    /** 总集数 */
     private int episodes;
     
     /** 剧集列表 */
@@ -39,7 +35,6 @@ public class Movie {
      * 
      * @return 电影名称
      */
-    @XmlElement(name = "name")
     public String getName() {
         return name;
     }
@@ -58,7 +53,6 @@ public class Movie {
      * 
      * @return 电影描述
      */
-    @XmlElement(name = "description")
     public String getDescription() {
         return description;
     }
@@ -77,7 +71,6 @@ public class Movie {
      * 
      * @return true表示已完结，false表示未完结
      */
-    @XmlElement(name = "finished")
     public boolean isFinished() {
         return finished;
     }
@@ -96,7 +89,6 @@ public class Movie {
      * 
      * @return 播放地址
      */
-    @XmlElement(name = "playUrl")
     public String getPlayUrl() {
         return playUrl;
     }
@@ -115,7 +107,6 @@ public class Movie {
      * 
      * @return 总集数
      */
-    @XmlElement(name = "episodes")
     public int getEpisodes() {
         return episodes;
     }
@@ -134,8 +125,6 @@ public class Movie {
      * 
      * @return 剧集列表
      */
-    @XmlElementWrapper(name = "episodeList")
-    @XmlElement(name = "episode")
     public List<Episode> getEpisodeList() {
         return episodeList;
     }
@@ -166,7 +155,6 @@ public class Movie {
          * 
          * @return 剧集标题
          */
-        @XmlElement(name = "title")
         public String getTitle() {
             return title;
         }
@@ -185,7 +173,6 @@ public class Movie {
          * 
          * @return 剧集播放地址
          */
-        @XmlElement(name = "episodeUrl")
         public String getEpisodeUrl() {
             return episodeUrl;
         }

@@ -1,27 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- 电影数据源配置文件 -->
 <configuration>
-    <!-- 数据源配置 -->
+    <!-- 数据源配置部分 -->
     <datasources>
-        <!-- 每个数据源配置 -->
+        <!-- 测试数据源，用于演示和默认情况 -->
         <datasource id="test_demo" class="org.example.get_movie_data.service.DataSourceManager$DefaultMovieService">
             <name>测试数据源</name>
             <description>测试数据源</description>
         </datasource>
+        
+        <!-- 第一个自定义数据源示例 -->
         <datasource id="custom1" class="com.example.custom.CustomMovieService">
             <name>自定义数据源1</name>
             <description>第一个自定义电影数据源实现</description>
         </datasource>
+        
+        <!-- 第二个自定义数据源示例 -->
         <datasource id="custom2" class="com.example.custom2.SecondaryMovieService">
             <name>自定义数据源2</name>
             <description>第二个自定义电影数据源实现</description>
         </datasource>
     </datasources>
 
-    <!-- URL映射配置 -->
+    <!-- URL映射配置部分 -->
     <urlMappings>
-        <!-- 每个URL映射到特定的数据源 -->
+        <!-- URL到数据源的映射关系 -->
         <urlMapping baseUrl="https://custom1.example.com/" datasource="custom1"/>
         <urlMapping baseUrl="https://custom2.example.com/" datasource="custom2"/>
+        
+        <!-- 通配符匹配，作为默认数据源 -->
         <urlMapping baseUrl="*" datasource="test_demo"/>
     </urlMappings>
 </configuration>

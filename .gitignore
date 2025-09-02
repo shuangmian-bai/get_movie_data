@@ -1,33 +1,92 @@
-HELP.md
+# Maven
 target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
 .mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
+# IntelliJ IDEA
+.idea/
 *.iws
 *.iml
 *.ipr
+out/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+# Eclipse
+.settings/
+.project
+.classpath
+*.launch
+*.settings/
+
+# NetBeans
+nbproject/private/
 build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+nbbuild/
+dist/
+nbdist/
+.bin/
+.netbeans/
 
-### VS Code ###
+# VS Code
 .vscode/
+
+# Mac OS X
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Temp files
+*.tmp
+*.temp
+
+# JAR files in libs directory (except for documentation)
+!libs/
+libs/*
+!libs/README.md
+
+# Build artifacts
+*.jar
+*.war
+*.ear
+*.class
+
+# IDE specific files
+*.swp
+*.swo
+
+# OS generated files
+ehthumbs_vista.db
+*.stackdump
+*.DS_Store
+Icon?
+._*
+
+# Gradle
+.gradle/
+build/
+
+# Package Files #
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs, see http://openjdk.java.net/go/hs-err
+hs_err_pid*
+
+# Custom datasource projects
+custom-datasource/target/
+custom-datasource2/target/

@@ -10,6 +10,16 @@ import java.nio.file.*;
 import java.util.jar.JarFile;
 import java.util.jar.JarEntry;
 
+/**
+ * 电影数据获取服务主应用类
+ *
+ * 这是一个基于Spring Boot的可扩展电影数据获取服务，
+ * 支持通过外部JAR插件扩展数据源，无需修改主项目代码即可添加新的数据源实现。
+ *
+ * @author get_movie_data team
+ * @version 1.0.0
+ */
+
 @SpringBootApplication
 public class GetMovieDataApplication {
 
@@ -19,6 +29,12 @@ public class GetMovieDataApplication {
 		
 		SpringApplication.run(GetMovieDataApplication.class, args);
 	}
+	
+	/**
+	 * 应用程序入口点
+	 *
+	 * @param args 命令行参数
+	 */
 
 	/**
 	 * 初始化基本文件和目录

@@ -2,33 +2,41 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
+	
+	<!-- 项目基本信息 -->
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>3.5.5</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
+	
 	<groupId>org.example</groupId>
 	<artifactId>get_movie_data</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>get_movie_data</name>
-	<description>Demo project for Spring Boot</description>
+	<description>可扩展的电影数据获取服务，支持通过外部JAR插件扩展数据源</description>
+	
 	<properties>
 		<java.version>17</java.version>
 	</properties>
+	
+	<!-- 项目依赖 -->
 	<dependencies>
+		<!-- Spring Boot Web Starter -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 
+		<!-- Spring Boot Test Starter -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
-		<!-- JAXB API -->
+		<!-- JAXB API - 用于XML配置文件解析 -->
 		<dependency>
 			<groupId>javax.xml.bind</groupId>
 			<artifactId>jaxb-api</artifactId>
@@ -50,21 +58,30 @@
 		</dependency>
 	</dependencies>
 
+	<!-- 构建配置 -->
 	<build>
 		<plugins>
+			<!-- Spring Boot Maven Plugin -->
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
 		</plugins>
+		
+		<!-- 资源配置 -->
 		<resources>
+			<!-- 主资源目录 -->
 			<resource>
 				<directory>src/main/resources</directory>
 			</resource>
+			
+			<!-- 配置文件目录 -->
 			<resource>
 				<directory>src/main/resources/config</directory>
 				<targetPath>config</targetPath>
 			</resource>
+			
+			<!-- 外部数据源JAR包目录 -->
 			<resource>
 				<directory>libs</directory>
 				<targetPath>libs</targetPath>

@@ -14,15 +14,31 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 数据源管理器
+ * 
+ * 负责管理所有数据源实例，根据URL映射动态加载和创建数据源服务。
+ * 支持通过外部JAR包扩展数据源实现。
+ * 
+ * @author get_movie_data team
+ * @version 1.0.0
+ */
 @Component
 public class DataSourceManager {
     
     @Autowired
     private DataSourceConfig dataSourceConfig;
     
+    /** 服务缓存，避免重复创建实例 */
     private Map<String, MovieService> serviceCache = new HashMap<>();
+    
+    /** 类加载器缓存，避免重复创建类加载器 */
     private Map<String, URLClassLoader> classLoaderCache = new HashMap<>();
     
+    /**
+     * 初始化方法，在Spring容器启动后执行
+     * 注册默认的数据源服务
+     */
     @PostConstruct
     public void init() {
         System.out.println("Initializing DataSourceManager...");
@@ -30,6 +46,12 @@ public class DataSourceManager {
         System.out.println("DataSourceManager initialized with default service");
     }
     
+    /**
+     * 根据基础URL获取对应的电影服务实例
+     * 
+     * @param baseUrl 基础URL
+     * @return 对应的电影服务实例
+     */
     public MovieService getMovieServiceByBaseUrl(String baseUrl) {
         System.out.println("Getting movie service for baseUrl: " + baseUrl);
         
@@ -67,6 +89,12 @@ public class DataSourceManager {
         return service;
     }
     
+    /**
+     * 根据基础URL查找匹配的数据源ID
+     * 
+     * @param baseUrl 基础URL
+     * @return 匹配的数据源ID，如果没有匹配则返回null
+     */
     private String findDatasourceIdByBaseUrl(String baseUrl) {
         System.out.println("Finding datasource for baseUrl: " + baseUrl);
         
@@ -93,6 +121,12 @@ public class DataSourceManager {
         return null;
     }
     
+    /**
+     * 根据数据源ID创建对应的电影服务实例
+     * 
+     * @param datasourceId 数据源ID
+     * @return 对应的电影服务实例
+     */
     private MovieService createMovieService(String datasourceId) {
         System.out.println("Creating movie service for datasourceId: " + datasourceId);
         
@@ -185,6 +219,8 @@ public class DataSourceManager {
     
     /**
      * 默认电影服务实现
+     * 
+     * 当没有匹配的数据源时使用此默认实现
      */
     private static class DefaultMovieService implements MovieService {
         @Override
@@ -281,6 +317,8 @@ public class DataSourceManager {
     
     /**
      * 外部电影服务适配器
+     * 
+     * 用于适配实现了ExternalMovieService接口的外部数据源
      */
     private static class ExternalMovieServiceAdapter implements MovieService {
         private final ExternalMovieService externalService;
@@ -341,6 +379,8 @@ public class DataSourceManager {
     
     /**
      * 通用外部服务适配器，用于处理不实现接口的自定义类
+     * 
+     * 通过反射调用外部类的方法，并进行数据类型转换
      */
     private static class GenericExternalServiceAdapter implements MovieService {
         private final Object externalService;
@@ -457,6 +497,12 @@ public class DataSourceManager {
             return this;
         }
         
+        /**
+         * 转换外部电影对象为内部Movie对象
+         * 
+         * @param externalMovie 外部电影对象
+         * @return 内部Movie对象
+         */
         private Movie convertExternalMovie(Object externalMovie) {
             if (externalMovie == null) return null;
             
@@ -514,6 +560,12 @@ public class DataSourceManager {
             }
         }
         
+        /**
+         * 转换外部剧集对象为内部Episode对象
+         * 
+         * @param externalEpisode 外部剧集对象
+         * @return 内部Episode对象
+         */
         private Movie.Episode convertExternalEpisode(Object externalEpisode) {
             if (externalEpisode == null) return null;
             

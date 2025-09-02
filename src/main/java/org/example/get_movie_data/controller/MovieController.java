@@ -8,6 +8,15 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 电影数据控制器
+ * 
+ * 提供RESTful API接口用于获取电影相关信息，包括搜索电影、获取剧集和获取M3U8播放地址。
+ * 支持通过URL参数动态选择不同的数据源。
+ * 
+ * @author get_movie_data team
+ * @version 1.0.0
+ */
 @RestController
 @RequestMapping("/api/movie")
 public class MovieController {
@@ -17,9 +26,10 @@ public class MovieController {
 
     /**
      * 根据搜索关键词获取影视信息
-     * @param baseUrl 基础URL
+     * 
+     * @param baseUrl 基础URL，用于确定使用哪个数据源
      * @param keyword 搜索关键词
-     * @param datasource 数据源ID（可选）
+     * @param datasource 数据源ID（可选），直接指定数据源
      * @return 影视信息列表
      */
     @GetMapping("/search")
@@ -33,9 +43,10 @@ public class MovieController {
 
     /**
      * 根据播放地址获取影视的全部集数和标题以及播放地址
-     * @param baseUrl 基础URL
+     * 
+     * @param baseUrl 基础URL，用于确定使用哪个数据源
      * @param playUrl 播放地址
-     * @param datasource 数据源ID（可选）
+     * @param datasource 数据源ID（可选），直接指定数据源
      * @return 影视剧集列表
      */
     @GetMapping("/episodes")
@@ -49,9 +60,10 @@ public class MovieController {
 
     /**
      * 获取具体播放地址的m3u8
-     * @param baseUrl 基础URL
+     * 
+     * @param baseUrl 基础URL，用于确定使用哪个数据源
      * @param episodeUrl 具体播放地址
-     * @param datasource 数据源ID（可选）
+     * @param datasource 数据源ID（可选），直接指定数据源
      * @return m3u8地址
      */
     @GetMapping("/m3u8")
