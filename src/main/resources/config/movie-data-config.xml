@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 数据源配置 -->
+    <datasources>
+        <!-- 每个数据源配置 -->
+        <datasource id="default" class="org.example.get_movie_data.service.impl.MovieServiceImpl">
+            <name>默认数据源</name>
+            <description>默认的电影数据获取实现</description>
+        </datasource>
+        
+        <!-- 可以添加更多数据源 -->
+        <!--
+        <datasource id="douban" class="org.example.get_movie_data.service.impl.DoubanMovieServiceImpl">
+            <name>豆瓣数据源</name>
+            <description>豆瓣电影数据获取实现</description>
+        </datasource>
+        -->
+    </datasources>
+    
+    <!-- URL映射配置 -->
+    <urlMappings>
+        <!-- 每个URL映射到特定的数据源 -->
+        <urlMapping baseUrl="*" datasource="default"/>
+        <!--
+        <urlMapping baseUrl="https://movie.douban.com/" datasource="douban"/>
+        -->
+    </urlMappings>
+</configuration>
