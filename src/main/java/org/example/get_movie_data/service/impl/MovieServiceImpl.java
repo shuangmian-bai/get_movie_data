@@ -11,6 +11,21 @@ import java.util.List;
 public class MovieServiceImpl implements MovieService {
 
     public List<Movie> searchMovies(String baseUrl, String keyword) {
+        // 针对特定URL返回固定数据
+        if ("https://127.0.0.1/test".equals(baseUrl)) {
+            List<Movie> movies = new ArrayList<Movie>();
+            
+            Movie movie = new Movie();
+            movie.setName("测试电影");
+            movie.setDescription("这是一部用于测试的固定电影数据");
+            movie.setFinished(true);
+            movie.setPlayUrl("https://127.0.0.1/test/play/1");
+            movie.setEpisodes(5);
+            
+            movies.add(movie);
+            return movies;
+        }
+        
         // 这里应该实现实际的搜索逻辑，根据baseUrl和keyword获取影视信息
         // 暂时返回示例数据
         List<Movie> movies = new ArrayList<Movie>();
@@ -27,6 +42,20 @@ public class MovieServiceImpl implements MovieService {
     }
 
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
+        // 针对特定URL返回固定数据
+        if ("https://127.0.0.1/test".equals(baseUrl)) {
+            List<Movie.Episode> episodes = new ArrayList<Movie.Episode>();
+            
+            for (int i = 1; i <= 5; i++) {
+                Movie.Episode episode = new Movie.Episode();
+                episode.setTitle("测试第" + i + "集");
+                episode.setEpisodeUrl("https://127.0.0.1/test/episode/" + i);
+                episodes.add(episode);
+            }
+            
+            return episodes;
+        }
+        
         // 这里应该实现获取集数的逻辑
         // 暂时返回示例数据
         List<Movie.Episode> episodes = new ArrayList<Movie.Episode>();
@@ -42,6 +71,11 @@ public class MovieServiceImpl implements MovieService {
     }
 
     public String getM3u8Url(String baseUrl, String episodeUrl) {
+        // 针对特定URL返回固定数据
+        if ("https://127.0.0.1/test".equals(baseUrl)) {
+            return "https://127.0.0.1/test/m3u8/test.m3u8";
+        }
+        
         // 这里应该实现获取m3u8地址的逻辑
         // 暂时返回示例数据
         return baseUrl + "/m3u8/" + episodeUrl.substring(episodeUrl.lastIndexOf('/') + 1) + ".m3u8";

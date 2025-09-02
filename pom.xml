@@ -129,5 +129,50 @@
 			</plugin>
 		</plugins>
 	</build>
+	
+	<!-- 为创建自定义数据源实现JAR文件的配置 -->
+	<profiles>
+		<profile>
+			<id>build-datasource</id>
+			<build>
+				<plugins>
+					<!-- 创建JAR包的插件 -->
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-jar-plugin</artifactId>
+						<configuration>
+							<archive>
+								<manifest>
+									<addClasspath>true</addClasspath>
+								</manifest>
+							</archive>
+						</configuration>
+					</plugin>
+					
+					<!-- 拷贝依赖的插件 -->
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-dependency-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>copy-dependencies-for-datasource</id>
+								<phase>package</phase>
+								<goals>
+									<goal>copy-dependencies</goal>
+								</goals>
+								<configuration>
+									<outputDirectory>libs</outputDirectory>
+									<overWriteReleases>false</overWriteReleases>
+									<overWriteSnapshots>false</overWriteSnapshots>
+									<overWriteIfNewer>true</overWriteIfNewer>
+									<includeScope>runtime</includeScope>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

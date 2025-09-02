@@ -20,7 +20,7 @@
     <!-- URL映射配置 -->
     <urlMappings>
         <!-- 每个URL映射到特定的数据源 -->
-        <urlMapping baseUrl="*" datasource="default"/>
+        <urlMapping baseUrl="https://127.0.0.1/test" datasource="default"/>
         <!--
         <urlMapping baseUrl="https://movie.douban.com/" datasource="douban"/>
         -->

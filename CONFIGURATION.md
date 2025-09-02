@@ -1,3 +1,156 @@
+# 电影数据获取系统
+
+## 项目配置和使用说明
+
+## 项目结构
+
+```
+get_movie_data/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   └── resources/
+│   │       └── config/
+│   │           └── movie-data-config.xml
+│   └── test/
+├── libs/                    # 外部数据源实现JAR文件目录
+├── target/                  # Maven构建输出目录
+├── pom.xml                 # 主构建配置文件
+├── datasource-pom.xml      # 自定义数据源构建配置文件
+├── build-datasource.bat    # Windows环境构建脚本
+└── build-datasource.sh     # Linux/Mac环境构建脚本
+```
+
+## 配置文件说明
+
+### movie-data-config.xml
+
+该文件用于配置数据源和URL映射：
+
+```xml
+<configuration>
+    <datasources>
+        <datasource id="default" class="org.example.get_movie_data.service.impl.MovieServiceImpl">
+            <name>默认数据源</name>
+            <description>默认的电影数据获取实现</description>
+        </datasource>
+        <!-- 可以添加更多数据源 -->
+    </datasources>
+    
+    <urlMappings>
+        <urlMapping baseUrl="*" datasource="default"/>
+    </urlMappings>
+</configuration>
+```
+
+## 构建和运行
+
+### 构建主应用
+
+```bash
+# 使用Maven构建
+mvn clean package
+
+# 或使用项目自带的Maven Wrapper
+./mvnw clean package
+```
+
+### 运行应用
+
+```bash
+# 直接运行
+mvn spring-boot:run
+
+# 或运行构建好的JAR文件
+java -jar target/get_movie_data-0.0.1-SNAPSHOT.jar
+```
+
+## 自定义数据源实现
+
+### 开发自定义数据源
+
+1. 创建新的实现类，实现MovieService接口
+2. 实现searchMovies、getEpisodes、getM3u8Url等方法
+3. 可以根据需要添加其他辅助方法
+
+### 构建自定义数据源JAR包
+
+#### Windows环境
+
+双击运行`build-datasource.bat`脚本，或在命令行中执行：
+
+```cmd
+build-datasource.bat
+```
+
+#### Linux/Mac环境
+
+在终端中执行：
+
+```bash
+chmod +x build-datasource.sh
+./build-datasource.sh
+```
+
+### 添加自定义数据源到配置文件
+
+在`movie-data-config.xml`中添加新的数据源配置：
+
+```xml
+<datasource id="custom" class="com.yourcompany.yourproject.YourCustomMovieService">
+    <name>自定义数据源</name>
+    <description>自定义的电影数据获取实现</description>
+</datasource>
+```
+
+并添加相应的URL映射：
+
+```xml
+<urlMapping baseUrl="https://your.custom.url/" datasource="custom"/>
+```
+
+### Maven Profile方式构建（可选）
+
+也可以使用Maven Profile来构建自定义数据源：
+
+```bash
+mvn clean package -P build-datasource
+```
+
+## API接口说明
+
+### 搜索电影接口
+
+GET /api/movie/search
+
+参数：
+- baseUrl: 基础URL
+- keyword: 搜索关键词
+- datasource: 数据源ID（可选）
+
+### 获取剧集列表接口
+
+GET /api/movie/episodes
+
+参数：
+- baseUrl: 基础URL
+- playUrl: 播放地址
+- datasource: 数据源ID（可选）
+
+### 获取M3U8地址接口
+
+GET /api/movie/m3u8
+
+参数：
+- baseUrl: 基础URL
+- episodeUrl: 具体播放地址
+- datasource: 数据源ID（可选）
+
+### 测试接口
+
+GET /api/movie/test/movies
+GET /api/movie/test/episodes
+GET /api/movie/test/m3u8?episodeId={剧集ID}
 # 电影数据获取系统配置文档
 
 ## 1. 概述
