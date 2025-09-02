@@ -2,13 +2,18 @@ package org.example.get_movie_data.service.impl;
 
 import org.example.get_movie_data.model.Movie;
 import org.example.get_movie_data.service.MovieService;
+import org.example.get_movie_data.service.DataSourceConfig;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class MovieServiceImpl implements MovieService {
+    
+    @Autowired
+    private DataSourceConfig dataSourceConfig;
 
     public List<Movie> searchMovies(String baseUrl, String keyword) {
         // 针对特定URL返回固定数据
@@ -83,13 +88,65 @@ public class MovieServiceImpl implements MovieService {
     
     public MovieService getMovieServiceByDatasource(String datasourceId) {
         // 根据数据源ID获取对应的服务实现
-        // 这里暂时只返回默认实现
+        // 如果没有指定数据源或者指定的是默认数据源，则使用当前实例
         if (datasourceId == null || datasourceId.isEmpty() || "default".equals(datasourceId)) {
             return this;
         }
         
-        // 实际应用中，这里会根据配置文件中的class路径动态加载对应的实现类
-        // 例如通过反射机制或者Spring的ApplicationContext来获取对应的Bean
-        return this;
+        // 检查数据源是否在配置文件中存在
+        boolean datasourceExists = false;
+        if (dataSourceConfig.getDatasources() != null) {
+            for (DataSourceConfig.Datasource datasource : dataSourceConfig.getDatasources()) {
+                if (datasourceId.equals(datasource.getId())) {
+                    datasourceExists = true;
+                    break;
+                }
+            }
+        }
+        
+        // 如果数据源在配置中存在但不是默认数据源，则表示需要使用外部jar包
+        // 在实际应用中，这里会根据配置文件中的class路径动态加载对应的实现类
+        // 如果加载失败或者jar包不存在，则返回失败状态的数据
+        if (datasourceExists) {
+            return new FailedMovieService();
+        } else {
+            // 如果数据源在配置中都不存在，则也返回失败状态
+            return new FailedMovieService();
+        }
+    }
+    
+    /**
+     * 用于表示数据源加载失败的服务实现
+     */
+    private static class FailedMovieService implements MovieService {
+        @Override
+        public List<Movie> searchMovies(String baseUrl, String keyword) {
+            List<Movie> movies = new ArrayList<>();
+            Movie movie = new Movie();
+            movie.setName("数据源加载失败");
+            movie.setDescription("无法加载指定的数据源，可能是因为对应的jar包未配置或不存在");
+            movie.setFinished(false);
+            movie.setPlayUrl("");
+            movie.setEpisodes(0);
+            movies.add(movie);
+            return movies;
+        }
+
+        @Override
+        public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
+            // 返回空列表表示获取剧集信息失败
+            return new ArrayList<>();
+        }
+
+        @Override
+        public String getM3u8Url(String baseUrl, String episodeUrl) {
+            // 返回空字符串表示获取播放地址失败
+            return "";
+        }
+
+        @Override
+        public MovieService getMovieServiceByDatasource(String datasourceId) {
+            return this;
+        }
     }
 }

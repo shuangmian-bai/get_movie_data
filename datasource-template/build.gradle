@@ -1,0 +1,40 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.yourcompany'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 主项目依赖 (需要先安装到本地Maven仓库)
+    compileOnly 'org.example:get_movie_data:0.0.1-SNAPSHOT'
+    
+    // 如果主项目未安装到Maven仓库，可以使用文件依赖
+    // implementation files('path/to/get_movie_data-0.0.1-SNAPSHOT.jar')
+}
+
+jar {
+    manifest {
+        attributes(
+            'Implementation-Title': 'Custom Movie Datasource',
+            'Implementation-Version': version
+        )
+    }
+}
+
+// 如果需要将依赖打包进JAR (可选)
+task fatJar(type: Jar) {
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
