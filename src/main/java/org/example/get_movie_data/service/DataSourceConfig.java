@@ -2,16 +2,21 @@ package org.example.get_movie_data.service;
 
 import org.springframework.stereotype.Component;
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
+import javax.xml.bind.annotation.*;
 import java.util.List;
 
 @Component
+@XmlRootElement(name = "configuration")
+@XmlType(propOrder = { "datasources", "urlMappings" })
 public class DataSourceConfig {
-    
+
+    // 默认构造函数，用于JAXB反序列化
+    public DataSourceConfig() {}
+
     private List<Datasource> datasources;
     private List<UrlMapping> urlMappings;
 
+    @XmlElementWrapper(name = "datasources")
     @XmlElement(name = "datasource")
     public List<Datasource> getDatasources() {
         return datasources;
@@ -21,6 +26,7 @@ public class DataSourceConfig {
         this.datasources = datasources;
     }
 
+    @XmlElementWrapper(name = "urlMappings")
     @XmlElement(name = "urlMapping")
     public List<UrlMapping> getUrlMappings() {
         return urlMappings;
@@ -30,18 +36,19 @@ public class DataSourceConfig {
         this.urlMappings = urlMappings;
     }
 
-    @XmlRootElement(name = "datasource")
     public static class Datasource {
         private String id;
         private String clazz;
         private String name;
         private String description;
 
+        public Datasource() {}
+
         public String getId() {
             return id;
         }
 
-        @XmlElement(name = "id")
+        @XmlAttribute
         public void setId(String id) {
             this.id = id;
         }
@@ -50,7 +57,7 @@ public class DataSourceConfig {
             return clazz;
         }
 
-        @XmlElement(name = "class")
+        @XmlAttribute(name = "class")
         public void setClazz(String clazz) {
             this.clazz = clazz;
         }
@@ -59,7 +66,7 @@ public class DataSourceConfig {
             return name;
         }
 
-        @XmlElement(name = "name")
+        @XmlElement
         public void setName(String name) {
             this.name = name;
         }
@@ -68,22 +75,33 @@ public class DataSourceConfig {
             return description;
         }
 
-        @XmlElement(name = "description")
+        @XmlElement
         public void setDescription(String description) {
             this.description = description;
         }
+
+        @Override
+        public String toString() {
+            return "Datasource{" +
+                    "id='" + id + '\'' +
+                    ", clazz='" + clazz + '\'' +
+                    ", name='" + name + '\'' +
+                    ", description='" + description + '\'' +
+                    '}';
+        }
     }
 
-    @XmlRootElement(name = "urlMapping")
     public static class UrlMapping {
         private String baseUrl;
         private String datasource;
+
+        public UrlMapping() {}
 
         public String getBaseUrl() {
             return baseUrl;
         }
 
-        @XmlElement(name = "baseUrl")
+        @XmlAttribute
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
         }
@@ -92,9 +110,25 @@ public class DataSourceConfig {
             return datasource;
         }
 
-        @XmlElement(name = "datasource")
+        @XmlAttribute
         public void setDatasource(String datasource) {
             this.datasource = datasource;
         }
+
+        @Override
+        public String toString() {
+            return "UrlMapping{" +
+                    "baseUrl='" + baseUrl + '\'' +
+                    ", datasource='" + datasource + '\'' +
+                    '}';
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "DataSourceConfig{" +
+                "datasources=" + datasources +
+                ", urlMappings=" + urlMappings +
+                '}';
     }
 }

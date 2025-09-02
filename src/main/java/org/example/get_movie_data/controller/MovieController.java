@@ -1,6 +1,7 @@
 package org.example.get_movie_data.controller;
 
 import org.example.get_movie_data.model.Movie;
+import org.example.get_movie_data.service.DataSourceManager;
 import org.example.get_movie_data.service.MovieService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -12,7 +13,7 @@ import java.util.List;
 public class MovieController {
 
     @Autowired
-    private MovieService movieService;
+    private DataSourceManager dataSourceManager;
 
     /**
      * 根据搜索关键词获取影视信息
@@ -25,7 +26,8 @@ public class MovieController {
     public List<Movie> searchMovies(@RequestParam String baseUrl, 
                                    @RequestParam String keyword,
                                    @RequestParam(required = false) String datasource) {
-        MovieService service = movieService.getMovieServiceByDatasource(datasource);
+        System.out.println("MovieController.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword + ", datasource: " + datasource);
+        MovieService service = dataSourceManager.getMovieServiceByBaseUrl(baseUrl);
         return service.searchMovies(baseUrl, keyword);
     }
 
@@ -40,7 +42,8 @@ public class MovieController {
     public List<Movie.Episode> getEpisodes(@RequestParam String baseUrl, 
                                           @RequestParam String playUrl,
                                           @RequestParam(required = false) String datasource) {
-        MovieService service = movieService.getMovieServiceByDatasource(datasource);
+        System.out.println("MovieController.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", datasource: " + datasource);
+        MovieService service = dataSourceManager.getMovieServiceByBaseUrl(baseUrl);
         return service.getEpisodes(baseUrl, playUrl);
     }
 
@@ -55,7 +58,8 @@ public class MovieController {
     public String getM3u8Url(@RequestParam String baseUrl, 
                             @RequestParam String episodeUrl,
                             @RequestParam(required = false) String datasource) {
-        MovieService service = movieService.getMovieServiceByDatasource(datasource);
+        System.out.println("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
+        MovieService service = dataSourceManager.getMovieServiceByBaseUrl(baseUrl);
         return service.getM3u8Url(baseUrl, episodeUrl);
     }
 }

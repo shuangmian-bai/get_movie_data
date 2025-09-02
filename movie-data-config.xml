@@ -3,23 +3,20 @@
     <!-- 数据源配置 -->
     <datasources>
         <!-- 每个数据源配置 -->
-        <datasource id="default" class="org.example.get_movie_data.service.impl.MovieServiceImpl">
-            <name>默认数据源</name>
-            <description>默认的电影数据获取实现</description>
+        <datasource id="test_demo" class="org.example.get_movie_data.service.impl.MovieServiceImpl">
+            <name>测试数据源</name>
+            <description>测试数据源</description>
         </datasource>
-
-        <datasource id="demo1" class="demo2.YourCustomMovieService">
-            <name>外部调用测试</name>
-            <description>使用外部调用测试</description>
+        <datasource id="custom" class="com.example.custom.CustomMovieService">
+            <name>自定义数据源</name>
+            <description>自定义电影数据源实现</description>
         </datasource>
     </datasources>
-    
+
     <!-- URL映射配置 -->
     <urlMappings>
         <!-- 每个URL映射到特定的数据源 -->
-        <urlMapping baseUrl="https://external.example.com/" datasource="demo1"/>
-        <urlMapping baseUrl="https://127.0.0.1/test" datasource="default"/>
-        <!-- 默认数据源处理其他所有请求 -->
-        <urlMapping baseUrl="*" datasource="default"/>
+        <urlMapping baseUrl="https://custom.example.com/" datasource="custom"/>
+        <urlMapping baseUrl="*" datasource="test_demo"/>
     </urlMappings>
 </configuration>

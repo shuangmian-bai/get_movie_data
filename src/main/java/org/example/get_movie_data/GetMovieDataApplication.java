@@ -52,6 +52,16 @@ public class GetMovieDataApplication {
 			if (!Files.exists(configFile)) {
 				// 从jar包中提取配置文件
 				extractResourceFromJar(jarUri, "config/movie-data-config.xml", configFile);
+			} else {
+				// 检查配置文件是否包含自定义数据源配置，如果没有则添加
+				String configContent = Files.readString(configFile);
+				if (!configContent.contains("custom")) {
+					// 备份原文件
+					Files.move(configFile, jarDir.resolve("movie-data-config.xml.bak"), 
+					           StandardCopyOption.REPLACE_EXISTING);
+					// 从jar包中提取配置文件
+					extractResourceFromJar(jarUri, "config/movie-data-config.xml", configFile);
+				}
 			}
 			
 			// 创建使用说明文件
