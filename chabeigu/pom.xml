@@ -8,14 +8,13 @@
 
     <!-- 项目坐标 -->
     <groupId>com.example</groupId>
-    <artifactId>custom-movie-datasource</artifactId>
+    <artifactId>chabeigu</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <!-- 项目描述 -->
-    <name>Custom Data Source</name>
-    <description>通用数据源扩展框架 - 自定义实现模块</description>
-    <url>https://example.com/custom-datasource</url>
+    <name>Custom Movie Datasource</name>
+    <description>自定义电影数据源实现示例</description>
 
     <!-- 项目属性 -->
     <properties>
@@ -31,11 +30,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.10.1</version>
+                <version>3.8.1</version>
                 <configuration>
                     <source>17</source>
                     <target>17</target>
-                    <encoding>UTF-8</encoding>
                 </configuration>
             </plugin>
         </plugins>
