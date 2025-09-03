@@ -1,4 +1,4 @@
-package com.example.chabeigu.movie;
+package com.example.chabeigu;
 
 import java.util.List;
 
