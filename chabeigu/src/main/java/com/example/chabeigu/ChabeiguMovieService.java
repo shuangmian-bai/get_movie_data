@@ -6,6 +6,7 @@ import org.jsoup.select.Elements;
 import org.jsoup.nodes.Element;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.net.URL;
 import java.net.HttpURLConnection;
@@ -48,14 +49,15 @@ public class ChabeiguMovieService {
         if (!pageElements.isEmpty()) {
             Element pageElement = pageElements.first();
             String href = pageElement.attr("href");
-            // 从href中提取页码，例如 "/index.php/vod/search/page/2850.html"
+            // 从href中提取页码，例如 "/index.php/vod/search/page/页码/wd/搜索关键词.html"
             if (href != null && !href.isEmpty()) {
                 try {
                     // 使用正则表达式提取页码
                     String[] parts = href.split("/");
                     if (parts.length > 0) {
-                        String pagePart = parts[parts.length - 1]; // 获取 "2850.html"
-                        pageCount = Integer.parseInt(pagePart.replace(".html", "")); // 提取页码
+                        //获取到字符串page所在的索引
+                        int pageIndex = Arrays.asList(parts).indexOf("page");
+                        pageCount = Integer.parseInt(parts[pageIndex+1]);
                     }
                 } catch (NumberFormatException e) {
                     pageCount = 1; // 出错时默认为1
@@ -67,6 +69,8 @@ public class ChabeiguMovieService {
         }
 
         System.out.println("总页数: " + pageCount);
+
+        getPageData(keyword, 1);
 
         List<Movie> movies = new ArrayList<>();
 
@@ -82,6 +86,18 @@ public class ChabeiguMovieService {
 
         movies.add(movie);
         return movies;
+    }
+
+    //获取一页函数，传入搜索关键词和页码，返回这一页数据
+    private List<Movie> getPageData(String keyword, int page) {
+        //https://www.chabeigu.com/index.php/vod/search/page/{页码}/wd/{搜索关键词}.html
+        //构建搜索url
+        String searchUrl = "https://www.chabeigu.com" + "/index.php/vod/search/page/" + page + "/wd/" + keyword + ".html";
+        String html = sendGetRequest(searchUrl);
+        System.out.println("html : "+html);
+
+
+        return null;
     }
 
     private String sendGetRequest(String urlString) {

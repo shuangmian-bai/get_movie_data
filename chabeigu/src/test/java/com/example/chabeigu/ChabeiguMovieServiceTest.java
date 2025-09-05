@@ -34,7 +34,7 @@ public class ChabeiguMovieServiceTest {
 
     private static void testSearchMovies(ChabeiguMovieService movieService) throws Exception {
         String baseUrl = "https://www.chabeigu.com/";
-        String keyword = "浪浪山";
+        String keyword = "好";
 
         List<Movie> movies = movieService.searchMovies(baseUrl, keyword);
 
