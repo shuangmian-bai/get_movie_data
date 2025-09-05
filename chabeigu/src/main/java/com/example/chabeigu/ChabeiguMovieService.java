@@ -242,9 +242,28 @@ public class ChabeiguMovieService {
      */
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
 
+        String html = sendGetRequest(playUrl);
+        //创建jsoup对象
+        Document doc = Jsoup.parse(html);
+        Elements elements = doc.select("#sort-item-1").select("a");
+        // 创建剧集列表
+        List<Movie.Episode> episodes = new ArrayList<>();
 
+        for (Element element : elements) {
+            String title = element.select("span").text();
+            System.out.println(element);
+            String episodeUrl = baseUrl + element.attr("href");
+            System.out.println("title: " + title);
+            System.out.println("episodeUrl: " + episodeUrl);
+            
+            // 构造剧集对象并添加到列表中
+            Movie.Episode episode = new Movie.Episode();
+            episode.setTitle(title);
+            episode.setEpisodeUrl(episodeUrl);
+            episodes.add(episode);
+        }
 
-        return null;
+        return episodes;
     }
 
     /**

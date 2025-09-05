@@ -17,10 +17,10 @@ public class ChabeiguMovieServiceTest {
             System.out.println("ChabeiguMovieService 实例化成功");
 
             // 测试searchMovies方法
-            testSearchMovies(movieService);
+//            testSearchMovies(movieService);
 
             // 测试getEpisodes方法
-//            testGetEpisodes(movieService);
+            testGetEpisodes(movieService);
 
             // 测试getM3u8Url方法
 //            testGetM3u8Url(movieService);
@@ -34,7 +34,7 @@ public class ChabeiguMovieServiceTest {
 
     private static void testSearchMovies(ChabeiguMovieService movieService) throws Exception {
         String baseUrl = "https://www.chabeigu.com/";
-        String keyword = "浪浪山";
+        String keyword = "铠甲勇士";
 
         List<Movie> movies = movieService.searchMovies(baseUrl, keyword);
 
@@ -56,8 +56,8 @@ public class ChabeiguMovieServiceTest {
     }
 
     private static void testGetEpisodes(ChabeiguMovieService movieService) throws Exception {
-        String baseUrl = "http://test.chabeigu.com";
-        String playUrl = "http://test.chabeigu.com/play/test";
+        String baseUrl = "https://www.chabeigu.com/";
+        String playUrl = "https://www.chabeigu.com/index.php/vod/detail/id/8250.html";
 
         List<Movie.Episode> episodes = movieService.getEpisodes(baseUrl, playUrl);
 
