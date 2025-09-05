@@ -16,6 +16,8 @@ import java.net.URL;
 import java.net.HttpURLConnection;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -273,6 +275,20 @@ public class ChabeiguMovieService {
      * @return M3U8播放地址
      */
     public String getM3u8Url(String baseUrl, String episodeUrl) {
-        return baseUrl + "/m3u8/chabeigu_video.m3u8";
+
+        String html = sendGetRequest(episodeUrl);
+        //使用正则表达式匹配 最小 http**m3u8
+        Pattern pattern = Pattern.compile("http.*m3u8");
+        Matcher matcher = pattern.matcher(html);
+        String m3u8Url = null;
+        if (matcher.find()) {
+            m3u8Url = matcher.group();
+            m3u8Url = m3u8Url.split("\"")[m3u8Url.split("\"").length - 1];
+            System.out.println("m3u8Url: " + m3u8Url);
+            return m3u8Url;
+        }
+
+
+        return m3u8Url;
     }
 }

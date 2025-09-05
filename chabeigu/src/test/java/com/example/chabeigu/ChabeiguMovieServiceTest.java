@@ -20,10 +20,10 @@ public class ChabeiguMovieServiceTest {
 //            testSearchMovies(movieService);
 
             // 测试getEpisodes方法
-            testGetEpisodes(movieService);
+//            testGetEpisodes(movieService);
 
             // 测试getM3u8Url方法
-//            testGetM3u8Url(movieService);
+            testGetM3u8Url(movieService);
 
             System.out.println("所有测试通过!");
         } catch (Exception e) {
@@ -56,7 +56,7 @@ public class ChabeiguMovieServiceTest {
     }
 
     private static void testGetEpisodes(ChabeiguMovieService movieService) throws Exception {
-        String baseUrl = "https://www.chabeigu.com/";
+        String baseUrl = "https://www.chabeigu.com";
         String playUrl = "https://www.chabeigu.com/index.php/vod/detail/id/8250.html";
 
         List<Movie.Episode> episodes = movieService.getEpisodes(baseUrl, playUrl);
@@ -74,8 +74,8 @@ public class ChabeiguMovieServiceTest {
     }
 
     private static void testGetM3u8Url(ChabeiguMovieService movieService) throws Exception {
-        String baseUrl = "http://test.chabeigu.com";
-        String episodeUrl = "http://test.chabeigu.com/episode/test";
+        String baseUrl = "https://www.chabeigu.com";
+        String episodeUrl = "https://www.chabeigu.com/index.php/vod/play/id/8250/sid/1/nid/1.html";
 
         String m3u8Url = movieService.getM3u8Url(baseUrl, episodeUrl);
 
