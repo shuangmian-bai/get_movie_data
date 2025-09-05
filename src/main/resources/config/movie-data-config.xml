@@ -20,6 +20,14 @@
             <name>自定义数据源2</name>
             <description>第二个自定义电影数据源实现</description>
         </datasource>
+
+        <data-source>
+            <id>chabeigu</id>
+            <class>com.example.chabeigu.ChabeiguMovieService</class>
+            <name>茶杯狐数据源</name>
+            <description>从茶杯狐网站获取电影数据</description>
+        </data-source>
+
     </datasources>
 
     <!-- URL映射配置部分 -->
@@ -27,7 +35,8 @@
         <!-- URL到数据源的映射关系 -->
         <urlMapping baseUrl="https://custom1.example.com/" datasource="custom1"/>
         <urlMapping baseUrl="https://custom2.example.com/" datasource="custom2"/>
-        
+        <urlMapping baseUrl="https://www.chabeigu.com" datasource="chabeigu"/>
+
         <!-- 通配符匹配，作为默认数据源 -->
         <urlMapping baseUrl="*" datasource="test_demo"/>
     </urlMappings>
