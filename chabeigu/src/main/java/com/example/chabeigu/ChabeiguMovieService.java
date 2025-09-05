@@ -94,7 +94,40 @@ public class ChabeiguMovieService {
         //构建搜索url
         String searchUrl = "https://www.chabeigu.com" + "/index.php/vod/search/page/" + page + "/wd/" + keyword + ".html";
         String html = sendGetRequest(searchUrl);
-        System.out.println("html : "+html);
+
+        //创建jsoup对象
+        Document doc = Jsoup.parse(html);
+        //查询类为module-search-item
+        Elements movieItems = doc.select(".module-search-item");
+
+        for (Element item : movieItems) {
+            System.out.println("==================================");
+            String name = item.select("body > div.module-search-item > div.video-info > div.video-info-header > h3 > a").text();
+            String description = item.select("body > div.module-search-item > div.video-info > div.video-info-main > div:nth-child(3) > div").text();
+            String playUrl = doc.baseUri() + item.select("body > div.module-search-item > div.video-info > div.video-info-header > h3 > a").attr("href");
+            String cache = item.select("body > div.module-search-item > div.video-info > div.video-info-header > a").text();
+            //cache存储是否完结和多少集信息
+            //匹配是否有"完结"字符串
+            boolean isFinished = cache.contains("完结");
+            int episodes = 0;
+            if (cache.contains("集")) {
+                //使用正则表达式匹配数字
+                String regex = "\\d+";
+                String[] parts = cache.split("集");
+                if (parts.length > 0) {
+                    String numberString = parts[0];
+                    episodes = Integer.parseInt(numberString);
+                }
+            }
+
+            System.out.println("name: " + name);
+            System.out.println("description: " + description);
+            System.out.println("playUrl: " + playUrl);
+            System.out.println("isFinished: " + isFinished);
+            System.out.println("episodes: " + episodes);
+
+        }
+
 
 
         return null;
