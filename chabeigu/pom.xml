@@ -23,6 +23,16 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+    <!-- 项目依赖 -->
+    <dependencies>
+        <!-- Jsoup HTML解析库 -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.15.3</version>
+        </dependency>
+    </dependencies>
+
     <!-- 构建配置 -->
     <build>
         <plugins>
