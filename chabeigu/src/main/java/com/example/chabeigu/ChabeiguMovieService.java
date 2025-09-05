@@ -248,10 +248,9 @@ public class ChabeiguMovieService {
         Elements elements = doc.select("#sort-item-1").select("a");
         // 创建剧集列表
         List<Movie.Episode> episodes = new ArrayList<>();
-
+        
         for (Element element : elements) {
             String title = element.select("span").text();
-            System.out.println(element);
             String episodeUrl = baseUrl + element.attr("href");
             System.out.println("title: " + title);
             System.out.println("episodeUrl: " + episodeUrl);
