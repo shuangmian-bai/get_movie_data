@@ -57,12 +57,7 @@
 			<version>1.3.2</version>
 		</dependency>
 		
-		<!-- Jsoup HTML Parser -->
-		<dependency>
-			<groupId>org.jsoup</groupId>
-			<artifactId>jsoup</artifactId>
-			<version>1.15.3</version>
-		</dependency>
+		<!-- 移除了 Jsoup HTML Parser 依赖，将其移动到需要的子项目中 -->
 	</dependencies>
 
 	<!-- 构建配置 -->
