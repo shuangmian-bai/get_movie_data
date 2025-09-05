@@ -158,29 +158,24 @@ public class ChabeiguMovieService {
             String playUrl = "https://www.chabeigu.com" + item.select(".video-info-header h3 a").attr("href");
             //获取海报信息
             String poster = item.select(".lazy.lazyload").attr("data-src");
-            // 获取集数信息
-            String cache = item.select(".video-info-header .video-serial").text();
+            //获取类型信息
+            String type = item.select(".video-info-items .video-info-item").first().text();
+            //获取地区信息
+            String area = item.select(".video-info-items .video-info-item").get(1).text();
 
-            //集数和是否完结暂时不解析，用默认值
-            boolean isFinished = false;
-            int episodes = 1;
+            System.out.println(item);
 
             System.out.println("name: " + name);
             System.out.println("description: " + description);
             System.out.println("playUrl: " + playUrl);
             System.out.println("poster: " + poster);
-            System.out.println("cache: " + cache);
-            System.out.println("isFinished: " + isFinished);
-            System.out.println("episodes: " + episodes);
-            
+
             //创建Movie对象并设置属性
             Movie movie = new Movie();
             movie.setName(name);
             movie.setDescription(description);
             movie.setPlayUrl(playUrl);
             movie.setPoster(poster);
-            movie.setFinished(isFinished);
-            movie.setEpisodes(episodes);
             
             //添加到列表
             movies.add(movie);

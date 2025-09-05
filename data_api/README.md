@@ -97,7 +97,8 @@ java -jar target/get_movie_data-0.0.1-SNAPSHOT.jar
 
 服务启动后，可通过以下API访问：
 
-- 搜索电影: `GET /api/movie/search?baseUrl={baseUrl}&keyword={keyword}`
+- 搜索电影（完整信息）: `GET /api/movie/search?baseUrl={baseUrl}&keyword={keyword}`
+- 搜索电影（基础信息）: `GET /api/movie/search/simple?baseUrl={baseUrl}&keyword={keyword}`
 - 获取剧集: `GET /api/movie/episodes?baseUrl={baseUrl}&playUrl={playUrl}`
 - 获取M3U8地址: `GET /api/movie/m3u8?baseUrl={baseUrl}&episodeUrl={episodeUrl}`
 
@@ -115,7 +116,22 @@ public class Movie {
     private boolean finished;      // 是否完结
     private String playUrl;        // 播放地址
     private int episodes;          // 集数
+    private String poster;         // 海报
     private List<Episode> episodeList; // 剧集列表
+    
+    // getters and setters
+}
+```
+
+#### MovieSimple类
+```java
+public class MovieSimple {
+    private String name;        // 电影名称
+    private String description; // 描述
+    private String playUrl;     // 播放地址
+    private String poster;      // 海报
+    private String type;        // 类型
+    private String region;      // 地区
     
     // getters and setters
 }
