@@ -99,38 +99,66 @@ public class ChabeiguMovieService {
         Document doc = Jsoup.parse(html);
         //查询类为module-search-item
         Elements movieItems = doc.select(".module-search-item");
+        
+        //创建Movie列表
+        List<Movie> movies = new ArrayList<>();
 
         for (Element item : movieItems) {
             System.out.println("==================================");
-            String name = item.select("body > div.module-search-item > div.video-info > div.video-info-header > h3 > a").text();
-            String description = item.select("body > div.module-search-item > div.video-info > div.video-info-main > div:nth-child(3) > div").text();
-            String playUrl = doc.baseUri() + item.select("body > div.module-search-item > div.video-info > div.video-info-header > h3 > a").attr("href");
-            String cache = item.select("body > div.module-search-item > div.video-info > div.video-info-header > a").text();
+            // 使用更简单的相对选择器
+            String name = item.select(".video-info-header h3 a").text();
+            // 选择剧情描述
+            String description = item.select(".video-info-items .video-info-item").last().text();
+            // 获取播放链接
+            String playUrl = "https://www.chabeigu.com" + item.select(".video-info-header h3 a").attr("href");
+            // 获取集数信息
+            String cache = item.select(".video-info-header .video-serial").text();
+            
             //cache存储是否完结和多少集信息
             //匹配是否有"完结"字符串
             boolean isFinished = cache.contains("完结");
             int episodes = 0;
-            if (cache.contains("集")) {
-                //使用正则表达式匹配数字
-                String regex = "\\d+";
-                String[] parts = cache.split("集");
-                if (parts.length > 0) {
-                    String numberString = parts[0];
-                    episodes = Integer.parseInt(numberString);
+            
+            // 提取集数
+            if (cache.contains("第") && cache.contains("集")) {
+                // 提取"第X集"中的数字
+                String episodesStr = cache.replaceAll(".*第(\\d+)集.*", "$1");
+                try {
+                    episodes = Integer.parseInt(episodesStr);
+                } catch (NumberFormatException e) {
+                    episodes = 0;
+                }
+            } else if (cache.startsWith("更新至")) {
+                // 处理"更新至第02集"这类情况
+                String episodesStr = cache.replaceAll("更新至第(\\d+)集.*", "$1");
+                try {
+                    episodes = Integer.parseInt(episodesStr);
+                } catch (NumberFormatException e) {
+                    episodes = 0;
                 }
             }
 
             System.out.println("name: " + name);
             System.out.println("description: " + description);
             System.out.println("playUrl: " + playUrl);
+            System.out.println("cache: " + cache);
             System.out.println("isFinished: " + isFinished);
             System.out.println("episodes: " + episodes);
-
+            
+            //创建Movie对象并设置属性
+            Movie movie = new Movie();
+            movie.setName(name);
+            movie.setDescription(description);
+            movie.setPlayUrl(playUrl);
+            movie.setFinished(isFinished);
+            movie.setEpisodes(episodes);
+            
+            //添加到列表
+            movies.add(movie);
         }
 
-
-
-        return null;
+        //返回Movie列表
+        return movies;
     }
 
     private String sendGetRequest(String urlString) {
