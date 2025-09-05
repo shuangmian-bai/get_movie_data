@@ -13,7 +13,7 @@ import java.util.List;
  * @version 1.0.0
  */
 @XmlRootElement(name = "movie")
-@XmlType(propOrder = {"name", "description", "finished", "playUrl", "episodes", "episodeList"})
+@XmlType(propOrder = {"name", "description", "finished", "playUrl", "episodes", "poster", "episodeList"})
 public class Movie {
     
     /** 电影名称 */
@@ -30,6 +30,9 @@ public class Movie {
     
     /** 集数 */
     private int episodes;
+    
+    /** 海报图片地址 */
+    private String poster;
     
     /** 剧集列表 */
     private List<Episode> episodeList;
@@ -127,6 +130,25 @@ public class Movie {
      */
     public void setEpisodes(int episodes) {
         this.episodes = episodes;
+    }
+
+    /**
+     * 获取海报图片地址
+     *
+     * @return 海报图片地址
+     */
+    @XmlElement(name = "poster")
+    public String getPoster() {
+        return poster;
+    }
+
+    /**
+     * 设置海报图片地址
+     *
+     * @param poster 海报图片地址
+     */
+    public void setPoster(String poster) {
+        this.poster = poster;
     }
 
     /**

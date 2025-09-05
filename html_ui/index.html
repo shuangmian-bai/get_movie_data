@@ -1,10 +1,331 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电影数据查询系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .search-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        select {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            background-color: white;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .results-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .movie-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        .movie-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s;
+        }
+        .movie-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .movie-poster {
+            width: 100%;
+            height: 300px;
+            background-color: #eee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+        }
+        .movie-info {
+            padding: 15px;
+        }
+        .movie-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+        .movie-desc {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .episode-list {
+            margin-top: 10px;
+        }
+        .episode-item {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .episode-item:hover {
+            background-color: #f5f5f5;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .error {
+            color: red;
+            text-align: center;
+            padding: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        .episode-container {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .m3u8-url {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+    </style>
 </head>
 <body>
+    <div class="header">
+        <h1>电影数据查询系统</h1>
+    </div>
 
+    <div class="search-container">
+        <div class="search-box">
+            <select id="dataSourceSelect">
+                <option value="https://custom1.example.com/">自定义数据源1 (https://custom1.example.com/)</option>
+                <option value="https://custom2.example.com/">自定义数据源2 (https://custom2.example.com/)</option>
+                <option value="https://www.chabeigu.com">茶杯狐数据源 (https://www.chabeigu.com)</option>
+                <option value="*" selected>测试数据源 (默认)</option>
+            </select>
+            <input type="text" id="keyword" placeholder="请输入电影名称...">
+            <button onclick="searchMovies()">搜索</button>
+        </div>
+    </div>
+
+    <div id="loading" class="loading hidden">
+        <p>搜索中...</p>
+    </div>
+
+    <div id="error" class="error hidden">
+        <p>搜索出错，请重试</p>
+    </div>
+
+    <div class="results-container">
+        <h2>搜索结果</h2>
+        <div id="results" class="movie-grid">
+            <p>请输入关键词进行搜索</p>
+        </div>
+    </div>
+
+    <script>
+        // API基础URL - 根据实际部署情况修改
+        const API_BASE_URL = 'http://localhost:8080/api/movie';
+        
+        async function searchMovies() {
+            const baseUrl = document.getElementById('dataSourceSelect').value;
+            const keyword = document.getElementById('keyword').value.trim();
+            
+            if (!keyword) {
+                alert('请输入搜索关键词');
+                return;
+            }
+            
+            // 显示加载状态
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('results').innerHTML = '';
+            
+            try {
+                // 调用搜索接口，不对baseUrl进行编码
+                const response = await fetch(`${API_BASE_URL}/search?baseUrl=${baseUrl}&keyword=${encodeURIComponent(keyword)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const movies = await response.json();
+                displayMovies(movies, baseUrl);
+            } catch (error) {
+                console.error('搜索出错:', error);
+                document.getElementById('error').classList.remove('hidden');
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+        
+        function displayMovies(movies, baseUrl) {
+            const resultsContainer = document.getElementById('results');
+            
+            if (!movies || movies.length === 0) {
+                resultsContainer.innerHTML = '<p>未找到相关电影</p>';
+                return;
+            }
+            
+            let html = '';
+            movies.forEach((movie, index) => {
+                html += `
+                    <div class="movie-card">
+                        <div class="movie-poster">
+                            ${movie.poster ? `<img src="${movie.poster}" alt="${movie.name}">` : '暂无海报'}
+                        </div>
+                        <div class="movie-info">
+                            <div class="movie-title">${movie.name || '未知标题'}</div>
+                            <div class="movie-desc">${movie.description || '暂无描述'}</div>
+                            <div>
+                                <strong>播放地址:</strong>
+                                <div class="episode-list">
+                                    <div class="episode-item" onclick="getEpisodes('${baseUrl}', '${movie.playUrl || ''}', this)">
+                                        ${movie.playUrl || '暂无播放地址'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsContainer.innerHTML = html;
+        }
+        
+        async function getEpisodes(baseUrl, playUrl, element) {
+            if (!playUrl) {
+                alert('播放地址为空');
+                return;
+            }
+            
+            // 创建剧集显示区域
+            let episodeContainer = element.parentNode.querySelector('.episode-container');
+            if (!episodeContainer) {
+                episodeContainer = document.createElement('div');
+                episodeContainer.className = 'episode-container';
+                element.parentNode.appendChild(episodeContainer);
+            }
+            
+            // 显示加载状态
+            episodeContainer.innerHTML = '<p>加载剧集中...</p>';
+            
+            try {
+                // 不对baseUrl进行编码
+                const response = await fetch(`${API_BASE_URL}/episodes?baseUrl=${baseUrl}&playUrl=${encodeURIComponent(playUrl)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const episodes = await response.json();
+                displayEpisodes(episodes, baseUrl, episodeContainer);
+            } catch (error) {
+                console.error('获取剧集出错:', error);
+                episodeContainer.innerHTML = '<p>获取剧集信息失败</p>';
+            }
+        }
+        
+        function displayEpisodes(episodes, baseUrl, container) {
+            if (!episodes || episodes.length === 0) {
+                container.innerHTML = '<p>暂无剧集信息</p>';
+                return;
+            }
+            
+            let html = '<strong>剧集列表:</strong><div class="episode-list">';
+            episodes.forEach(episode => {
+                html += `<div class="episode-item" onclick="getM3u8Url('${baseUrl}', '${episode.episodeUrl}', this)">
+                            ${episode.title || episode.episodeUrl}
+                         </div>`;
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+        }
+        
+        async function getM3u8Url(baseUrl, episodeUrl, element) {
+            if (!episodeUrl) {
+                alert('剧集地址为空');
+                return;
+            }
+            
+            // 创建M3U8 URL显示区域
+            let m3u8Container = element.parentNode.querySelector('.m3u8-url');
+            if (!m3u8Container) {
+                m3u8Container = document.createElement('div');
+                m3u8Container.className = 'm3u8-url';
+                element.parentNode.appendChild(m3u8Container);
+            }
+            
+            // 显示加载状态
+            m3u8Container.innerHTML = '<p>获取播放地址中...</p>';
+            
+            try {
+                // 不对baseUrl进行编码
+                const response = await fetch(`${API_BASE_URL}/m3u8?baseUrl=${baseUrl}&episodeUrl=${encodeURIComponent(episodeUrl)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const m3u8Url = await response.text();
+                m3u8Container.innerHTML = `<strong>M3U8播放地址:</strong><br>${m3u8Url || '无播放地址'}`;
+            } catch (error) {
+                console.error('获取M3U8地址出错:', error);
+                m3u8Container.innerHTML = '<p>获取播放地址失败</p>';
+            }
+        }
+        
+        // 回车搜索
+        document.getElementById('keyword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchMovies();
+            }
+        });
+    </script>
 </body>
 </html>

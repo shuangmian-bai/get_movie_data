@@ -28,6 +28,9 @@ public class Movie {
     /** 总集数 */
     private int episodes;
     
+    /** 海报图片地址 */
+    private String poster;
+    
     /** 剧集列表 */
     private List<Episode> episodeList;
 
@@ -119,6 +122,24 @@ public class Movie {
      */
     public void setEpisodes(int episodes) {
         this.episodes = episodes;
+    }
+
+    /**
+     * 获取海报图片地址
+     *
+     * @return 海报图片地址
+     */
+    public String getPoster() {
+        return poster;
+    }
+
+    /**
+     * 设置海报图片地址
+     *
+     * @param poster 海报图片地址
+     */
+    public void setPoster(String poster) {
+        this.poster = poster;
     }
 
     /**

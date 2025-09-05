@@ -17,13 +17,13 @@ public class ChabeiguMovieServiceTest {
             System.out.println("ChabeiguMovieService 实例化成功");
 
             // 测试searchMovies方法
-//            testSearchMovies(movieService);
+            testSearchMovies(movieService);
 
             // 测试getEpisodes方法
 //            testGetEpisodes(movieService);
 
             // 测试getM3u8Url方法
-            testGetM3u8Url(movieService);
+//            testGetM3u8Url(movieService);
 
             System.out.println("所有测试通过!");
         } catch (Exception e) {

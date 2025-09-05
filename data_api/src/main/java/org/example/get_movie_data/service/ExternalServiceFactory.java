@@ -340,6 +340,14 @@ public class ExternalServiceFactory {
                     System.err.println("Error getting episodes from external movie: " + e.getMessage());
                 }
 
+                try {
+                    Method getPosterMethod = externalMovieClass.getMethod("getPoster");
+                    Object poster = getPosterMethod.invoke(externalMovie);
+                    movie.setPoster(poster != null ? poster.toString() : "");
+                } catch (Exception e) {
+                    System.err.println("Error getting poster from external movie: " + e.getMessage());
+                }
+
                 return movie;
             } catch (Exception e) {
                 System.err.println("Error converting external movie: " + e.getMessage());
