@@ -8,6 +8,10 @@ import org.jsoup.nodes.Element;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.net.URL;
 import java.net.HttpURLConnection;
 import java.io.BufferedReader;
@@ -24,6 +28,9 @@ import java.io.InputStreamReader;
  * @version 1.0.0
  */
 public class ChabeiguMovieService {
+    
+    // 线程池大小控制变量
+    private static final int THREAD_POOL_SIZE = 10;
     
     /**
      * 根据关键词搜索电影
@@ -70,22 +77,58 @@ public class ChabeiguMovieService {
 
         System.out.println("总页数: " + pageCount);
 
-        getPageData(keyword, 1);
+        // 使用多线程获取所有页面数据
+        List<Movie> movies = getAllPageData(keyword, pageCount);
 
-        List<Movie> movies = new ArrayList<>();
-
-
-
-
-        Movie movie = new Movie();
-        movie.setName("茶杯狐电影: " + keyword);
-        movie.setDescription("这是通过茶杯狐数据源获取的电影信息");
-        movie.setFinished(true);
-        movie.setPlayUrl(baseUrl + "/play/chabeigu_" + keyword);
-        movie.setEpisodes(12);
-
-        movies.add(movie);
         return movies;
+    }
+
+    /**
+     * 使用多线程获取所有页面数据
+     * 
+     * @param keyword 搜索关键词
+     * @param pageCount 总页数
+     * @return 所有页面的电影列表
+     */
+    private List<Movie> getAllPageData(String keyword, int pageCount) {
+        // 创建固定大小的线程池
+        ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        List<Future<List<Movie>>> futures = new ArrayList<>();
+        
+        try {
+            // 提交所有任务
+            for (int i = 1; i <= pageCount; i++) {
+                final int page = i;
+                Future<List<Movie>> future = executor.submit(() -> getPageData(keyword, page));
+                futures.add(future);
+            }
+            
+            // 收集所有结果
+            List<Movie> allMovies = new ArrayList<>();
+            for (Future<List<Movie>> future : futures) {
+                try {
+                    List<Movie> pageMovies = future.get();
+                    allMovies.addAll(pageMovies);
+                } catch (Exception e) {
+                    System.err.println("获取页面数据时出错: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+            
+            return allMovies;
+        } finally {
+            // 关闭线程池
+            executor.shutdown();
+            try {
+                // 等待所有任务完成
+                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     //获取一页函数，传入搜索关键词和页码，返回这一页数据
