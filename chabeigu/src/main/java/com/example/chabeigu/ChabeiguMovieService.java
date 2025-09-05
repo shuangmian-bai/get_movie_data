@@ -161,9 +161,14 @@ public class ChabeiguMovieService {
             //匹配是否有"完结"字符串
             boolean isFinished = cache.contains("完结");
             int episodes = 0;
-            
+
+            //如果是XX版，则被判断为电影，则将isFinished设置为true，集数为1
+            if (cache.contains("版")) {
+                isFinished = true;
+                episodes = 1;
+            }
             // 提取集数
-            if (cache.contains("第") && cache.contains("集")) {
+            else if (cache.contains("第") && cache.contains("集")) {
                 // 提取"第X集"中的数字
                 String episodesStr = cache.replaceAll(".*第(\\d+)集.*", "$1");
                 try {
@@ -236,15 +241,10 @@ public class ChabeiguMovieService {
      * @return 剧集列表
      */
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-        List<Movie.Episode> episodes = new ArrayList<>();
-        
-        for (int i = 1; i <= 5; i++) {
-            Movie.Episode episode = new Movie.Episode();
-            episode.setTitle("茶杯狐第" + i + "集");
-            episode.setEpisodeUrl(baseUrl + "/episode/chabeigu_" + i);
-            episodes.add(episode);
-        }
-        return episodes;
+
+
+
+        return null;
     }
 
     /**

@@ -34,7 +34,7 @@ public class ChabeiguMovieServiceTest {
 
     private static void testSearchMovies(ChabeiguMovieService movieService) throws Exception {
         String baseUrl = "https://www.chabeigu.com/";
-        String keyword = "好";
+        String keyword = "浪浪山";
 
         List<Movie> movies = movieService.searchMovies(baseUrl, keyword);
 
@@ -47,8 +47,9 @@ public class ChabeiguMovieServiceTest {
         }
 
         Movie movie = movies.get(0);
-        if (!("茶杯狐电影: " + keyword).equals(movie.getName())) {
-            throw new AssertionError("电影名称不匹配");
+        // 检查电影名称是否包含关键词，而不是严格匹配特定前缀
+        if (!movie.getName().contains(keyword)) {
+            throw new AssertionError("电影名称不匹配: 期望包含'" + keyword + "', 实际为'" + movie.getName() + "'");
         }
 
         System.out.println("searchMovies 测试通过");
