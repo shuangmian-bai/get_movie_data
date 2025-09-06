@@ -99,8 +99,6 @@ java -jar target/get_movie_data-0.0.1-SNAPSHOT.jar
 
 服务启动后，可通过以下API访问：
 
-- 搜索电影（完整信息）: `GET /api/movie/search?baseUrl={baseUrl}&keyword={keyword}`
-- 搜索电影（基础信息）: `GET /api/movie/search/simple?baseUrl={baseUrl}&keyword={keyword}`
 - 获取剧集: `GET /api/movie/episodes?baseUrl={baseUrl}&playUrl={playUrl}`
 - 获取M3U8地址: `GET /api/movie/m3u8?baseUrl={baseUrl}&episodeUrl={episodeUrl}`
 - 统一搜索接口（并发查询所有数据源）: `GET /api/movie/search/all?keyword={keyword}`
