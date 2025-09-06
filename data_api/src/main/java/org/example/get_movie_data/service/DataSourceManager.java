@@ -4,27 +4,26 @@ import org.example.get_movie_data.model.Movie;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
-import java.io.File;
-import java.lang.reflect.Method;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.ArrayList;
-import java.util.HashMap;
+import jakarta.annotation.PostConstruct;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 /**
  * 数据源管理器
  * 
- * 负责管理所有数据源实例，根据URL映射动态加载和创建数据源服务。
- * 支持通过外部JAR包扩展数据源实现。
+ * 负责管理所有数据源服务实例，包括内部默认服务和外部加载的服务。
  * 
  * @author get_movie_data team
  * @version 1.0.0
  */
 @Component
 public class DataSourceManager implements MovieServiceRouter {
+    private static final Logger logger = Logger.getLogger(DataSourceManager.class.getName());
     
     @Autowired
     private ConfigManager configManager;
@@ -32,18 +31,60 @@ public class DataSourceManager implements MovieServiceRouter {
     @Autowired
     private ExternalServiceFactory externalServiceFactory;
     
-    /** 服务缓存，避免重复创建实例 */
-    private Map<String, MovieService> serviceCache = new HashMap<>();
+    /** 数据源服务实例缓存 */
+    private Map<String, MovieService> serviceCache = new ConcurrentHashMap<>();
     
     /**
      * 初始化方法，在Spring容器启动后执行
-     * 注册默认的数据源服务
      */
     @PostConstruct
     public void init() {
-        System.out.println("Initializing DataSourceManager...");
-        serviceCache.put("default", new DefaultMovieService());
-        System.out.println("DataSourceManager initialized with default service");
+        logger.info("Initializing DataSourceManager");
+        // 初始化时预加载所有配置的数据源
+        loadAllServices();
+    }
+    
+    /**
+     * 预加载所有配置的数据源服务
+     */
+    private void loadAllServices() {
+        DataSourceConfig config = configManager.getConfig();
+        if (config != null && config.getDatasources() != null) {
+            for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
+                try {
+                    MovieService service = createMovieService(datasource.getId(), datasource.getClazz());
+                    if (service != null) {
+                        serviceCache.put(datasource.getId(), service);
+                        logger.info("Loaded service for datasource: " + datasource.getId());
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to load service for datasource: " + datasource.getId(), e);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 根据数据源ID创建对应的电影服务实例
+     * 
+     * @param datasourceId 数据源ID
+     * @param className 类名
+     * @return 对应的电影服务实例
+     */
+    private MovieService createMovieService(String datasourceId, String className) {
+        logger.info("Creating movie service for datasourceId: " + datasourceId + ", className: " + className);
+        
+        // 首先尝试通过外部服务工厂创建
+        MovieService externalService = externalServiceFactory.createMovieService(datasourceId, className);
+        if (externalService != null) {
+            logger.info("Successfully created external service for datasource: " + datasourceId);
+            return externalService;
+        }
+        
+        // 如果外部服务创建失败，使用默认服务
+        logger.warning("Failed to create external service for datasource: " + datasourceId + 
+                      ", using default service instead");
+        return new DefaultMovieService();
     }
     
     /**
@@ -54,122 +95,91 @@ public class DataSourceManager implements MovieServiceRouter {
      */
     @Override
     public MovieService getMovieServiceByBaseUrl(String baseUrl) {
-        System.out.println("Getting movie service for baseUrl: " + baseUrl);
+        logger.info("Getting movie service for baseUrl: " + baseUrl);
         
-        // 查找匹配的数据源ID
-        String datasourceId = findDatasourceIdByBaseUrl(baseUrl);
-        System.out.println("Found datasourceId: " + datasourceId);
-        
-        if (datasourceId == null) {
-            System.out.println("No matching datasource found, returning default service");
-            return serviceCache.get("default");
+        // 获取配置
+        DataSourceConfig config = configManager.getConfig();
+        if (config == null || config.getUrlMappings() == null) {
+            logger.warning("No configuration or URL mappings found, using default service");
+            return new DefaultMovieService();
         }
         
-        // 检查是否是默认数据源
-        if ("default".equals(datasourceId)) {
-            System.out.println("Using default service");
-            return serviceCache.get("default");
+        // 查找匹配的URL映射
+        for (DataSourceConfig.UrlMapping mapping : config.getUrlMappings()) {
+            if (matchesUrlPattern(baseUrl, mapping.getBaseUrl())) {
+                // 根据数据源ID获取服务实例
+                MovieService service = serviceCache.get(mapping.getDatasource());
+                if (service != null) {
+                    logger.info("Found service for datasource: " + mapping.getDatasource());
+                    return service;
+                } else {
+                    logger.warning("Service not found in cache for datasource: " + mapping.getDatasource() + 
+                                  ", creating new instance");
+                    // 如果缓存中没有，尝试创建新的服务实例
+                    DataSourceConfig.Datasource datasource = getDatasourceById(config, mapping.getDatasource());
+                    if (datasource != null) {
+                        service = createMovieService(datasource.getId(), datasource.getClazz());
+                        if (service != null) {
+                            serviceCache.put(datasource.getId(), service);
+                            return service;
+                        }
+                    }
+                }
+            }
         }
         
-        // 检查缓存
-        if (serviceCache.containsKey(datasourceId)) {
-            System.out.println("Found service in cache for datasourceId: " + datasourceId);
-            return serviceCache.get(datasourceId);
-        }
-        
-        // 创建新的服务实例
-        MovieService service = createMovieService(datasourceId);
-        if (service != null) {
-            serviceCache.put(datasourceId, service);
-            System.out.println("Created and cached service for datasourceId: " + datasourceId);
-        } else {
-            System.out.println("Failed to create service for datasourceId: " + datasourceId + ", using default");
-            service = serviceCache.get("default");
-        }
-        
-        return service;
+        // 如果没有找到匹配的映射，使用默认服务
+        logger.info("No matching URL mapping found, using default service");
+        return new DefaultMovieService();
     }
-
+    
     /**
-     * 根据基础URL查找匹配的数据源ID
+     * 根据ID查找数据源配置
      * 
-     * @param baseUrl 基础URL
-     * @return 匹配的数据源ID，如果没有匹配则返回null
+     * @param config 配置对象
+     * @param id 数据源ID
+     * @return 数据源配置，如果未找到则返回null
      */
-    private String findDatasourceIdByBaseUrl(String baseUrl) {
-        System.out.println("Finding datasource for baseUrl: " + baseUrl);
-        
-        DataSourceConfig dataSourceConfig = configManager.getConfig();
-        if (dataSourceConfig.getUrlMappings() != null) {
-            // 先查找精确匹配
-            for (DataSourceConfig.UrlMapping mapping : dataSourceConfig.getUrlMappings()) {
-                System.out.println("Checking mapping: " + mapping.getBaseUrl() + " -> " + mapping.getDatasource());
-                if (baseUrl.equals(mapping.getBaseUrl())) {
-                    System.out.println("Found exact match: " + mapping.getDatasource());
-                    return mapping.getDatasource();
-                }
-            }
-            
-            // 再查找通配符匹配
-            for (DataSourceConfig.UrlMapping mapping : dataSourceConfig.getUrlMappings()) {
-                if ("*".equals(mapping.getBaseUrl())) {
-                    System.out.println("Found wildcard match: " + mapping.getDatasource());
-                    return mapping.getDatasource();
+    private DataSourceConfig.Datasource getDatasourceById(DataSourceConfig config, String id) {
+        if (config.getDatasources() != null) {
+            for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
+                if (id.equals(datasource.getId())) {
+                    return datasource;
                 }
             }
         }
-        
-        System.out.println("No matching datasource found");
         return null;
     }
     
     /**
-     * 根据数据源ID创建对应的电影服务实例
+     * 检查URL是否匹配指定的模式
      * 
-     * @param datasourceId 数据源ID
-     * @return 对应的电影服务实例
+     * @param url 待检查的URL
+     * @param pattern URL模式
+     * @return 是否匹配
      */
-    private MovieService createMovieService(String datasourceId) {
-        System.out.println("Creating movie service for datasourceId: " + datasourceId);
-        
-        DataSourceConfig dataSourceConfig = configManager.getConfig();
-        // 查找数据源配置
-        DataSourceConfig.Datasource targetDatasource = null;
-        if (dataSourceConfig.getDatasources() != null) {
-            for (DataSourceConfig.Datasource datasource : dataSourceConfig.getDatasources()) {
-                System.out.println("Checking datasource: " + datasource.getId() + " -> " + datasource.getClazz());
-                if (datasourceId.equals(datasource.getId())) {
-                    targetDatasource = datasource;
-                    break;
-                }
-            }
+    private boolean matchesUrlPattern(String url, String pattern) {
+        if ("*".equals(pattern)) {
+            return true; // 通配符匹配所有URL
         }
         
-        if (targetDatasource == null) {
-            System.out.println("Datasource not found in config: " + datasourceId);
-            return null;
-        }
-        
-        String className = targetDatasource.getClazz();
-        System.out.println("Trying to load class: " + className);
-        
-        // 使用外部服务工厂创建服务
-        return externalServiceFactory.createMovieService(datasourceId, className);
+        return url.startsWith(pattern);
     }
     
     /**
-     * 默认电影服务实现
+     * 默认电影服务实现类
      * 
-     * 当没有匹配的数据源时使用此默认实现
+     * 当外部数据源不可用时，使用此默认实现。
      */
-    private static class DefaultMovieService implements MovieService {
+    public static class DefaultMovieService implements MovieService {
+        
         @Override
         public List<Movie> searchMovies(String baseUrl, String keyword) {
-            System.out.println("DefaultMovieService.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
+            logger.info("DefaultMovieService.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
             
             // 针对特定URL返回固定数据
             if ("https://127.0.0.1/test".equals(baseUrl)) {
-                System.out.println("Returning test data for https://127.0.0.1/test");
+                logger.info("Returning test data for https://127.0.0.1/test");
                 List<Movie> movies = new ArrayList<>();
                 
                 Movie movie = new Movie();
@@ -180,7 +190,7 @@ public class DataSourceManager implements MovieServiceRouter {
                 movie.setEpisodes(5);
                 
                 movies.add(movie);
-                System.out.println("Test data movies count: " + movies.size());
+                logger.info("Test data movies count: " + movies.size());
                 return movies;
             }
             
@@ -196,13 +206,13 @@ public class DataSourceManager implements MovieServiceRouter {
             movie.setEpisodes(10);
             
             movies.add(movie);
-            System.out.println("Default data movies count: " + movies.size());
+            logger.info("Default data movies count: " + movies.size());
             return movies;
         }
 
         @Override
         public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-            System.out.println("DefaultMovieService.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
+            logger.info("DefaultMovieService.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
             
             // 针对特定URL返回固定数据
             if ("https://127.0.0.1/test".equals(baseUrl)) {
@@ -215,7 +225,7 @@ public class DataSourceManager implements MovieServiceRouter {
                     episodes.add(episode);
                 }
                 
-                System.out.println("Test episodes count: " + episodes.size());
+                logger.info("Test episodes count: " + episodes.size());
                 return episodes;
             }
             
@@ -230,13 +240,13 @@ public class DataSourceManager implements MovieServiceRouter {
                 episodes.add(episode);
             }
             
-            System.out.println("Default episodes count: " + episodes.size());
+            logger.info("Default episodes count: " + episodes.size());
             return episodes;
         }
 
         @Override
         public String getM3u8Url(String baseUrl, String episodeUrl) {
-            System.out.println("DefaultMovieService.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
+            logger.info("DefaultMovieService.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
             
             // 针对特定URL返回固定数据
             if ("https://127.0.0.1/test".equals(baseUrl)) {
@@ -252,291 +262,6 @@ public class DataSourceManager implements MovieServiceRouter {
         public MovieService getMovieServiceByDatasource(String datasourceId) {
             // 默认实现不支持通过数据源ID获取服务
             return this;
-        }
-    }
-    
-    /**
-     * 外部电影服务适配器
-     * 
-     * 用于适配实现了ExternalMovieService接口的外部数据源
-     */
-    private static class ExternalMovieServiceAdapter implements MovieService {
-        private final ExternalMovieService externalService;
-
-        public ExternalMovieServiceAdapter(ExternalMovieService externalService) {
-            this.externalService = externalService;
-            System.out.println("Created ExternalMovieServiceAdapter");
-        }
-
-        @Override
-        public List<Movie> searchMovies(String baseUrl, String keyword) {
-            System.out.println("ExternalMovieServiceAdapter.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
-            try {
-                List<Movie> result = externalService.searchMovies(baseUrl, keyword);
-                System.out.println("External service returned " + (result != null ? result.size() : "null") + " movies");
-                return result;
-            } catch (Exception e) {
-                System.err.println("Error in external service searchMovies:");
-                e.printStackTrace();
-                return new ArrayList<>();
-            }
-        }
-
-        @Override
-        public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-            System.out.println("ExternalMovieServiceAdapter.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
-            try {
-                List<Movie.Episode> result = externalService.getEpisodes(baseUrl, playUrl);
-                System.out.println("External service returned " + (result != null ? result.size() : "null") + " episodes");
-                return result;
-            } catch (Exception e) {
-                System.err.println("Error in external service getEpisodes:");
-                e.printStackTrace();
-                return new ArrayList<>();
-            }
-        }
-
-        @Override
-        public String getM3u8Url(String baseUrl, String episodeUrl) {
-            System.out.println("ExternalMovieServiceAdapter.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
-            try {
-                String result = externalService.getM3u8Url(baseUrl, episodeUrl);
-                System.out.println("External service returned m3u8 URL: " + result);
-                return result;
-            } catch (Exception e) {
-                System.err.println("Error in external service getM3u8Url:");
-                e.printStackTrace();
-                return "";
-            }
-        }
-
-        @Override
-        public MovieService getMovieServiceByDatasource(String datasourceId) {
-            // 适配器不支持通过数据源ID获取服务
-            return this;
-        }
-    }
-    
-    /**
-     * 通用外部服务适配器，用于处理不实现接口的自定义类
-     * 
-     * 通过反射调用外部类的方法，并进行数据类型转换
-     */
-    private static class GenericExternalServiceAdapter implements MovieService {
-        private final Object externalService;
-        private final ClassLoader classLoader;
-        private Method searchMoviesMethod;
-        private Method getEpisodesMethod;
-        private Method getM3u8UrlMethod;
-
-        public GenericExternalServiceAdapter(Object externalService, ClassLoader classLoader) {
-            this.externalService = externalService;
-            this.classLoader = classLoader;
-            System.out.println("Created GenericExternalServiceAdapter for class: " + externalService.getClass().getName());
-            
-            // 查找方法
-            try {
-                Class<?> clazz = externalService.getClass();
-                searchMoviesMethod = clazz.getMethod("searchMovies", String.class, String.class);
-                getEpisodesMethod = clazz.getMethod("getEpisodes", String.class, String.class);
-                getM3u8UrlMethod = clazz.getMethod("getM3u8Url", String.class, String.class);
-                System.out.println("Found all required methods in external service");
-            } catch (Exception e) {
-                System.err.println("Error finding methods in external service:");
-                e.printStackTrace();
-            }
-        }
-
-        @Override
-        public List<Movie> searchMovies(String baseUrl, String keyword) {
-            System.out.println("GenericExternalServiceAdapter.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
-            try {
-                if (searchMoviesMethod != null) {
-                    Object result = searchMoviesMethod.invoke(externalService, baseUrl, keyword);
-                    System.out.println("External service returned result: " + result);
-                    
-                    // 转换结果
-                    if (result instanceof List) {
-                        List<?> externalMovies = (List<?>) result;
-                        List<Movie> movies = new ArrayList<>();
-                        
-                        for (Object externalMovie : externalMovies) {
-                            Movie movie = convertExternalMovie(externalMovie);
-                            if (movie != null) {
-                                movies.add(movie);
-                            }
-                        }
-                        
-                        System.out.println("Converted " + movies.size() + " movies");
-                        return movies;
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("Error in external service searchMovies:");
-                e.printStackTrace();
-            }
-            
-            return new ArrayList<>();
-        }
-
-        @Override
-        public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-            System.out.println("GenericExternalServiceAdapter.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
-            try {
-                if (getEpisodesMethod != null) {
-                    Object result = getEpisodesMethod.invoke(externalService, baseUrl, playUrl);
-                    System.out.println("External service returned result: " + result);
-                    
-                    // 转换结果
-                    if (result instanceof List) {
-                        List<?> externalEpisodes = (List<?>) result;
-                        List<Movie.Episode> episodes = new ArrayList<>();
-                        
-                        for (Object externalEpisode : externalEpisodes) {
-                            Movie.Episode episode = convertExternalEpisode(externalEpisode);
-                            if (episode != null) {
-                                episodes.add(episode);
-                            }
-                        }
-                        
-                        System.out.println("Converted " + episodes.size() + " episodes");
-                        return episodes;
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("Error in external service getEpisodes:");
-                e.printStackTrace();
-            }
-            
-            return new ArrayList<>();
-        }
-
-        @Override
-        public String getM3u8Url(String baseUrl, String episodeUrl) {
-            System.out.println("GenericExternalServiceAdapter.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
-            try {
-                if (getM3u8UrlMethod != null) {
-                    Object result = getM3u8UrlMethod.invoke(externalService, baseUrl, episodeUrl);
-                    System.out.println("External service returned result: " + result);
-                    
-                    if (result instanceof String) {
-                        return (String) result;
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("Error in external service getM3u8Url:");
-                e.printStackTrace();
-            }
-            
-            return "";
-        }
-
-        @Override
-        public MovieService getMovieServiceByDatasource(String datasourceId) {
-            // 适配器不支持通过数据源ID获取服务
-            return this;
-        }
-        
-        /**
-         * 转换外部电影对象为内部Movie对象
-         * 
-         * @param externalMovie 外部电影对象
-         * @return 内部Movie对象
-         */
-        private Movie convertExternalMovie(Object externalMovie) {
-            if (externalMovie == null) return null;
-            
-            try {
-                Movie movie = new Movie();
-                
-                // 使用反射获取外部电影对象的属性
-                Class<?> externalMovieClass = externalMovie.getClass();
-                
-                try {
-                    Method getNameMethod = externalMovieClass.getMethod("getName");
-                    Object name = getNameMethod.invoke(externalMovie);
-                    movie.setName(name != null ? name.toString() : "");
-                } catch (Exception e) {
-                    System.err.println("Error getting name from external movie: " + e.getMessage());
-                }
-                
-                try {
-                    Method getDescriptionMethod = externalMovieClass.getMethod("getDescription");
-                    Object description = getDescriptionMethod.invoke(externalMovie);
-                    movie.setDescription(description != null ? description.toString() : "");
-                } catch (Exception e) {
-                    System.err.println("Error getting description from external movie: " + e.getMessage());
-                }
-                
-                try {
-                    Method isFinishedMethod = externalMovieClass.getMethod("isFinished");
-                    Object finished = isFinishedMethod.invoke(externalMovie);
-                    movie.setFinished(finished instanceof Boolean ? (Boolean) finished : false);
-                } catch (Exception e) {
-                    System.err.println("Error getting finished from external movie: " + e.getMessage());
-                }
-                
-                try {
-                    Method getPlayUrlMethod = externalMovieClass.getMethod("getPlayUrl");
-                    Object playUrl = getPlayUrlMethod.invoke(externalMovie);
-                    movie.setPlayUrl(playUrl != null ? playUrl.toString() : "");
-                } catch (Exception e) {
-                    System.err.println("Error getting playUrl from external movie: " + e.getMessage());
-                }
-                
-                try {
-                    Method getEpisodesMethod = externalMovieClass.getMethod("getEpisodes");
-                    Object episodes = getEpisodesMethod.invoke(externalMovie);
-                    movie.setEpisodes(episodes instanceof Integer ? (Integer) episodes : 0);
-                } catch (Exception e) {
-                    System.err.println("Error getting episodes from external movie: " + e.getMessage());
-                }
-                
-                return movie;
-            } catch (Exception e) {
-                System.err.println("Error converting external movie: " + e.getMessage());
-                e.printStackTrace();
-                return null;
-            }
-        }
-        
-        /**
-         * 转换外部剧集对象为内部Episode对象
-         * 
-         * @param externalEpisode 外部剧集对象
-         * @return 内部Episode对象
-         */
-        private Movie.Episode convertExternalEpisode(Object externalEpisode) {
-            if (externalEpisode == null) return null;
-            
-            try {
-                Movie.Episode episode = new Movie.Episode();
-                
-                // 使用反射获取外部剧集对象的属性
-                Class<?> externalEpisodeClass = externalEpisode.getClass();
-                
-                try {
-                    Method getTitleMethod = externalEpisodeClass.getMethod("getTitle");
-                    Object title = getTitleMethod.invoke(externalEpisode);
-                    episode.setTitle(title != null ? title.toString() : "");
-                } catch (Exception e) {
-                    System.err.println("Error getting title from external episode: " + e.getMessage());
-                }
-                
-                try {
-                    Method getEpisodeUrlMethod = externalEpisodeClass.getMethod("getEpisodeUrl");
-                    Object episodeUrl = getEpisodeUrlMethod.invoke(externalEpisode);
-                    episode.setEpisodeUrl(episodeUrl != null ? episodeUrl.toString() : "");
-                } catch (Exception e) {
-                    System.err.println("Error getting episodeUrl from external episode: " + e.getMessage());
-                }
-                
-                return episode;
-            } catch (Exception e) {
-                System.err.println("Error converting external episode: " + e.getMessage());
-                e.printStackTrace();
-                return null;
-            }
         }
     }
 }

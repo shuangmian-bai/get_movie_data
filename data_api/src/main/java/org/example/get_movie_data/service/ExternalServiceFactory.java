@@ -37,23 +37,23 @@ public class ExternalServiceFactory {
      * @return 对应的电影服务实例
      */
     public MovieService createMovieService(String datasourceId, String className) {
-        System.out.println("Creating movie service for datasourceId: " + datasourceId + ", className: " + className);
+        logger.info("Creating movie service for datasourceId: " + datasourceId + ", className: " + className);
 
         try {
             // 创建URLClassLoader来加载libs目录下的jar文件
             File libDir = new File("libs");
-            System.out.println("Lib directory exists: " + libDir.exists());
+            logger.info("Lib directory exists: " + libDir.exists());
 
             if (!libDir.exists()) {
-                System.out.println("Lib directory does not exist");
+                logger.warning("Lib directory does not exist");
                 return null;
             }
 
             File[] jarFiles = libDir.listFiles((dir, name) -> name.endsWith(".jar"));
-            System.out.println("Found jar files: " + (jarFiles != null ? jarFiles.length : 0));
+            logger.info("Found jar files: " + (jarFiles != null ? jarFiles.length : 0));
 
             if (jarFiles == null || jarFiles.length == 0) {
-                System.out.println("No jar files found in lib directory");
+                logger.warning("No jar files found in lib directory");
                 return null;
             }
 
@@ -61,7 +61,7 @@ public class ExternalServiceFactory {
             URL[] jarUrls = new URL[jarFiles.length];
             for (int i = 0; i < jarFiles.length; i++) {
                 jarUrls[i] = jarFiles[i].toURI().toURL();
-                System.out.println("Adding JAR to classpath: " + jarUrls[i]);
+                logger.info("Adding JAR to classpath: " + jarUrls[i]);
             }
 
             // 检查缓存中是否已有类加载器
@@ -69,41 +69,41 @@ public class ExternalServiceFactory {
             if (classLoader == null) {
                 classLoader = new URLClassLoader(jarUrls, Thread.currentThread().getContextClassLoader());
                 classLoaderCache.put(datasourceId, classLoader);
-                System.out.println("Created new classloader for datasource: " + datasourceId);
+                logger.info("Created new classloader for datasource: " + datasourceId);
             } else {
-                System.out.println("Using cached classloader for datasource: " + datasourceId);
+                logger.info("Using cached classloader for datasource: " + datasourceId);
             }
 
             // 尝试加载类
             Class<?> clazz = classLoader.loadClass(className);
-            System.out.println("Successfully loaded class: " + clazz.getName());
+            logger.info("Successfully loaded class: " + clazz.getName());
 
             // 检查类是否实现了ExternalMovieService接口
             if (ExternalMovieService.class.isAssignableFrom(clazz)) {
-                System.out.println("Class implements ExternalMovieService, creating adapter");
+                logger.info("Class implements ExternalMovieService, creating adapter");
                 Object instance = clazz.getDeclaredConstructor().newInstance();
                 return new ExternalMovieServiceAdapter((ExternalMovieService) instance);
             }
 
             // 检查类是否实现了MovieService接口
             if (MovieService.class.isAssignableFrom(clazz)) {
-                System.out.println("Class implements MovieService, creating direct instance");
+                logger.info("Class implements MovieService, creating direct instance");
                 return (MovieService) clazz.getDeclaredConstructor().newInstance();
             }
 
             // 如果类没有实现任何接口，创建一个通用适配器
-            System.out.println("Class does not implement required interface, creating generic adapter");
+            logger.info("Class does not implement required interface, creating generic adapter");
             Object instance = clazz.getDeclaredConstructor().newInstance();
             return new GenericExternalServiceAdapter(instance, classLoader);
         } catch (ClassNotFoundException e) {
             // 仅记录日志，不打印完整堆栈跟踪，避免误导
             logger.log(Level.INFO, "Class not found: " + className + " for datasource: " + datasourceId + 
-                       ". This is normal for optional data sources.");
+                       ". This is normal for optional data sources.", e);
             return null;
         } catch (Exception e) {
             // 仅记录日志，不打印完整堆栈跟踪，避免误导
             logger.log(Level.WARNING, "Error creating movie service for datasource: " + datasourceId + 
-                       ", class: " + className + ". Using default service instead.");
+                       ", class: " + className + ". Using default service instead.", e);
             return null;
         }
     }
@@ -118,47 +118,44 @@ public class ExternalServiceFactory {
 
         public ExternalMovieServiceAdapter(ExternalMovieService externalService) {
             this.externalService = externalService;
-            System.out.println("Created ExternalMovieServiceAdapter");
+            logger.info("Created ExternalMovieServiceAdapter");
         }
 
         @Override
         public List<Movie> searchMovies(String baseUrl, String keyword) {
-            System.out.println("ExternalMovieServiceAdapter.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
+            logger.info("ExternalMovieServiceAdapter.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
             try {
                 List<Movie> result = externalService.searchMovies(baseUrl, keyword);
-                System.out.println("External service returned " + (result != null ? result.size() : "null") + " movies");
+                logger.info("External service returned " + (result != null ? result.size() : "null") + " movies");
                 return result;
             } catch (Exception e) {
-                System.err.println("Error in external service searchMovies:");
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error in external service searchMovies", e);
                 return new ArrayList<>();
             }
         }
 
         @Override
         public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-            System.out.println("ExternalMovieServiceAdapter.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
+            logger.info("ExternalMovieServiceAdapter.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
             try {
                 List<Movie.Episode> result = externalService.getEpisodes(baseUrl, playUrl);
-                System.out.println("External service returned " + (result != null ? result.size() : "null") + " episodes");
+                logger.info("External service returned " + (result != null ? result.size() : "null") + " episodes");
                 return result;
             } catch (Exception e) {
-                System.err.println("Error in external service getEpisodes:");
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error in external service getEpisodes", e);
                 return new ArrayList<>();
             }
         }
 
         @Override
         public String getM3u8Url(String baseUrl, String episodeUrl) {
-            System.out.println("ExternalMovieServiceAdapter.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
+            logger.info("ExternalMovieServiceAdapter.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
             try {
                 String result = externalService.getM3u8Url(baseUrl, episodeUrl);
-                System.out.println("External service returned m3u8 URL: " + result);
+                logger.info("External service returned m3u8 URL: " + result);
                 return result;
             } catch (Exception e) {
-                System.err.println("Error in external service getM3u8Url:");
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error in external service getM3u8Url", e);
                 return "";
             }
         }
@@ -185,7 +182,7 @@ public class ExternalServiceFactory {
         public GenericExternalServiceAdapter(Object externalService, ClassLoader classLoader) {
             this.externalService = externalService;
             this.classLoader = classLoader;
-            System.out.println("Created GenericExternalServiceAdapter for class: " + externalService.getClass().getName());
+            logger.info("Created GenericExternalServiceAdapter for class: " + externalService.getClass().getName());
 
             // 查找方法
             try {
@@ -193,20 +190,19 @@ public class ExternalServiceFactory {
                 searchMoviesMethod = clazz.getMethod("searchMovies", String.class, String.class);
                 getEpisodesMethod = clazz.getMethod("getEpisodes", String.class, String.class);
                 getM3u8UrlMethod = clazz.getMethod("getM3u8Url", String.class, String.class);
-                System.out.println("Found all required methods in external service");
+                logger.info("Found all required methods in external service");
             } catch (Exception e) {
-                System.err.println("Error finding methods in external service:");
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error finding methods in external service", e);
             }
         }
 
         @Override
         public List<Movie> searchMovies(String baseUrl, String keyword) {
-            System.out.println("GenericExternalServiceAdapter.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
+            logger.info("GenericExternalServiceAdapter.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword);
             try {
                 if (searchMoviesMethod != null) {
                     Object result = searchMoviesMethod.invoke(externalService, baseUrl, keyword);
-                    System.out.println("External service returned result: " + result);
+                    logger.info("External service returned result: " + result);
 
                     // 转换结果
                     if (result instanceof List) {
@@ -220,13 +216,12 @@ public class ExternalServiceFactory {
                             }
                         }
 
-                        System.out.println("Converted " + movies.size() + " movies");
+                        logger.info("Converted " + movies.size() + " movies");
                         return movies;
                     }
                 }
             } catch (Exception e) {
-                System.err.println("Error in external service searchMovies:");
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error in external service searchMovies", e);
             }
 
             return new ArrayList<>();
@@ -234,11 +229,11 @@ public class ExternalServiceFactory {
 
         @Override
         public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-            System.out.println("GenericExternalServiceAdapter.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
+            logger.info("GenericExternalServiceAdapter.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl);
             try {
                 if (getEpisodesMethod != null) {
                     Object result = getEpisodesMethod.invoke(externalService, baseUrl, playUrl);
-                    System.out.println("External service returned result: " + result);
+                    logger.info("External service returned result: " + result);
 
                     // 转换结果
                     if (result instanceof List) {
@@ -252,13 +247,12 @@ public class ExternalServiceFactory {
                             }
                         }
 
-                        System.out.println("Converted " + episodes.size() + " episodes");
+                        logger.info("Converted " + episodes.size() + " episodes");
                         return episodes;
                     }
                 }
             } catch (Exception e) {
-                System.err.println("Error in external service getEpisodes:");
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error in external service getEpisodes", e);
             }
 
             return new ArrayList<>();
@@ -266,19 +260,18 @@ public class ExternalServiceFactory {
 
         @Override
         public String getM3u8Url(String baseUrl, String episodeUrl) {
-            System.out.println("GenericExternalServiceAdapter.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
+            logger.info("GenericExternalServiceAdapter.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
             try {
                 if (getM3u8UrlMethod != null) {
                     Object result = getM3u8UrlMethod.invoke(externalService, baseUrl, episodeUrl);
-                    System.out.println("External service returned result: " + result);
+                    logger.info("External service returned result: " + result);
 
                     if (result instanceof String) {
                         return (String) result;
                     }
                 }
             } catch (Exception e) {
-                System.err.println("Error in external service getM3u8Url:");
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error in external service getM3u8Url", e);
             }
 
             return "";
@@ -310,7 +303,7 @@ public class ExternalServiceFactory {
                     Object name = getNameMethod.invoke(externalMovie);
                     movie.setName(name != null ? name.toString() : "");
                 } catch (Exception e) {
-                    System.err.println("Error getting name from external movie: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting name from external movie", e);
                 }
 
                 try {
@@ -318,7 +311,7 @@ public class ExternalServiceFactory {
                     Object description = getDescriptionMethod.invoke(externalMovie);
                     movie.setDescription(description != null ? description.toString() : "");
                 } catch (Exception e) {
-                    System.err.println("Error getting description from external movie: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting description from external movie", e);
                 }
 
                 try {
@@ -326,7 +319,7 @@ public class ExternalServiceFactory {
                     Object finished = isFinishedMethod.invoke(externalMovie);
                     movie.setFinished(finished instanceof Boolean ? (Boolean) finished : false);
                 } catch (Exception e) {
-                    System.err.println("Error getting finished from external movie: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting finished from external movie", e);
                 }
 
                 try {
@@ -334,7 +327,7 @@ public class ExternalServiceFactory {
                     Object playUrl = getPlayUrlMethod.invoke(externalMovie);
                     movie.setPlayUrl(playUrl != null ? playUrl.toString() : "");
                 } catch (Exception e) {
-                    System.err.println("Error getting playUrl from external movie: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting playUrl from external movie", e);
                 }
 
                 try {
@@ -342,7 +335,7 @@ public class ExternalServiceFactory {
                     Object episodes = getEpisodesMethod.invoke(externalMovie);
                     movie.setEpisodes(episodes instanceof Integer ? (Integer) episodes : 0);
                 } catch (Exception e) {
-                    System.err.println("Error getting episodes from external movie: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting episodes from external movie", e);
                 }
 
                 try {
@@ -350,13 +343,12 @@ public class ExternalServiceFactory {
                     Object poster = getPosterMethod.invoke(externalMovie);
                     movie.setPoster(poster != null ? poster.toString() : "");
                 } catch (Exception e) {
-                    System.err.println("Error getting poster from external movie: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting poster from external movie", e);
                 }
 
                 return movie;
             } catch (Exception e) {
-                System.err.println("Error converting external movie: " + e.getMessage());
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error converting external movie", e);
                 return null;
             }
         }
@@ -381,7 +373,7 @@ public class ExternalServiceFactory {
                     Object title = getTitleMethod.invoke(externalEpisode);
                     episode.setTitle(title != null ? title.toString() : "");
                 } catch (Exception e) {
-                    System.err.println("Error getting title from external episode: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting title from external episode", e);
                 }
 
                 try {
@@ -389,13 +381,12 @@ public class ExternalServiceFactory {
                     Object episodeUrl = getEpisodeUrlMethod.invoke(externalEpisode);
                     episode.setEpisodeUrl(episodeUrl != null ? episodeUrl.toString() : "");
                 } catch (Exception e) {
-                    System.err.println("Error getting episodeUrl from external episode: " + e.getMessage());
+                    logger.log(Level.WARNING, "Error getting episodeUrl from external episode", e);
                 }
 
                 return episode;
             } catch (Exception e) {
-                System.err.println("Error converting external episode: " + e.getMessage());
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error converting external episode", e);
                 return null;
             }
         }

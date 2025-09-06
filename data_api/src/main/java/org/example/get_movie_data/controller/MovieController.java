@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 /**
  * 电影数据控制器
@@ -29,6 +31,8 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/movie")
 public class MovieController {
+    
+    private static final Logger logger = Logger.getLogger(MovieController.class.getName());
 
     @Autowired
     private MovieServiceRouter movieServiceRouter;
@@ -49,7 +53,7 @@ public class MovieController {
     public List<Movie> searchMovies(@RequestParam String baseUrl, 
                                    @RequestParam String keyword,
                                    @RequestParam(required = false) String datasource) {
-        System.out.println("MovieController.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword + ", datasource: " + datasource);
+        logger.info("MovieController.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword + ", datasource: " + datasource);
         MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
         return service.searchMovies(baseUrl, keyword);
     }
@@ -63,14 +67,14 @@ public class MovieController {
      */
     @GetMapping("/search/all")
     public List<Movie> searchMoviesFromAllSources(@RequestParam String keyword) {
-        System.out.println("MovieController.searchMoviesFromAllSources called with keyword: " + keyword);
+        logger.info("MovieController.searchMoviesFromAllSources called with keyword: " + keyword);
         
         // 获取所有URL映射配置
         DataSourceConfig config = configManager.getConfig();
         List<DataSourceConfig.UrlMapping> urlMappings = config.getUrlMappings();
         
         if (urlMappings == null || urlMappings.isEmpty()) {
-            System.out.println("No url mappings configured");
+            logger.warning("No url mappings configured");
             return new ArrayList<>();
         }
         
@@ -92,7 +96,7 @@ public class MovieController {
             
             Future<List<Movie>> future = executor.submit(() -> {
                 try {
-                    System.out.println("Searching movies from URL: " + urlMapping.getBaseUrl());
+                    logger.info("Searching movies from URL: " + urlMapping.getBaseUrl());
                     String url = "http://localhost:8080/api/movie/search?baseUrl=" + 
                                  urlMapping.getBaseUrl() + "&keyword=" + keyword;
                     ResponseEntity<Movie[]> response = restTemplate.getForEntity(url, Movie[].class);
@@ -107,8 +111,7 @@ public class MovieController {
                     }
                     return new ArrayList<>();
                 } catch (Exception e) {
-                    System.err.println("Error searching movies from URL " + urlMapping.getBaseUrl() + ": " + e.getMessage());
-                    e.printStackTrace();
+                    logger.log(Level.WARNING, "Error searching movies from URL " + urlMapping.getBaseUrl(), e);
                     return new ArrayList<>();
                 }
             });
@@ -122,15 +125,14 @@ public class MovieController {
                 List<Movie> movies = future.get(30, TimeUnit.SECONDS); // 30秒超时
                 allMovies.addAll(movies);
             } catch (Exception e) {
-                System.err.println("Error getting result from future: " + e.getMessage());
-                e.printStackTrace();
+                logger.log(Level.WARNING, "Error getting result from future", e);
             }
         }
         
         // 关闭线程池
         executor.shutdown();
         
-        System.out.println("Total movies found from all sources: " + allMovies.size());
+        logger.info("Total movies found from all sources: " + allMovies.size());
         return allMovies;
     }
 
@@ -146,14 +148,21 @@ public class MovieController {
     public List<MovieSimple> searchMoviesSimple(@RequestParam String baseUrl,
                                                @RequestParam String keyword,
                                                @RequestParam(required = false) String datasource) {
-        System.out.println("MovieController.searchMoviesSimple called with baseUrl: " + baseUrl + ", keyword: " + keyword + ", datasource: " + datasource);
+        logger.info("MovieController.searchMoviesSimple called with baseUrl: " + baseUrl + ", keyword: " + keyword + ", datasource: " + datasource);
         MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
         List<Movie> movies = service.searchMovies(baseUrl, keyword);
         
         // 转换为MovieSimple对象，去除剧集信息
         return movies.stream().map(movie -> {
             MovieSimple simple = new MovieSimple();
-            BeanUtils.copyProperties(movie, simple);
+            // 注意：MovieSimple中没有finished字段，但添加了type和region字段
+            simple.setName(movie.getName());
+            simple.setDescription(movie.getDescription());
+            simple.setPlayUrl(movie.getPlayUrl());
+            simple.setPoster(movie.getPoster());
+            // 根据需要设置type和region的默认值或从movie中提取
+            simple.setType(extractTypeFromMovie(movie));
+            simple.setRegion(extractRegionFromMovie(movie));
             return simple;
         }).collect(Collectors.toList());
     }
@@ -194,7 +203,7 @@ public class MovieController {
     public List<Movie.Episode> getEpisodes(@RequestParam String baseUrl, 
                                           @RequestParam String playUrl,
                                           @RequestParam(required = false) String datasource) {
-        System.out.println("MovieController.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", datasource: " + datasource);
+        logger.info("MovieController.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", datasource: " + datasource);
         MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
         return service.getEpisodes(baseUrl, playUrl);
     }
@@ -211,7 +220,7 @@ public class MovieController {
     public String getM3u8Url(@RequestParam String baseUrl, 
                             @RequestParam String episodeUrl,
                             @RequestParam(required = false) String datasource) {
-        System.out.println("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
+        logger.info("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
         MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
         return service.getM3u8Url(baseUrl, episodeUrl);
     }
