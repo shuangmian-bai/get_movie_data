@@ -30,6 +30,7 @@ import java.util.logging.Level;
  */
 @RestController
 @RequestMapping("/api/movie")
+@CrossOrigin(origins = "*", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
 public class MovieController {
     
     private static final Logger logger = Logger.getLogger(MovieController.class.getName());
@@ -39,6 +40,16 @@ public class MovieController {
     
     @Autowired
     private ConfigManager configManager;
+
+    /**
+     * 处理跨域预检请求
+     * 
+     * @return ResponseEntity
+     */
+    @RequestMapping(method = RequestMethod.OPTIONS)
+    public ResponseEntity<?> handleOptions() {
+        return ResponseEntity.ok().build();
+    }
 
     /**
      * 根据搜索关键词获取影视信息（完整信息，包含剧集）

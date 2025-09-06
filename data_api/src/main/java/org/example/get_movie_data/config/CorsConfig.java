@@ -25,7 +25,7 @@ public class CorsConfig {
      * @return CorsFilter实例
      */
     @Bean
-    public CorsFilter corsFilter() {
+    public CorsFilter basicCorsFilter() {
         CorsConfiguration config = new CorsConfiguration();
         
         // 允许任何域名访问
@@ -34,8 +34,10 @@ public class CorsConfig {
         config.addAllowedHeader("*");
         // 允许任何HTTP方法（GET, POST, PUT, DELETE等）
         config.addAllowedMethod("*");
+        // 暴露响应头
+        config.addExposedHeader("*");
         // 允许发送Cookie和认证信息
-        config.setAllowCredentials(true);
+        config.setAllowCredentials(false);
         // 设置预检请求的有效期，避免重复发送预检请求
         config.setMaxAge(3600L);
         
