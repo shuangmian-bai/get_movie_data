@@ -1,0 +1,154 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #121212;
+    color: #eee;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.left-panel,
+.right-panel {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.left-panel {
+    background: #1e1e1e;
+    border-right: 1px solid #333;
+}
+
+.right-panel {
+    background: #1a1a1a;
+}
+
+/* 头部样式 */
+header {
+    margin-bottom: 20px;
+}
+
+header h1 {
+    font-size: 24px;
+    margin-bottom: 10px;
+    color: #bb86fc;
+}
+
+#searchInput {
+    width: 70%;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    background: #333;
+    color: #fff;
+    outline: none;
+}
+
+#searchBtn {
+    width: 25%;
+    padding: 10px;
+    margin-left: 5%;
+    background: #03dac6;
+    color: #000;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+#searchBtn:hover {
+    background: #02bfa5;
+}
+
+/* 搜索结果列表 */
+.movie-item {
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #2d2d2d;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.movie-item:hover {
+    background: #444;
+}
+
+.movie-item h3 {
+    font-size: 16px;
+    margin-bottom: 4px;
+    color: #bb86fc;
+}
+
+.movie-item p {
+    font-size: 12px;
+    color: #aaa;
+}
+
+.movie-item .source {
+    font-size: 10px;
+    color: #888;
+    margin-top: 4px;
+}
+
+/* 右侧详情 */
+#movieDetail {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.movie-poster {
+    max-width: 200px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.movie-info h2 {
+    color: #bb86fc;
+    margin-bottom: 8px;
+}
+
+.episode-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.episode-btn {
+    padding: 8px 12px;
+    background: #3700b3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.episode-btn:hover {
+    background: #6200ee;
+}
+
+#videoPlayer {
+    width: 100%;
+    height: 360px;
+    border-radius: 8px;
+    background: #000;
+}
+
+.placeholder {
+    color: #666;
+    font-style: italic;
+    text-align: center;
+    margin-top: 100px;
+}
