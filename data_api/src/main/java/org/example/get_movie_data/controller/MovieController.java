@@ -4,17 +4,24 @@ import org.example.get_movie_data.model.Movie;
 import org.example.get_movie_data.model.MovieSimple;
 import org.example.get_movie_data.service.MovieService;
 import org.example.get_movie_data.service.MovieServiceRouter;
+import org.example.get_movie_data.service.DataSourceConfig;
+import org.example.get_movie_data.service.ConfigManager;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 /**
- * 电影控制器类
+ * 电影数据控制器
  * 
- * 提供电影相关的RESTful API接口。
+ * 提供RESTful API接口用于获取电影相关信息，包括搜索电影、获取剧集和获取M3U8播放地址。
+ * 支持通过URL参数动态选择不同的数据源。
  * 
  * @author get_movie_data team
  * @version 1.0.0
@@ -25,9 +32,13 @@ public class MovieController {
 
     @Autowired
     private MovieServiceRouter movieServiceRouter;
+    
+    @Autowired
+    private ConfigManager configManager;
 
     /**
      * 根据搜索关键词获取影视信息（完整信息，包含剧集）
+     * 此接口需要指定baseUrl来选择特定数据源
      * 
      * @param baseUrl 基础URL，用于确定使用哪个数据源
      * @param keyword 搜索关键词
@@ -41,6 +52,86 @@ public class MovieController {
         System.out.println("MovieController.searchMovies called with baseUrl: " + baseUrl + ", keyword: " + keyword + ", datasource: " + datasource);
         MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
         return service.searchMovies(baseUrl, keyword);
+    }
+    
+    /**
+     * 根据搜索关键词获取影视信息（完整信息，包含剧集）
+     * 此接口为对外统一接口，会并发向所有配置的数据源发送HTTP请求并整合结果
+     * 
+     * @param keyword 搜索关键词
+     * @return 影视信息列表
+     */
+    @GetMapping("/search/all")
+    public List<Movie> searchMoviesFromAllSources(@RequestParam String keyword) {
+        System.out.println("MovieController.searchMoviesFromAllSources called with keyword: " + keyword);
+        
+        // 获取所有URL映射配置
+        DataSourceConfig config = configManager.getConfig();
+        List<DataSourceConfig.UrlMapping> urlMappings = config.getUrlMappings();
+        
+        if (urlMappings == null || urlMappings.isEmpty()) {
+            System.out.println("No url mappings configured");
+            return new ArrayList<>();
+        }
+        
+        // 创建RestTemplate用于发送HTTP请求
+        RestTemplate restTemplate = new RestTemplate();
+        
+        // 创建线程池
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(urlMappings.size(), 10));
+        
+        // 存储所有Future结果
+        List<Future<List<Movie>>> futures = new ArrayList<>();
+        
+        // 向每个URL映射提交任务
+        for (DataSourceConfig.UrlMapping urlMapping : urlMappings) {
+            // 跳过通配符匹配
+            if ("*".equals(urlMapping.getBaseUrl())) {
+                continue;
+            }
+            
+            Future<List<Movie>> future = executor.submit(() -> {
+                try {
+                    System.out.println("Searching movies from URL: " + urlMapping.getBaseUrl());
+                    String url = "http://localhost:8080/api/movie/search?baseUrl=" + 
+                                 urlMapping.getBaseUrl() + "&keyword=" + keyword;
+                    ResponseEntity<Movie[]> response = restTemplate.getForEntity(url, Movie[].class);
+                    Movie[] movies = response.getBody();
+                    
+                    // 为每个电影对象设置baseUrl字段
+                    if (movies != null) {
+                        for (Movie movie : movies) {
+                            movie.setBaseUrl(urlMapping.getBaseUrl());
+                        }
+                        return List.of(movies);
+                    }
+                    return new ArrayList<>();
+                } catch (Exception e) {
+                    System.err.println("Error searching movies from URL " + urlMapping.getBaseUrl() + ": " + e.getMessage());
+                    e.printStackTrace();
+                    return new ArrayList<>();
+                }
+            });
+            futures.add(future);
+        }
+        
+        // 收集所有结果
+        List<Movie> allMovies = new ArrayList<>();
+        for (Future<List<Movie>> future : futures) {
+            try {
+                List<Movie> movies = future.get(30, TimeUnit.SECONDS); // 30秒超时
+                allMovies.addAll(movies);
+            } catch (Exception e) {
+                System.err.println("Error getting result from future: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        
+        // 关闭线程池
+        executor.shutdown();
+        
+        System.out.println("Total movies found from all sources: " + allMovies.size());
+        return allMovies;
     }
 
     /**
@@ -62,14 +153,7 @@ public class MovieController {
         // 转换为MovieSimple对象，去除剧集信息
         return movies.stream().map(movie -> {
             MovieSimple simple = new MovieSimple();
-            simple.setName(movie.getName());
-            simple.setDescription(movie.getDescription());
-            simple.setPlayUrl(movie.getPlayUrl());
-            simple.setPoster(movie.getPoster());
-            // 注意：MovieSimple中没有finished字段，但添加了type和region字段
-            // 这里可以根据需要设置type和region的默认值或从movie中提取
-            simple.setType(extractTypeFromMovie(movie));
-            simple.setRegion(extractRegionFromMovie(movie));
+            BeanUtils.copyProperties(movie, simple);
             return simple;
         }).collect(Collectors.toList());
     }

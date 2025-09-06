@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 /**
  * 外部服务工厂
@@ -22,6 +24,7 @@ import java.util.Map;
  */
 @Component
 public class ExternalServiceFactory {
+    private static final Logger logger = Logger.getLogger(ExternalServiceFactory.class.getName());
 
     /** 类加载器缓存，避免重复创建类加载器 */
     private Map<String, URLClassLoader> classLoaderCache = new HashMap<>();
@@ -93,12 +96,14 @@ public class ExternalServiceFactory {
             Object instance = clazz.getDeclaredConstructor().newInstance();
             return new GenericExternalServiceAdapter(instance, classLoader);
         } catch (ClassNotFoundException e) {
-            System.err.println("Class not found: " + className);
-            e.printStackTrace();
+            // 仅记录日志，不打印完整堆栈跟踪，避免误导
+            logger.log(Level.INFO, "Class not found: " + className + " for datasource: " + datasourceId + 
+                       ". This is normal for optional data sources.");
             return null;
         } catch (Exception e) {
-            System.err.println("Error creating movie service:");
-            e.printStackTrace();
+            // 仅记录日志，不打印完整堆栈跟踪，避免误导
+            logger.log(Level.WARNING, "Error creating movie service for datasource: " + datasourceId + 
+                       ", class: " + className + ". Using default service instead.");
             return null;
         }
     }

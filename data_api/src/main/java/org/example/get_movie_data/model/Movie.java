@@ -13,7 +13,7 @@ import java.util.List;
  * @version 1.0.0
  */
 @XmlRootElement(name = "movie")
-@XmlType(propOrder = {"name", "description", "finished", "playUrl", "episodes", "poster", "episodeList"})
+@XmlType(propOrder = {"name", "description", "finished", "playUrl", "episodes", "poster", "baseUrl", "episodeList"})
 public class Movie {
     
     /** 电影名称 */
@@ -33,6 +33,9 @@ public class Movie {
     
     /** 海报图片地址 */
     private String poster;
+    
+    /** 数据源基础URL */
+    private String baseUrl;
     
     /** 剧集列表 */
     private List<Episode> episodeList;
@@ -149,6 +152,25 @@ public class Movie {
      */
     public void setPoster(String poster) {
         this.poster = poster;
+    }
+
+    /**
+     * 获取数据源基础URL
+     *
+     * @return 数据源基础URL
+     */
+    @XmlElement(name = "baseUrl")
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    /**
+     * 设置数据源基础URL
+     *
+     * @param baseUrl 数据源基础URL
+     */
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
     }
 
     /**
