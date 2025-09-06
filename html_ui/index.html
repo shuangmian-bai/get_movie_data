@@ -3,329 +3,346 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>电影数据查询系统</title>
+    <title>双面的影视接口数据原型</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #50b3a2;
+            --dark-color: #2c3e50;
+            --light-color: #ecf0f1;
+            --danger-color: #e74c3c;
+            --success-color: #27ae60;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
         }
-        .header {
+
+        header {
+            background: rgba(44, 62, 80, 0.9);
+            color: white;
             text-align: center;
+            padding: 20px 0;
             margin-bottom: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
         }
-        .search-container {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
-        .search-box {
+
+        .search-bar {
             display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
             gap: 10px;
-            margin-bottom: 10px;
         }
-        input[type="text"] {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
+
+        .search-bar input[type="text"] {
+            padding: 15px 20px;
+            width: 70%;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            outline: none;
+            transition: all 0.3s ease;
         }
-        select {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-            background-color: white;
+
+        .search-bar input[type="text"]:focus {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(74, 144, 226, 0.4);
         }
-        button {
-            padding: 10px 20px;
-            background-color: #007bff;
+
+        .search-bar button {
+            padding: 15px 30px;
+            background: var(--secondary-color);
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 50px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: 0 4px 15px rgba(80, 179, 162, 0.4);
+            transition: all 0.3s ease;
         }
-        button:hover {
-            background-color: #0056b3;
+
+        .search-bar button:hover {
+            background: #3aa090;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(80, 179, 162, 0.6);
         }
-        .results-container {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .movie-grid {
+
+        .results {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
         }
-        .movie-card {
-            border: 1px solid #ddd;
-            border-radius: 8px;
+
+        .movie-item {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
             overflow: hidden;
-            transition: transform 0.2s;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.2);
         }
-        .movie-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+
+        .movie-item:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
         }
+
         .movie-poster {
             width: 100%;
-            height: 300px;
-            background-color: #eee;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #999;
+            height: 360px;
+            object-fit: cover;
+            border-bottom: 3px solid var(--primary-color);
         }
+
         .movie-info {
-            padding: 15px;
+            padding: 20px;
         }
-        .movie-title {
-            font-weight: bold;
-            margin-bottom: 5px;
-            font-size: 16px;
-        }
-        .movie-desc {
-            color: #666;
-            font-size: 14px;
+
+        .movie-info h3 {
+            font-size: 1.3rem;
             margin-bottom: 10px;
+            color: var(--dark-color);
+            font-weight: 600;
         }
-        .episode-list {
-            margin-top: 10px;
+
+        .movie-info p {
+            margin-bottom: 8px;
+            color: #666;
+            font-size: 0.95rem;
         }
-        .episode-item {
-            padding: 5px;
-            border-bottom: 1px solid #eee;
+
+        .movie-info strong {
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .episode-select {
+            margin: 15px 0;
+        }
+
+        .episode-select select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            background: white;
             cursor: pointer;
+            transition: all 0.3s ease;
         }
-        .episode-item:hover {
-            background-color: #f5f5f5;
+
+        .episode-select select:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
         }
-        .loading {
-            text-align: center;
-            padding: 20px;
-        }
-        .error {
-            color: red;
-            text-align: center;
-            padding: 20px;
-        }
-        .hidden {
-            display: none;
-        }
-        .episode-container {
-            margin-top: 10px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: #f9f9f9;
-        }
+
         .m3u8-url {
-            margin-top: 10px;
-            padding: 10px;
-            background-color: #e9ecef;
-            border-radius: 4px;
+            margin: 15px 0;
+            padding: 12px;
+            background: linear-gradient(45deg, #f9d423, #f83600);
+            color: white;
+            border-radius: 8px;
+            font-size: 0.9rem;
             word-break: break-all;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .select-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .select-btn:hover {
+            background: #3a7bc8;
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .results {
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 15px;
+            }
+            
+            .search-bar {
+                flex-direction: column;
+            }
+            
+            .search-bar input[type="text"] {
+                width: 100%;
+            }
+            
+            header h1 {
+                font-size: 2rem;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>电影数据查询系统</h1>
-    </div>
 
-    <div class="search-container">
-        <div class="search-box">
-            <select id="dataSourceSelect">
-                <option value="https://custom1.example.com/">自定义数据源1 (https://custom1.example.com/)</option>
-                <option value="https://custom2.example.com/">自定义数据源2 (https://custom2.example.com/)</option>
-                <option value="https://www.chabeigu.com">茶杯狐数据源 (https://www.chabeigu.com)</option>
-                <option value="*" selected>测试数据源 (默认)</option>
-            </select>
-            <input type="text" id="keyword" placeholder="请输入电影名称...">
-            <button onclick="searchMovies()">搜索</button>
-        </div>
+<header>
+    <div class="container">
+        <h1>双面的影视接口数据原型</h1>
     </div>
+</header>
 
-    <div id="loading" class="loading hidden">
-        <p>搜索中...</p>
+<div class="container">
+    <div class="search-bar">
+        <input type="text" id="keyword" placeholder="🔍 输入电影或电视剧名称...">
+        <button onclick="searchMovies()">搜索</button>
     </div>
+    <div class="results" id="results"></div>
+</div>
 
-    <div id="error" class="error hidden">
-        <p>搜索出错，请重试</p>
-    </div>
+<script>
+    async function searchMovies() {
+        const keyword = document.getElementById('keyword').value.trim();
+        if (!keyword) return;
+        
+        try {
+            const response = await fetch(`http://127.0.0.1:8080/api/movie/search/all?keyword=${encodeURIComponent(keyword)}`);
+            if (!response.ok) throw new Error('搜索失败');
+            
+            const data = await response.json();
+            displayResults(data);
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById('results').innerHTML = '<p style="color: red; text-align: center; width: 100%;">搜索出错，请稍后重试</p>';
+        }
+    }
 
-    <div class="results-container">
-        <h2>搜索结果</h2>
-        <div id="results" class="movie-grid">
-            <p>请输入关键词进行搜索</p>
-        </div>
-    </div>
+    function displayResults(data) {
+        const resultsContainer = document.getElementById('results');
+        
+        if (data.length === 0) {
+            resultsContainer.innerHTML = '<p style="color: #666; text-align: center; width: 100%;">未找到相关影视内容</p>';
+            return;
+        }
 
-    <script>
-        // API基础URL - 根据实际部署情况修改
-        const API_BASE_URL = 'http://localhost:8080/api/movie';
-        
-        async function searchMovies() {
-            const baseUrl = document.getElementById('dataSourceSelect').value;
-            const keyword = document.getElementById('keyword').value.trim();
-            
-            if (!keyword) {
-                alert('请输入搜索关键词');
-                return;
-            }
-            
-            // 显示加载状态
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('error').classList.add('hidden');
-            document.getElementById('results').innerHTML = '';
-            
-            try {
-                // 调用搜索接口，不对baseUrl进行编码
-                const response = await fetch(`${API_BASE_URL}/search?baseUrl=${baseUrl}&keyword=${encodeURIComponent(keyword)}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const movies = await response.json();
-                displayMovies(movies, baseUrl);
-            } catch (error) {
-                console.error('搜索出错:', error);
-                document.getElementById('error').classList.remove('hidden');
-            } finally {
-                document.getElementById('loading').classList.add('hidden');
-            }
-        }
-        
-        function displayMovies(movies, baseUrl) {
-            const resultsContainer = document.getElementById('results');
-            
-            if (!movies || movies.length === 0) {
-                resultsContainer.innerHTML = '<p>未找到相关电影</p>';
-                return;
-            }
-            
-            let html = '';
-            movies.forEach((movie, index) => {
-                html += `
-                    <div class="movie-card">
-                        <div class="movie-poster">
-                            ${movie.poster ? `<img src="${movie.poster}" alt="${movie.name}">` : '暂无海报'}
-                        </div>
-                        <div class="movie-info">
-                            <div class="movie-title">${movie.name || '未知标题'}</div>
-                            <div class="movie-desc">${movie.description || '暂无描述'}</div>
-                            <div>
-                                <strong>播放地址:</strong>
-                                <div class="episode-list">
-                                    <div class="episode-item" onclick="getEpisodes('${baseUrl}', '${movie.playUrl || ''}', this)">
-                                        ${movie.playUrl || '暂无播放地址'}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            resultsContainer.innerHTML = html;
-        }
-        
-        async function getEpisodes(baseUrl, playUrl, element) {
-            if (!playUrl) {
-                alert('播放地址为空');
-                return;
-            }
-            
-            // 创建剧集显示区域
-            let episodeContainer = element.parentNode.querySelector('.episode-container');
-            if (!episodeContainer) {
-                episodeContainer = document.createElement('div');
-                episodeContainer.className = 'episode-container';
-                element.parentNode.appendChild(episodeContainer);
-            }
-            
-            // 显示加载状态
-            episodeContainer.innerHTML = '<p>加载剧集中...</p>';
-            
-            try {
-                // 不对baseUrl进行编码
-                const response = await fetch(`${API_BASE_URL}/episodes?baseUrl=${baseUrl}&playUrl=${encodeURIComponent(playUrl)}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const episodes = await response.json();
-                displayEpisodes(episodes, baseUrl, episodeContainer);
-            } catch (error) {
-                console.error('获取剧集出错:', error);
-                episodeContainer.innerHTML = '<p>获取剧集信息失败</p>';
-            }
-        }
-        
-        function displayEpisodes(episodes, baseUrl, container) {
-            if (!episodes || episodes.length === 0) {
-                container.innerHTML = '<p>暂无剧集信息</p>';
-                return;
-            }
-            
-            let html = '<strong>剧集列表:</strong><div class="episode-list">';
-            episodes.forEach(episode => {
-                html += `<div class="episode-item" onclick="getM3u8Url('${baseUrl}', '${episode.episodeUrl}', this)">
-                            ${episode.title || episode.episodeUrl}
-                         </div>`;
-            });
-            html += '</div>';
-            
-            container.innerHTML = html;
-        }
-        
-        async function getM3u8Url(baseUrl, episodeUrl, element) {
-            if (!episodeUrl) {
-                alert('剧集地址为空');
-                return;
-            }
-            
-            // 创建M3U8 URL显示区域
-            let m3u8Container = element.parentNode.querySelector('.m3u8-url');
-            if (!m3u8Container) {
-                m3u8Container = document.createElement('div');
-                m3u8Container.className = 'm3u8-url';
-                element.parentNode.appendChild(m3u8Container);
-            }
-            
-            // 显示加载状态
-            m3u8Container.innerHTML = '<p>获取播放地址中...</p>';
-            
-            try {
-                // 不对baseUrl进行编码
-                const response = await fetch(`${API_BASE_URL}/m3u8?baseUrl=${baseUrl}&episodeUrl=${encodeURIComponent(episodeUrl)}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const m3u8Url = await response.text();
-                m3u8Container.innerHTML = `<strong>M3U8播放地址:</strong><br>${m3u8Url || '无播放地址'}`;
-            } catch (error) {
-                console.error('获取M3U8地址出错:', error);
-                m3u8Container.innerHTML = '<p>获取播放地址失败</p>';
-            }
-        }
-        
-        // 回车搜索
-        document.getElementById('keyword').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                searchMovies();
-            }
+        let output = '';
+        data.forEach(movie => {
+            const safePlayUrl = movie.playUrl.replace(/\//g, '_');
+            output += `
+            <div class="movie-item">
+                <img src="${movie.poster || 'https://via.placeholder.com/300x400?text=No+Poster'}" alt="${movie.name}海报" class="movie-poster">
+                <div class="movie-info">
+                    <h3>${movie.name}</h3>
+                    <p><strong>简介:</strong> ${movie.description || '暂无简介'}</p>
+                    <p><strong>集数:</strong> ${movie.episodes || '未知'}</p>
+                    <p><strong>状态:</strong> ${movie.finished ? '已完结' : '更新中'}</p>
+                    
+                    <div class="episode-select" id="episodeSelect-${safePlayUrl}"></div>
+                    <div class="m3u8-url" id="m3u8Url-${safePlayUrl}"></div>
+                    
+                    <button class="select-btn" onclick="selectMovie('${movie.baseUrl}', '${encodeURIComponent(JSON.stringify(movie))}')">
+                        选择剧集
+                    </button>
+                </div>
+            </div>
+        `;
         });
-    </script>
+        resultsContainer.innerHTML = output;
+    }
+
+    async function selectMovie(baseUrl, movieJson) {
+        try {
+            const movie = JSON.parse(decodeURIComponent(movieJson));
+            const safePlayUrl = movie.playUrl.replace(/\//g, '_');
+            
+            const episodesResponse = await fetch(`http://127.0.0.1:8080/api/movie/episodes?baseUrl=${baseUrl}&playUrl=${movie.playUrl}`);
+            if (!episodesResponse.ok) throw new Error('获取剧集失败');
+            
+            const episodesData = await episodesResponse.json();
+            
+            if (episodesData.length === 0) {
+                document.getElementById(`episodeSelect-${safePlayUrl}`).innerHTML = '<p style="color: #999; font-size: 0.9rem;">暂无可用剧集</p>';
+                return;
+            }
+
+            let episodeOptions = `<select><option value="">请选择剧集...</option>`;
+            episodesData.forEach(episode => {
+                episodeOptions += `<option value="${episode.episodeUrl}">${episode.title}</option>`;
+            });
+            episodeOptions += '</select>';
+            
+            // 移除旧的下拉框，添加新的
+            const selectContainer = document.getElementById(`episodeSelect-${safePlayUrl}`);
+            selectContainer.innerHTML = episodeOptions;
+            
+            // 添加事件监听器
+            const selectElement = selectContainer.querySelector('select');
+            selectElement.addEventListener('change', function() {
+                if (this.value) {
+                    getM3u8Url(this.value, baseUrl, safePlayUrl);
+                } else {
+                    document.getElementById(`m3u8Url-${safePlayUrl}`).innerText = '';
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error:', error);
+            const safePlayUrl = JSON.parse(decodeURIComponent(movieJson)).playUrl.replace(/\//g, '_');
+            document.getElementById(`episodeSelect-${safePlayUrl}`).innerHTML = '<p style="color: red; font-size: 0.9rem;">加载剧集失败</p>';
+        }
+    }
+
+    async function getM3u8Url(episodeUrl, baseUrl, playUrl) {
+        try {
+            const m3u8Response = await fetch(`http://127.0.0.1:8080/api/movie/m3u8?baseUrl=${baseUrl}&episodeUrl=${episodeUrl}`);
+            if (!m3u8Response.ok) throw new Error('获取M3U8地址失败');
+            
+            const m3u8Data = await m3u8Response.text();
+            document.getElementById(`m3u8Url-${playUrl}`).innerHTML = `
+                <strong>M3U8播放地址:</strong><br>
+                <span style="font-size: 0.85rem;">${m3u8Data}</span>
+            `;
+            
+        } catch (error) {
+            console.error('Error:', error);
+            document.getElementById(`m3u8Url-${playUrl}`).innerHTML = '<span style="color: red;">获取播放地址失败</span>';
+        }
+    }
+</script>
+
 </body>
 </html>
