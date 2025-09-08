@@ -11,9 +11,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /**
  * 缓存管理器
@@ -73,6 +76,7 @@ public class CacheManager {
      */
     public List<Movie> getCachedSearchResults(String baseUrl, String keyword) {
         String cacheKey = "search_" + baseUrl + "_" + keyword;
+        logger.info("Checking cache for key: " + cacheKey);
         
         // 先检查内存缓存
         CacheEntry memoryEntry = memoryCache.get(cacheKey);
@@ -84,6 +88,7 @@ public class CacheManager {
         // 检查文件缓存
         try {
             Path cacheFile = getCacheFilePath(cacheKey);
+            logger.info("Checking file cache at path: " + cacheFile.toString());
             if (Files.exists(cacheFile) && !isFileExpired(cacheFile)) {
                 String json = Files.readString(cacheFile);
                 List<Movie> movies = objectMapper.readValue(json, 
@@ -94,12 +99,145 @@ public class CacheManager {
                 
                 logger.info("Loaded search results from file cache for key: " + cacheKey);
                 return movies;
+            } else {
+                logger.info("File cache does not exist or is expired for key: " + cacheKey);
             }
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error reading search results from cache", e);
         }
         
+        // 检查是否存在更广泛的搜索结果缓存，可以从中提取子集
+        logger.info("Checking for subset cache for baseUrl: " + baseUrl + ", keyword: " + keyword);
+        List<Movie> subsetMovies = getSubsetFromExistingCache(baseUrl, keyword);
+        if (subsetMovies != null) {
+            logger.info("Found subset cache with " + subsetMovies.size() + " movies");
+            // 将提取的子集缓存起来
+            cacheSearchResults(baseUrl, keyword, subsetMovies);
+            return subsetMovies;
+        } else {
+            logger.info("No subset cache found");
+        }
+        
         return null;
+    }
+    
+    /**
+     * 从现有缓存中提取匹配关键词的子集
+     * 
+     * @param baseUrl 基础URL
+     * @param keyword 搜索关键词
+     * @return 匹配的电影列表，如果没有找到合适的缓存则返回null
+     */
+    private List<Movie> getSubsetFromExistingCache(String baseUrl, String keyword) {
+        logger.info("getSubsetFromExistingCache called with baseUrl: " + baseUrl + ", keyword: " + keyword);
+        
+        // 遍历内存缓存查找可能的父级缓存
+        for (ConcurrentHashMap.Entry<String, CacheEntry> entry : memoryCache.entrySet()) {
+            String key = entry.getKey();
+            CacheEntry cacheEntry = entry.getValue();
+            logger.info("Checking memory cache entry: " + key);
+            
+            // 检查是否为搜索缓存且未过期
+            if (key.startsWith("search_" + baseUrl + "_") && !cacheEntry.isExpired()) {
+                // 检查缓存关键词是否可以提供搜索关键词的信息
+                String cachedKeyword = key.substring(("search_" + baseUrl + "_").length());
+                logger.info("Comparing cached keyword '" + cachedKeyword + "' with search keyword '" + keyword + "'");
+                // 根据需求，应该是缓存结果中包含搜索关键词，而不是缓存关键词包含搜索关键词
+                // 但为了找到可能包含所需信息的缓存，我们需要检查已有的缓存
+                // 正确的逻辑是：如果缓存关键词是更广泛的搜索词，那么可能包含我们需要的信息
+                // 例如："浪"是"浪浪山"的更广泛搜索词，所以"浪"的缓存可能包含"浪浪山"的信息
+                // 但是"浪".contains("浪浪山")是false，所以我们需要另一种判断方式
+                // 更合理的做法是直接检查所有缓存结果中是否包含关键词
+                logger.info("Found search cache for key: " + key + ", extracting subset for keyword: " + keyword);
+                List<Movie> cachedMovies = (List<Movie>) cacheEntry.getData();
+                // 过滤出包含关键词的电影
+                List<Movie> filteredMovies = cachedMovies.stream()
+                        .filter(movie -> movie.getName().contains(keyword) || 
+                                (movie.getDescription() != null && movie.getDescription().contains(keyword)))
+                        .collect(Collectors.toList());
+                if (!filteredMovies.isEmpty()) {
+                    logger.info("Filtered " + filteredMovies.size() + " movies from cache");
+                    return filteredMovies;
+                }
+            }
+        }
+        
+        // 遍历文件缓存查找可能的父级缓存
+        try {
+            Path cacheDir = Paths.get(CACHE_DIR);
+            logger.info("Checking file cache directory: " + cacheDir.toString());
+            if (Files.exists(cacheDir)) {
+                // 使用 Files.list 简化处理
+                try (var files = Files.list(cacheDir)) {
+                    for (Path path : (Iterable<Path>) files::iterator) {
+                        if (Files.isRegularFile(path) && path.toString().endsWith(".cache")) {
+                            try {
+                                String fileName = path.getFileName().toString();
+                                String key = fileName.substring(0, fileName.length() - 6); // 移除 ".cache" 后缀
+                                logger.info("Checking file cache: " + key);
+                                
+                                // 检查是否为搜索缓存
+                                if (key.startsWith("search_" + baseUrl + "_")) {
+                                    // 检查缓存关键词是否可以提供搜索关键词的信息
+                                    String cachedKeyword = key.substring(("search_" + baseUrl + "_").length());
+                                    logger.info("Checking file cached keyword '" + cachedKeyword + "' for content containing search keyword '" + keyword + "'");
+                                    // 检查文件是否过期
+                                    if (!isFileExpired(path)) {
+                                        logger.info("Found search file cache for key: " + key + ", extracting subset for keyword: " + keyword);
+                                        String json = Files.readString(path);
+                                        List<Movie> cachedMovies = objectMapper.readValue(json, 
+                                            TypeFactory.defaultInstance().constructCollectionType(List.class, Movie.class));
+                                        
+                                        // 过滤出包含关键词的电影
+                                        List<Movie> movies = cachedMovies.stream()
+                                                .filter(movie -> movie.getName().contains(keyword) || 
+                                                        (movie.getDescription() != null && movie.getDescription().contains(keyword)))
+                                                .collect(Collectors.toList());
+                                        
+                                        // 更新内存缓存
+                                        memoryCache.put(key, new CacheEntry(cachedMovies));
+                                        
+                                        // 返回过滤后的结果
+                                        if (!movies.isEmpty()) {
+                                            logger.info("Filtered " + movies.size() + " movies from file cache");
+                                            // 更新内存缓存
+                                            String subsetCacheKey = "search_" + baseUrl + "_" + keyword;
+                                            memoryCache.put(subsetCacheKey, new CacheEntry(movies));
+                                            return movies;
+                                        }
+                                    } else {
+                                        logger.info("File cache is expired: " + path.toString());
+                                    }
+                                }
+                            } catch (IOException e) {
+                                logger.log(Level.WARNING, "Error reading cache file: " + path, e);
+                            }
+                        }
+                    }
+                }
+            } else {
+                logger.info("Cache directory does not exist: " + cacheDir.toString());
+            }
+        } catch (IOException e) {
+            logger.log(Level.WARNING, "Error listing cache directory", e);
+        }
+        
+        logger.info("No subset cache found for baseUrl: " + baseUrl + ", keyword: " + keyword);
+        return null;
+    }
+    
+    /**
+     * 根据关键词过滤电影列表
+     * 
+     * @param movies 电影列表
+     * @param keyword 关键词
+     * @return 过滤后的电影列表
+     */
+    private List<Movie> filterMoviesByKeyword(List<Movie> movies, String keyword) {
+        return movies.stream()
+                .filter(movie -> movie.getName().contains(keyword) || 
+                        (movie.getDescription() != null && movie.getDescription().contains(keyword)))
+                .collect(Collectors.toList());
     }
     
     /**
@@ -263,7 +401,10 @@ public class CacheManager {
      * @return 缓存文件路径
      */
     private Path getCacheFilePath(String cacheKey) {
-        return Paths.get(CACHE_DIR, cacheKey + ".cache");
+        // 在Windows系统中，文件名不能包含以下字符: < > : " / \ | ? *
+        // 将这些字符替换为下划线
+        String safeCacheKey = cacheKey.replaceAll("[<>:\"/\\\\|?*]", "_");
+        return Paths.get(CACHE_DIR, safeCacheKey + ".cache");
     }
     
     /**
