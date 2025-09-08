@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
 import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -295,7 +297,55 @@ public class BfzyMovieService {
      * @return M3U8播放地址
      */
     public String getM3u8Url(String baseUrl, String episodeUrl) {
-
-        return episodeUrl;
+        // 对episodeUrl进行编码处理，将中文部分重新编码
+        String encodedEpisodeUrl = encodeChineseToUnicode(episodeUrl);
+        return encodedEpisodeUrl;
+    }
+    
+    /**
+     * 将episodeUrl编码为URL安全格式
+     * 
+     * @param episodeUrl 需要编码的episodeUrl
+     * @return 编码后的episodeUrl
+     */
+    private String encodeEpisodeUrl(String episodeUrl) {
+        try {
+            // 如果episodeUrl已经是以/开头的绝对路径，则直接返回
+            if (episodeUrl.startsWith("/")) {
+                return episodeUrl;
+            }
+            
+            // 对URL中的中文部分进行编码
+            return "/" + URLEncoder.encode(episodeUrl, StandardCharsets.UTF_8.toString())
+                    .replaceAll("%2F", "/"); // 保留URL中的斜杠
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "/" + episodeUrl; // 出错时添加前缀"/"并返回
+        }
+    }
+    
+    /**
+     * 将字符串中的中文字符编码为Unicode格式
+     * 
+     * @param input 包含中文的字符串
+     * @return 编码后的字符串
+     */
+    private String encodeChineseToUnicode(String input) {
+        if (input == null || input.isEmpty()) {
+            return input;
+        }
+        
+        StringBuilder result = new StringBuilder();
+        for (char ch : input.toCharArray()) {
+            // 判断是否为中文字符
+            if (ch >= 0x4E00 && ch <= 0x9FFF) {
+                // 将中文字符转换为Unicode编码格式
+                result.append(String.format("\\u%04X", (int) ch));
+            } else {
+                // 非中文字符直接添加
+                result.append(ch);
+            }
+        }
+        return result.toString();
     }
 }
