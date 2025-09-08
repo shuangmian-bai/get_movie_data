@@ -1,15 +1,15 @@
-package com.example.yhta;
+package com.example.bfzy;
 
 import java.util.List;
 
 /**
- * 电影数据封装类（YHTA API适配版本）
+ * 电影数据封装类（bfzy.tv API适配版本）
  * 
- * 此类用于封装从YHTA数据源获取的电影相关信息，
+ * 此类用于封装从bfzy.tv数据源获取的电影相关信息，
  * 它与主项目中使用的Movie类结构相似但独立存在。
  * 数据转换适配器会将此类实例转换为主项目中使用的Movie实例。
  * 
- * @author yhta development team
+ * @author bfzy development team
  * @version 1.0.0
  */
 public class Movie {
