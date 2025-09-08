@@ -155,6 +155,33 @@ public class CacheManager {
     private List<Movie> getSubsetFromExistingCache(String baseUrl, String keyword) {
         logger.info("getSubsetFromExistingCache called with baseUrl: " + baseUrl + ", keyword: " + keyword);
         
+        // 遍历内存缓存查找可能的父级缓存
+        for (ConcurrentHashMap.Entry<String, CacheEntry> entry : memoryCache.entrySet()) {
+            String key = entry.getKey();
+            CacheEntry cacheEntry = entry.getValue();
+            logger.info("Checking memory cache entry: " + key);
+            
+            // 检查是否为搜索缓存且未过期
+            if (key.startsWith("search_" + baseUrl + "_") && !cacheEntry.isExpired()) {
+                // 检查搜索关键词是否包含缓存关键词
+                String cachedKeyword = key.substring(("search_" + baseUrl + "_").length());
+                logger.info("Comparing search keyword '" + keyword + "' with memory cached keyword '" + cachedKeyword + "'");
+                
+                // 如果搜索关键词包含缓存关键词，则可以从缓存中提取数据
+                // 例如：搜索"浪浪山"，而缓存是"浪"，则可以使用缓存
+                if (keyword.contains(cachedKeyword)) {
+                    logger.info("Found broader search memory cache for key: " + key + ", extracting subset for keyword: " + keyword);
+                    List<Movie> cachedMovies = (List<Movie>) cacheEntry.getData();
+                    
+                    // 过滤出包含关键词的电影
+                    List<Movie> filteredMovies = filterMoviesByKeyword(cachedMovies, keyword);
+                    logger.info("Filtered " + filteredMovies.size() + " movies from memory cache");
+                    
+                    return filteredMovies;
+                }
+            }
+        }
+        
         // 遍历文件缓存查找可能的父级缓存
         try {
             Path cacheDir = Paths.get(SEARCH_CACHE_DIR);
@@ -171,12 +198,13 @@ public class CacheManager {
                                 
                                 // 检查是否为当前baseUrl的搜索缓存
                                 if (key.startsWith("search_" + baseUrl + "_")) {
-                                    // 检查缓存关键词是否包含搜索关键词
+                                    // 检查搜索关键词是否包含缓存关键词（修改逻辑）
                                     String cachedKeyword = key.substring(("search_" + baseUrl + "_").length());
-                                    logger.info("Comparing file cached keyword '" + cachedKeyword + "' with search keyword '" + keyword + "'");
+                                    logger.info("Comparing search keyword '" + keyword + "' with file cached keyword '" + cachedKeyword + "'");
                                     
-                                    // 如果缓存关键词包含搜索关键词，则可以从缓存中提取数据
-                                    if (cachedKeyword.contains(keyword)) {
+                                    // 如果搜索关键词包含缓存关键词，则可以从缓存中提取数据
+                                    // 例如：搜索"浪浪山"，而缓存是"浪"，则可以使用缓存
+                                    if (keyword.contains(cachedKeyword)) {
                                         logger.info("Found broader search file cache for key: " + key + ", extracting subset for keyword: " + keyword);
                                         String json = Files.readString(path);
                                         CacheFileContent<List<Movie>> cacheFileContent = objectMapper.readValue(json, 
@@ -191,6 +219,9 @@ public class CacheManager {
                                                     .filter(movie -> movie.getName().contains(keyword) || 
                                                             (movie.getDescription() != null && movie.getDescription().contains(keyword)))
                                                     .collect(Collectors.toList());
+                                            
+                                            // 更新内存缓存
+                                            memoryCache.put(key, new CacheEntry(cachedMovies));
                                             
                                             // 返回过滤后的结果
                                             if (!movies.isEmpty()) {
