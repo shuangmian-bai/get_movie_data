@@ -204,20 +204,21 @@ public class GetMovieDataApplication {
 	 */
 	private static void createBasicConfigFile(Path targetPath) throws IOException {
 		String basicConfig = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+				"<!-- 电影数据源配置文件 -->\n" +
 				"<configuration>\n" +
-				"    <!-- 数据源配置 -->\n" +
+				"    <!-- 数据源配置部分 -->\n" +
 				"    <datasources>\n" +
-				"        <!-- 每个数据源配置 -->\n" +
-				"        <datasource id=\"default\" class=\"org.example.get_movie_data.service.impl.MovieServiceImpl\">\n" +
-				"            <name>默认数据源</name>\n" +
-				"            <description>默认的电影数据获取实现</description>\n" +
+				"        <!-- 测试数据源，用于演示和默认情况 -->\n" +
+				"        <datasource id=\"test_demo\" class=\"org.example.get_movie_data.service.DataSourceManager$DefaultMovieService\">\n" +
+				"            <name>测试数据源</name>\n" +
+				"            <description>测试数据源</description>\n" +
 				"        </datasource>\n" +
 				"    </datasources>\n" +
-				"    \n" +
-				"    <!-- URL映射配置 -->\n" +
+				"\n" +
+				"    <!-- URL映射配置部分 -->\n" +
 				"    <urlMappings>\n" +
-				"        <!-- 每个URL映射到特定的数据源 -->\n" +
-				"        <urlMapping baseUrl=\"*\" datasource=\"default\"/>\n" +
+				"        <!-- 通配符匹配，作为默认数据源 -->\n" +
+				"        <urlMapping baseUrl=\"*\" datasource=\"test_demo\"/>\n" +
 				"    </urlMappings>\n" +
 				"</configuration>";
 		
@@ -241,53 +242,87 @@ public class GetMovieDataApplication {
 				"系统提供以下RESTful API接口：\n\n" +
 				"### 搜索电影\n\n" +
 				"```\n" +
-				"GET /api/movie/search?baseUrl={baseUrl}&keyword={keyword}[&datasource={datasource}]\n" +
+				"GET /api/movie/search?keyword={keyword}\n" +
 				"```\n\n" +
 				"参数说明：\n" +
-				"- baseUrl: 基础URL\n" +
-				"- keyword: 搜索关键词\n" +
-				"- datasource: 可选，指定数据源ID\n\n" +
+				"- keyword: 搜索关键词\n\n" +
+				"### 搜索特定数据源的电影\n\n" +
+				"```\n" +
+				"GET /api/movie/search?baseUrl={baseUrl}&keyword={keyword}\n" +
+				"```\n\n" +
+				"参数说明：\n" +
+				"- baseUrl: 基础URL，用于匹配特定数据源\n" +
+				"- keyword: 搜索关键词\n\n" +
+				"### 获取所有数据源的电影\n\n" +
+				"```\n" +
+				"GET /api/movie/searchAll?keyword={keyword}\n" +
+				"```\n\n" +
+				"参数说明：\n" +
+				"- keyword: 搜索关键词\n\n" +
 				"### 获取剧集列表\n\n" +
 				"```\n" +
-				"GET /api/movie/episodes?baseUrl={baseUrl}&playUrl={playUrl}[&datasource={datasource}]\n" +
+				"GET /api/movie/episodes?baseUrl={baseUrl}&playUrl={playUrl}\n" +
 				"```\n\n" +
 				"参数说明：\n" +
 				"- baseUrl: 基础URL\n" +
-				"- playUrl: 播放地址\n" +
-				"- datasource: 可选，指定数据源ID\n\n" +
+				"- playUrl: 播放地址\n\n" +
 				"### 获取M3U8地址\n\n" +
 				"```\n" +
-				"GET /api/movie/m3u8?baseUrl={baseUrl}&episodeUrl={episodeUrl}[&datasource={datasource}]\n" +
+				"GET /api/movie/m3u8?baseUrl={baseUrl}&episodeUrl={episodeUrl}\n" +
 				"```\n\n" +
 				"参数说明：\n" +
 				"- baseUrl: 基础URL\n" +
-				"- episodeUrl: 剧集播放地址\n" +
-				"- datasource: 可选，指定数据源ID\n\n" +
+				"- episodeUrl: 剧集播放地址\n\n" +
 				"## 配置说明\n\n" +
 				"系统通过 `movie-data-config.xml` 文件进行配置，包括数据源配置和URL映射配置。\n\n" +
 				"### 数据源配置\n\n" +
 				"```xml\n" +
 				"<datasources>\n" +
-				"    <datasource id=\"default\" class=\"org.example.get_movie_data.service.impl.MovieServiceImpl\">\n" +
-				"        <name>默认数据源</name>\n" +
-				"        <description>默认的电影数据获取实现</description>\n" +
+				"    <datasource id=\"test_demo\" class=\"org.example.get_movie_data.service.DataSourceManager$DefaultMovieService\">\n" +
+				"        <name>测试数据源</name>\n" +
+				"        <description>测试数据源</description>\n" +
 				"    </datasource>\n" +
 				"</datasources>\n" +
 				"```\n\n" +
 				"### URL映射配置\n\n" +
 				"```xml\n" +
 				"<urlMappings>\n" +
-				"    <urlMapping baseUrl=\"*\" datasource=\"default\"/>\n" +
+				"    <urlMapping baseUrl=\"*\" datasource=\"test_demo\"/>\n" +
 				"</urlMappings>\n" +
 				"```\n\n" +
 				"## 扩展数据源\n\n" +
 				"要扩展新的数据源，请按照以下步骤操作：\n\n" +
-				"1. 创建实现MovieService接口的类\n" +
+				"1. 创建实现ExternalMovieService接口的类\n" +
 				"2. 将实现类打包为jar文件\n" +
 				"3. 将jar文件放入 `libs` 目录\n" +
 				"4. 在 `movie-data-config.xml` 文件中添加数据源配置\n" +
 				"5. （可选）添加URL映射配置\n\n" +
-				"详细配置说明请参考 `CONFIGURATION.md` 文件。";
+				"示例配置：\n\n" +
+				"```xml\n" +
+				"<datasources>\n" +
+				"    <datasource id=\"chabeigu\" class=\"com.example.chabeigu.ChabeiguMovieService\">\n" +
+				"        <name>茶杯狐数据源</name>\n" +
+				"        <description>从茶杯狐网站获取电影数据</description>\n" +
+				"    </datasource>\n" +
+				"</datasources>\n\n" +
+				"<urlMappings>\n" +
+				"    <urlMapping baseUrl=\"https://www.chabeigu.com\" datasource=\"chabeigu\"/>\n" +
+				"</urlMappings>\n" +
+				"```\n\n" +
+				"## 项目结构\n\n" +
+				"```\n" +
+				"get_movie_data/\n" +
+				"├── libs/                          # 外部数据源JAR包存放目录\n" +
+				"├── movie-data-config.xml          # 数据源配置文件\n" +
+				"├── README.md                      # 使用说明文件\n" +
+				"├── chabeigu/                      # 茶杯狐数据源示例项目\n" +
+				"└── custom-datasource/             # 自定义数据源示例项目\n" +
+				"```\n\n" +
+				"## 内置数据源\n\n" +
+				"系统内置以下数据源：\n\n" +
+				"- **测试数据源(test_demo)**: 用于演示和默认情况的测试数据源\n" +
+				"- **茶杯狐数据源(chabeigu)**: 从茶杯狐网站获取电影数据的示例实现\n\n" +
+				"详细使用说明请参考项目目录中的README.md文件。";
 		
 		Files.write(targetPath, readmeContent.getBytes());
 	}

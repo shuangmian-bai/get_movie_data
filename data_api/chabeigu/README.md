@@ -27,21 +27,16 @@ mvn clean package
 在主项目的 `movie-data-config.xml` 中添加如下配置：
 
 ```xml
-<data-sources>
-    <data-source>
-        <id>chabeigu</id>
-        <class>com.example.chabeigu.ChabeiguMovieService</class>
+<datasources>
+    <datasource id="chabeigu" class="com.example.chabeigu.ChabeiguMovieService">
         <name>茶杯狐数据源</name>
         <description>从茶杯狐网站获取电影数据</description>
-    </data-source>
-</data-sources>
+    </datasource>
+</datasources>
 
-<url-mappings>
-    <url-mapping>
-        <prefix>chabeigu</prefix>
-        <data-source-id>chabeigu</data-source-id>
-    </url-mapping>
-</url-mappings>
+<urlMappings>
+    <urlMapping baseUrl="https://www.chabeigu.com" datasource="chabeigu"/>
+</urlMappings>
 ```
 
 ## 自定义数据源示例项目
@@ -99,10 +94,3 @@ custom-datasource/
 2. 修改包名和类名
 3. 实现具体的电影数据获取逻辑
 4. 打包并部署到主项目
-
-## 注意事项
-
-1. 确保数据模型类的结构与主项目兼容
-2. 方法签名必须与示例保持一致
-3. 不要在JAR包中包含主项目的类，避免类冲突
-4. 使用独立的包名空间（如com.example.yourproject）
