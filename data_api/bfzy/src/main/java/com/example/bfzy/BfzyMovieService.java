@@ -1,5 +1,10 @@
 package com.example.bfzy;
 
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import org.apache.commons.text.StringEscapeUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
@@ -11,10 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.net.URL;
-import java.net.HttpURLConnection;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,8 +31,27 @@ import java.util.regex.Pattern;
  */
 public class BfzyMovieService {
     
+    // 创建OkHttp客户端实例
+    private static final OkHttpClient client = new OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build();
+    
     // 线程池大小控制变量
     private static final int THREAD_POOL_SIZE = 10;
+    
+    /**
+     * 处理Unicode转义字符
+     * 
+     * @param input 包含Unicode转义字符的字符串
+     * @return 解码后的字符串
+     */
+    private String unescapeUnicode(String input) {
+        if (input == null || input.isEmpty()) {
+            return input;
+        }
+        return StringEscapeUtils.unescapeJava(input);
+    }
     
     /**
      * 根据关键词搜索电影
@@ -40,38 +61,13 @@ public class BfzyMovieService {
      * @return 电影列表
      */
     public List<Movie> searchMovies(String baseUrl, String keyword) {
-        // 搜索接口 https://bfzy.tv/vodsearch/-------------.html?wd={keyword}
-        // 构建搜索url
-        String searchUrl = baseUrl + "/vodsearch/-------------.html?wd=" + keyword;
+        //http://search.bfzyapi.com/json-api/?dname=baofeng&key={keyword}&count=20
+        String url = "http://search.bfzyapi.com/" + "json-api/?dname=baofeng&key=" + keyword + "&count=20";
+        //发送请求,获取json
+        String json = sendGetRequest(url);
 
-        // 发送get请求
-        String html = sendGetRequest(searchUrl);
-        
-        // 创建jsoup对象
-        Document doc = Jsoup.parse(html);
 
-        // 获取页码信息
-        Elements pageElements = doc.select(".page > a");
-        int pageCount = 1; // 默认值改为1
-        
-        if (!pageElements.isEmpty()) {
-            try {
-                // 获取最后一个分页链接并提取页码
-                Element lastPageElement = pageElements.last();
-                String pageText = lastPageElement.text();
-                pageCount = Integer.parseInt(pageText);
-            } catch (NumberFormatException e) {
-                pageCount = 1; // 出错时默认为1
-                System.err.println("解析页码时出错: " + e.getMessage());
-            }
-        }
-
-        System.out.println("总页数: " + pageCount);
-
-        // 使用多线程获取所有页面数据
-        List<Movie> movies = getAllPageData(baseUrl, keyword, pageCount);
-
-        return movies;
+        return null;
     }
 
     /**
@@ -149,10 +145,10 @@ public class BfzyMovieService {
             System.out.println("==================================");
             
             // 选择电影名称
-            String name = item.select(".module-poster-item-title").text();
+            String name = unescapeUnicode(item.select(".module-poster-item-title").text());
             
             // 选择剧情描述
-            String description = item.select(".module-item-note").first().text();
+            String description = unescapeUnicode(item.select(".module-item-note").first().text());
             
             // 获取播放链接
             String playUrl = baseUrl + item.select(".module-poster-item-link").attr("href");
@@ -182,27 +178,32 @@ public class BfzyMovieService {
 
     private String sendGetRequest(String urlString) {
         try {
-            URL url = new URL(urlString);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            // 创建请求
+            Request request = new Request.Builder()
+                    .url(urlString)
+                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                    .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+                    .addHeader("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                    .addHeader("Connection", "keep-alive")
+                    .build();
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-            StringBuilder response = new StringBuilder();
-            String line;
-
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
+            // 执行请求
+            try (Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new IOException("Unexpected code " + response);
+                }
+                
+                // 获取响应体
+                ResponseBody responseBody = response.body();
+                if (responseBody != null) {
+                    return responseBody.string();
+                }
             }
-            reader.close();
-
-            return response.toString();
         } catch (Exception e) {
             e.printStackTrace();
-            return "";
         }
+        return "";
     }
-
 
     /**
      * 获取指定电影的所有剧集
@@ -223,7 +224,7 @@ public class BfzyMovieService {
         List<Movie.Episode> episodes = new ArrayList<>();
         
         for (Element element : elements) {
-            String title = element.text();
+            String title = unescapeUnicode(element.text());
             String episodeUrl = baseUrl + element.attr("href");
             System.out.println("title: " + title);
             System.out.println("episodeUrl: " + episodeUrl);
