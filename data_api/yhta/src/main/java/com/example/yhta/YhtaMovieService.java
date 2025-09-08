@@ -41,47 +41,101 @@ public class YhtaMovieService {
      * @return 电影列表
      */
     public List<Movie> searchMovies(String baseUrl, String keyword) {
-        // 搜索接口: https://www.yhta.cc/vodsearch/-------------.html?wd={keyword}
+        // 搜索接口:
+        //https://www.857kan.com/search/{keyword}-------------.html
         // 构建搜索url
-        String searchUrl = baseUrl + "/vodsearch/-------------.html?wd=" + keyword;
+        String searchUrl = baseUrl + "/search/" + keyword + "-------------.html";
 
         // 发送get请求
         String html = sendGetRequest(searchUrl);
         // 创建jsoup对象
         Document doc = Jsoup.parse(html);
 
-        // 获取搜索结果项
-        Elements movieItems = doc.select(".module-item");
-        
-        // 创建Movie列表
-        List<Movie> movies = new ArrayList<>();
-
-        for (Element item : movieItems) {
+        // 找到body > div.wrap > div > div > ul > li:nth-child(9) > a,获取href
+        String href = doc.select("body > div.wrap > div > div > ul > li:nth-child(9) > a").attr("href");
+        // 以-分割
+        String[] split = href.split("-");
+        // 查找其中的整数值
+        int totalPages = 0;
+        for (String part : split) {
             try {
-                // 提取电影信息
-                String name = item.select(".video-name a").attr("title");
-                String playUrl = baseUrl + item.select(".video-name a").attr("href");
-                String poster = item.select(".module-item-pic img").attr("data-src");
-                String description = item.select(".video-info-item.desc").text();
-                
-                // 创建Movie对象并设置属性
-                Movie movie = new Movie();
-                movie.setName(name);
-                movie.setDescription(description);
-                movie.setPlayUrl(playUrl);
-                movie.setPoster(poster);
-                
-                // 添加到列表
-                movies.add(movie);
+                totalPages = Integer.parseInt(part);
+                // 找到第一个整数就跳出循环
+                break;
+            } catch (NumberFormatException e) {
+                // 不是整数，继续查找
+                continue;
+            }
+        }
+        
+        System.out.println("找到"+totalPages+"页数据");
+        
+        // 使用线程池并发获取所有页面数据
+        ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        List<Future<List<Movie>>> futures = new ArrayList<>();
+        
+        // 提交所有页面的获取任务
+        for (int page = 1; page <= totalPages; page++) {
+            final int pageNum = page;
+            Future<List<Movie>> future = executor.submit(() -> getMoviesByPage(baseUrl, keyword, pageNum));
+            futures.add(future);
+        }
+        
+        // 收集所有结果
+        List<Movie> allMovies = new ArrayList<>();
+        for (Future<List<Movie>> future : futures) {
+            try {
+                List<Movie> movies = future.get(10, TimeUnit.SECONDS); // 设置超时时间
+                allMovies.addAll(movies);
             } catch (Exception e) {
-                System.err.println("解析电影项时出错: " + e.getMessage());
+                System.err.println("获取页面数据时出错: " + e.getMessage());
                 e.printStackTrace();
             }
+        }
+        
+        // 关闭线程池
+        executor.shutdown();
+        
+        return allMovies;
+    }
+
+    //定义一个函数，传入搜索关键词和页码，返回这一页的数据
+    public List<Movie> getMoviesByPage(String baseUrl, String keyword, int page) {
+        //https://www.857kan.com/search/{keyword}----------{page}---.html
+        //构建搜索url
+        String searchUrl = baseUrl + "/search/" + keyword + "----------" + page + "---.html";
+        //发送get请求
+        String html = sendGetRequest(searchUrl);
+        Document doc = Jsoup.parse(html);
+        //搜索#searchList > li:nth-child(1)
+        Elements elements = doc.select("#searchList > li");
+        
+        // 创建电影列表
+        List<Movie> movies = new ArrayList<>();
+        
+        for (Element element : elements) {
+            //找到li > div.detail > h4 > a
+            String name = element.select("div.detail > h4 > a").text();
+            //找到li > div.detail > p.hidden-xs作为描述
+            String description = element.select("div.detail > p.hidden-xs").text();
+            //找到 li > div.thumb > a ,定位data-original元素为海报内容
+            String poster = element.select("div.thumb > a").attr("data-original");
+            //找到li > div.thumb > a的href
+            String playUrl = baseUrl + element.select("div.thumb > a").attr("href");
+            
+            // 创建Movie对象并设置属性
+            Movie movie = new Movie();
+            movie.setName(name);
+            movie.setDescription(description);
+            movie.setPoster(poster);
+            movie.setPlayUrl(playUrl);
+            
+            // 添加到电影列表
+            movies.add(movie);
         }
 
         return movies;
     }
-
     private String sendGetRequest(String urlString) {
         try {
             URL url = new URL(urlString);

@@ -32,10 +32,12 @@ public class YhtaMovieServiceTest {
     }
 
     private static void testSearchMovies(YhtaMovieService movieService) throws Exception {
-        String baseUrl = "https://www.yhta.cc";
-        String keyword = "铠甲勇士";
+        String baseUrl = "https://www.857kan.com";
+        String keyword = "海贼王";
 
         List<Movie> movies = movieService.searchMovies(baseUrl, keyword);
+        //打印一下搜索结果
+
 
         if (movies == null) {
             throw new AssertionError("searchMovies 返回了 null");
@@ -53,8 +55,8 @@ public class YhtaMovieServiceTest {
     }
 
     private static void testGetEpisodes(YhtaMovieService movieService) throws Exception {
-        String baseUrl = "https://www.yhta.cc";
-        String playUrl = "https://www.yhta.cc/voddetail/1234.html"; // 示例URL，请根据实际情况修改
+        String baseUrl = "https://www.857kan.com";
+        String playUrl = "https://www.857kan.com/voddetail/1234.html"; // 示例URL，请根据实际情况修改
 
         List<Movie.Episode> episodes = movieService.getEpisodes(baseUrl, playUrl);
 
@@ -74,8 +76,8 @@ public class YhtaMovieServiceTest {
     }
 
     private static void testGetM3u8Url(YhtaMovieService movieService) throws Exception {
-        String baseUrl = "https://www.yhta.cc";
-        String episodeUrl = "https://www.yhta.cc/vodplay/1234-1-1.html"; // 示例URL，请根据实际情况修改
+        String baseUrl = "https://www.857kan.com";
+        String episodeUrl = "https://www.857kan.com/vodplay/1234-1-1.html"; // 示例URL，请根据实际情况修改
 
         String m3u8Url = movieService.getM3u8Url(baseUrl, episodeUrl);
 
