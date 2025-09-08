@@ -76,6 +76,27 @@ public class BfzyMovieService {
         String url = "http://search.bfzyapi.com/" + "json-api/?dname=baofeng&key=" + keyword + "&count=20";
         //发送请求,获取json
         String json = sendGetRequest(url);
+        
+        // 解析JSON并只提取posts字段中的数据
+        JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
+        JsonArray postsArray = jsonObject.getAsJsonArray("posts");
+
+        //遍历
+        for (JsonElement postElement : postsArray) {
+            System.out.println("========================================");
+            //电影名称就是vod_name字段
+            String name = postElement.getAsJsonObject().get("vod_name").getAsString();
+            //海报信息是vod_pic字段
+            String poster = postElement.getAsJsonObject().get("vod_pic").getAsString();
+            //播放地址是vod_play_url字段
+            String playUrl = postElement.getAsJsonObject().get("vod_play_url").getAsString();
+            //简介是vod_content字段
+            String description = postElement.getAsJsonObject().get("vod_content").getAsString();
+            System.out.println("name:" + name);
+            System.out.println("poster:" + poster);
+            System.out.println("playUrl:" + playUrl);
+            System.out.println("description:" + description);
+        }
 
 
         return null;
