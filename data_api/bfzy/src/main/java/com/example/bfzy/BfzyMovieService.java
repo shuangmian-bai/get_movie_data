@@ -77,9 +77,17 @@ public class BfzyMovieService {
         //发送请求,获取json
         String json = sendGetRequest(url);
         
+        // 如果返回空内容则返回空列表
+        if (json == null || json.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         // 解析JSON并只提取posts字段中的数据
         JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
         JsonArray postsArray = jsonObject.getAsJsonArray("posts");
+        
+        // 创建电影列表
+        List<Movie> movies = new ArrayList<>();
 
         //遍历
         for (JsonElement postElement : postsArray) {
@@ -96,10 +104,23 @@ public class BfzyMovieService {
             System.out.println("poster:" + poster);
             System.out.println("playUrl:" + playUrl);
             System.out.println("description:" + description);
+            
+            // 处理Unicode转义字符
+            name = unescapeUnicode(name);
+            description = unescapeUnicode(description);
+            
+            // 创建Movie对象并设置属性
+            Movie movie = new Movie();
+            movie.setName(name);
+            movie.setPoster(poster);
+            movie.setPlayUrl(playUrl);
+            movie.setDescription(description);
+            
+            // 添加到列表
+            movies.add(movie);
         }
 
-
-        return null;
+        return movies;
     }
 
     /**
@@ -245,29 +266,24 @@ public class BfzyMovieService {
      * @return 剧集列表
      */
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-        String html = sendGetRequest(playUrl);
-        // 创建jsoup对象
-        Document doc = Jsoup.parse(html);
-        
-        // 选择剧集列表
-        Elements elements = doc.select(".module-play-list-content a");
+        //playUrl按照#分割
+        String[] playUrls = playUrl.split("#");
         
         // 创建剧集列表
         List<Movie.Episode> episodes = new ArrayList<>();
         
-        for (Element element : elements) {
-            String title = unescapeUnicode(element.text());
-            String episodeUrl = baseUrl + element.attr("href");
-            System.out.println("title: " + title);
-            System.out.println("episodeUrl: " + episodeUrl);
-            
-            // 构造剧集对象并添加到列表中
+        for (String playUrl1 : playUrls) {
+            //以$分割，0为title，1为episodeUrl
+            String[] playUrl2 = playUrl1.split("\\$");
             Movie.Episode episode = new Movie.Episode();
-            episode.setTitle(title);
-            episode.setEpisodeUrl(episodeUrl);
+            episode.setTitle(playUrl2[0]);
+            episode.setEpisodeUrl(playUrl2[1]);
+
+            // 添加到剧集列表
             episodes.add(episode);
         }
-
+        
+        // 返回剧集列表
         return episodes;
     }
 
@@ -279,18 +295,7 @@ public class BfzyMovieService {
      * @return M3U8播放地址
      */
     public String getM3u8Url(String baseUrl, String episodeUrl) {
-        String html = sendGetRequest(episodeUrl);
-        
-        // 使用正则表达式匹配m3u8地址
-        Pattern pattern = Pattern.compile("https?://[^\"]*\\.m3u8[^\"]*");
-        Matcher matcher = pattern.matcher(html);
-        String m3u8Url = null;
-        if (matcher.find()) {
-            m3u8Url = matcher.group();
-            System.out.println("m3u8Url: " + m3u8Url);
-            return m3u8Url;
-        }
 
-        return m3u8Url;
+        return episodeUrl;
     }
 }
