@@ -1,22 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- 电影数据源配置文件 -->
 <configuration>
-    <!-- 数据源配置 -->
+    <!-- 数据源配置部分 -->
     <datasources>
-        <!-- 每个数据源配置 -->
-        <datasource id="test_demo" class="org.example.get_movie_data.service.impl.MovieServiceImpl">
+        <!-- 测试数据源，用于演示和默认情况 -->
+        <datasource id="test_demo" class="org.example.get_movie_data.service.DataSourceManager$DefaultMovieService">
             <name>测试数据源</name>
             <description>测试数据源</description>
         </datasource>
-        <datasource id="custom" class="com.example.custom.CustomMovieService">
-            <name>自定义数据源</name>
-            <description>自定义电影数据源实现</description>
+
+        <!-- 茶杯狐数据源 -->
+        <datasource id="chabeigu" class="com.example.chabeigu.ChabeiguMovieService">
+            <name>茶杯狐数据源</name>
+            <description>从茶杯狐网站获取电影数据</description>
         </datasource>
+
+        <!-- YHTA数据源 -->
+        <datasource id="yhta" class="com.example.yhta.YhtaMovieService">
+            <name>YHTA数据源</name>
+            <description>从YHTA网站获取电影数据</description>
+        </datasource>
+
     </datasources>
 
-    <!-- URL映射配置 -->
+    <!-- URL映射配置部分 -->
     <urlMappings>
-        <!-- 每个URL映射到特定的数据源 -->
-        <urlMapping baseUrl="https://custom.example.com/" datasource="custom"/>
+        <!-- URL到数据源的映射关系 -->
+        <urlMapping baseUrl="https://www.chabeigu.com" datasource="chabeigu"/>
+        <urlMapping baseUrl="https://www.yhta.cc" datasource="yhta"/>
+
+        <!-- 通配符匹配，作为默认数据源 -->
         <urlMapping baseUrl="*" datasource="test_demo"/>
     </urlMappings>
 </configuration>
