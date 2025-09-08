@@ -16,13 +16,13 @@ public class YhtaMovieServiceTest {
             System.out.println("YhtaMovieService 实例化成功");
 
             // 测试searchMovies方法
-            testSearchMovies(movieService);
+//            testSearchMovies(movieService);
 
             // 测试getEpisodes方法
 //            testGetEpisodes(movieService);
 
             // 测试getM3u8Url方法
-//            testGetM3u8Url(movieService);
+            testGetM3u8Url(movieService);
 
             System.out.println("所有测试通过!");
         } catch (Exception e) {
@@ -56,7 +56,7 @@ public class YhtaMovieServiceTest {
 
     private static void testGetEpisodes(YhtaMovieService movieService) throws Exception {
         String baseUrl = "https://www.857kan.com";
-        String playUrl = "https://www.857kan.com/voddetail/1234.html"; // 示例URL，请根据实际情况修改
+        String playUrl = "https://www.857kan.com/video/4609.html"; // 示例URL，请根据实际情况修改
 
         List<Movie.Episode> episodes = movieService.getEpisodes(baseUrl, playUrl);
 
@@ -77,7 +77,7 @@ public class YhtaMovieServiceTest {
 
     private static void testGetM3u8Url(YhtaMovieService movieService) throws Exception {
         String baseUrl = "https://www.857kan.com";
-        String episodeUrl = "https://www.857kan.com/vodplay/1234-1-1.html"; // 示例URL，请根据实际情况修改
+        String episodeUrl = "https://www.857kan.com/play/1805-1-1.html"; // 示例URL，请根据实际情况修改
 
         String m3u8Url = movieService.getM3u8Url(baseUrl, episodeUrl);
 

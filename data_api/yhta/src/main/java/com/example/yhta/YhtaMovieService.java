@@ -129,7 +129,13 @@ public class YhtaMovieService {
             movie.setDescription(description);
             movie.setPoster(poster);
             movie.setPlayUrl(playUrl);
-            
+
+            System.out.println("========================");
+            System.out.println( name);
+            System.out.println( description);
+            System.out.println( poster);
+            System.out.println( playUrl);
+
             // 添加到电影列表
             movies.add(movie);
         }
@@ -167,28 +173,27 @@ public class YhtaMovieService {
      * @return 剧集列表
      */
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-        String html = sendGetRequest(playUrl);
-        // 创建jsoup对象
-        Document doc = Jsoup.parse(html);
-        
-        // 选择剧集元素
-        Elements elements = doc.select(".module-blocklist a");
+
+        //发送GET请求
+        String response = sendGetRequest(playUrl);
+        //创建doc对象
+        Document doc = Jsoup.parse(response);
         
         // 创建剧集列表
         List<Movie.Episode> episodes = new ArrayList<>();
         
-        for (Element element : elements) {
-            String title = element.select("span").text();
-            if (title == null || title.isEmpty()) {
-                title = element.text();
-            }
-            
+        //找到#playlist1 > ul > li里面的全部a标签并且循环
+        for (Element element : doc.select("#playlist1 > ul > li > a")) {
+            //a标签的文本为title，a标签的href为episodeUrl，需要设置变量
+            String title = element.text();
             String episodeUrl = baseUrl + element.attr("href");
             
-            // 构造剧集对象并添加到列表中
+            // 创建Episode对象并设置属性
             Movie.Episode episode = new Movie.Episode();
             episode.setTitle(title);
             episode.setEpisodeUrl(episodeUrl);
+            
+            // 添加到剧集列表
             episodes.add(episode);
         }
 
@@ -203,17 +208,9 @@ public class YhtaMovieService {
      * @return M3U8播放地址
      */
     public String getM3u8Url(String baseUrl, String episodeUrl) {
-        String html = sendGetRequest(episodeUrl);
-        
-        // 使用正则表达式匹配m3u8地址
-        Pattern pattern = Pattern.compile("https?://[^\"]*m3u8[^\"]*");
-        Matcher matcher = pattern.matcher(html);
-        String m3u8Url = null;
-        if (matcher.find()) {
-            m3u8Url = matcher.group();
-            return m3u8Url;
-        }
-
-        return m3u8Url;
+        // 发送GET请求
+        String response = sendGetRequest(episodeUrl);
+        System.out.println( response);
+        return null;
     }
 }
