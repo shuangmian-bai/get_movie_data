@@ -236,6 +236,7 @@ public class GetMovieDataApplication {
 				"2. 运行此jar包: `java -jar get_movie_data-0.0.1-SNAPSHOT.jar`\n" +
 				"3. 系统将自动创建以下文件和目录：\n" +
 				"   - `libs/` 目录：用于存放扩展的数据源实现jar包\n" +
+				"   - `cache/` 目录：用于存放缓存文件\n" +
 				"   - `movie-data-config.xml` 文件：数据源和URL映射配置文件\n" +
 				"   - `README.md` 文件：使用说明\n\n" +
 				"## API接口\n\n" +
@@ -273,6 +274,19 @@ public class GetMovieDataApplication {
 				"参数说明：\n" +
 				"- baseUrl: 基础URL\n" +
 				"- episodeUrl: 剧集播放地址\n\n" +
+				"## 缓存机制\n\n" +
+				"系统内置缓存机制，避免重复爬取相同数据，提高响应速度：\n\n" +
+				"- 所有API接口调用结果都会被缓存\n" +
+				"- 缓存默认保存在 `cache/` 目录下\n" +
+				"- 缓存默认有效期为2小时\n" +
+				"- 缓存过期后会自动重新爬取数据\n\n" +
+				"### 缓存配置\n\n" +
+				"缓存时间在 `org.example.get_movie_data.service.CacheManager` 类中配置：\n\n" +
+				"```java\n" +
+				"// 缓存过期时间（毫秒）- 默认2小时\n" +
+				"private static final long CACHE_EXPIRE_TIME = 2 * 60 * 60 * 1000;\n" +
+				"```\n\n" +
+				"如需修改缓存时间，可以修改该常量值并重新构建项目。\n\n" +
 				"## 配置说明\n\n" +
 				"系统通过 `movie-data-config.xml` 文件进行配置，包括数据源配置和URL映射配置。\n\n" +
 				"### 数据源配置\n\n" +
@@ -313,6 +327,7 @@ public class GetMovieDataApplication {
 				"```\n" +
 				"get_movie_data/\n" +
 				"├── libs/                          # 外部数据源JAR包存放目录\n" +
+				"├── cache/                         # 缓存文件存放目录\n" +
 				"├── movie-data-config.xml          # 数据源配置文件\n" +
 				"├── README.md                      # 使用说明文件\n" +
 				"├── chabeigu/                      # 茶杯狐数据源示例项目\n" +

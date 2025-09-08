@@ -1,33 +1,38 @@
 package org.example.get_movie_data.service;
 
 import org.example.get_movie_data.model.Movie;
-import org.springframework.stereotype.Component;
-
 import java.io.File;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
+import java.util.Map;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.ArrayList;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
 /**
- * 外部服务工厂
+ * 外部服务工厂类
  * 
- * 负责加载和创建外部数据源服务实例。
+ * 负责创建和管理外部数据源服务实例，支持通过JAR包动态加载外部服务实现。
  * 
  * @author get_movie_data team
  * @version 1.0.0
  */
-@Component
 public class ExternalServiceFactory {
+    
     private static final Logger logger = Logger.getLogger(ExternalServiceFactory.class.getName());
-
-    /** 类加载器缓存，避免重复创建类加载器 */
-    private Map<String, URLClassLoader> classLoaderCache = new HashMap<>();
+    
+    // 类加载器缓存，避免重复创建
+    private final Map<String, URLClassLoader> classLoaderCache = new HashMap<>();
+    
+    // 缓存管理器
+    private final CacheManager cacheManager;
+    
+    public ExternalServiceFactory(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
+    }
 
     /**
      * 根据类名创建对应的电影服务实例
@@ -82,19 +87,25 @@ public class ExternalServiceFactory {
             if (ExternalMovieService.class.isAssignableFrom(clazz)) {
                 logger.info("Class implements ExternalMovieService, creating adapter");
                 Object instance = clazz.getDeclaredConstructor().newInstance();
-                return new ExternalMovieServiceAdapter((ExternalMovieService) instance);
+                MovieService service = new ExternalMovieServiceAdapter((ExternalMovieService) instance);
+                // 添加缓存装饰器
+                return new CachedMovieService(service, cacheManager);
             }
 
             // 检查类是否实现了MovieService接口
             if (MovieService.class.isAssignableFrom(clazz)) {
                 logger.info("Class implements MovieService, creating direct instance");
-                return (MovieService) clazz.getDeclaredConstructor().newInstance();
+                MovieService service = (MovieService) clazz.getDeclaredConstructor().newInstance();
+                // 添加缓存装饰器
+                return new CachedMovieService(service, cacheManager);
             }
 
             // 如果类没有实现任何接口，创建一个通用适配器
             logger.info("Class does not implement required interface, creating generic adapter");
             Object instance = clazz.getDeclaredConstructor().newInstance();
-            return new GenericExternalServiceAdapter(instance, classLoader);
+            MovieService service = new GenericExternalServiceAdapter(instance, classLoader);
+            // 添加缓存装饰器
+            return new CachedMovieService(service, cacheManager);
         } catch (ClassNotFoundException e) {
             // 仅记录日志，不打印完整堆栈跟踪，避免误导
             logger.log(Level.INFO, "Class not found: " + className + " for datasource: " + datasourceId + 
