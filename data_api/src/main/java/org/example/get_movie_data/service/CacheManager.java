@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Optional;
@@ -31,7 +33,9 @@ public class CacheManager {
     private static final Logger logger = Logger.getLogger(CacheManager.class.getName());
     
     // 缓存目录
-    private static final String CACHE_DIR = "cache";
+    private static final String SEARCH_CACHE_DIR = "cache/search";
+    private static final String EPISODES_CACHE_DIR = "cache/episodes";
+    private static final String M3U8_CACHE_DIR = "cache/m3u8";
     
     // 缓存过期时间（毫秒）- 默认2小时
     private static final long CACHE_EXPIRE_TIME = 2 * 60 * 60 * 1000;
@@ -48,10 +52,12 @@ public class CacheManager {
     private static class CacheEntry {
         private final Object data;
         private final long createTime;
+        private final long expireTime;
         
         public CacheEntry(Object data) {
             this.data = data;
             this.createTime = System.currentTimeMillis();
+            this.expireTime = this.createTime + CACHE_EXPIRE_TIME;
         }
         
         public Object getData() {
@@ -62,8 +68,17 @@ public class CacheManager {
             return createTime;
         }
         
+        public long getExpireTime() {
+            return expireTime;
+        }
+        
         public boolean isExpired() {
-            return System.currentTimeMillis() - createTime > CACHE_EXPIRE_TIME;
+            return System.currentTimeMillis() > expireTime;
+        }
+        
+        public String getExpireTimeString() {
+            return LocalDateTime.ofEpochSecond(expireTime/1000, 0, java.time.ZoneOffset.UTC)
+                    .format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH时mm分ss秒"));
         }
     }
     
@@ -82,25 +97,34 @@ public class CacheManager {
         CacheEntry memoryEntry = memoryCache.get(cacheKey);
         if (memoryEntry != null && !memoryEntry.isExpired()) {
             logger.info("Found search results in memory cache for key: " + cacheKey);
+            logger.info("Cache will expire at: " + memoryEntry.getExpireTimeString());
             return (List<Movie>) memoryEntry.getData();
         }
         
         // 检查文件缓存
         try {
-            Path cacheFile = getCacheFilePath(cacheKey);
+            Path cacheFile = getSearchCacheFilePath(cacheKey);
             logger.info("Checking file cache at path: " + cacheFile.toString());
-            if (Files.exists(cacheFile) && !isFileExpired(cacheFile)) {
+            if (Files.exists(cacheFile)) {
                 String json = Files.readString(cacheFile);
-                List<Movie> movies = objectMapper.readValue(json, 
-                    TypeFactory.defaultInstance().constructCollectionType(List.class, Movie.class));
+                CacheFileContent<List<Movie>> cacheFileContent = objectMapper.readValue(json, 
+                    new TypeReference<CacheFileContent<List<Movie>>>() {});
                 
-                // 更新内存缓存
-                memoryCache.put(cacheKey, new CacheEntry(movies));
-                
-                logger.info("Loaded search results from file cache for key: " + cacheKey);
-                return movies;
+                // 检查是否过期
+                if (!cacheFileContent.isExpired()) {
+                    List<Movie> movies = cacheFileContent.getData();
+                    
+                    // 更新内存缓存
+                    memoryCache.put(cacheKey, new CacheEntry(movies));
+                    
+                    logger.info("Loaded search results from file cache for key: " + cacheKey);
+                    logger.info("Cache will expire at: " + cacheFileContent.getExpireTimeString());
+                    return movies;
+                } else {
+                    logger.info("File cache expired at: " + cacheFileContent.getExpireTimeString());
+                }
             } else {
-                logger.info("File cache does not exist or is expired for key: " + cacheKey);
+                logger.info("File cache does not exist for key: " + cacheKey);
             }
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error reading search results from cache", e);
@@ -131,43 +155,12 @@ public class CacheManager {
     private List<Movie> getSubsetFromExistingCache(String baseUrl, String keyword) {
         logger.info("getSubsetFromExistingCache called with baseUrl: " + baseUrl + ", keyword: " + keyword);
         
-        // 遍历内存缓存查找可能的父级缓存
-        for (ConcurrentHashMap.Entry<String, CacheEntry> entry : memoryCache.entrySet()) {
-            String key = entry.getKey();
-            CacheEntry cacheEntry = entry.getValue();
-            logger.info("Checking memory cache entry: " + key);
-            
-            // 检查是否为搜索缓存且未过期
-            if (key.startsWith("search_" + baseUrl + "_") && !cacheEntry.isExpired()) {
-                // 检查缓存关键词是否可以提供搜索关键词的信息
-                String cachedKeyword = key.substring(("search_" + baseUrl + "_").length());
-                logger.info("Comparing cached keyword '" + cachedKeyword + "' with search keyword '" + keyword + "'");
-                // 根据需求，应该是缓存结果中包含搜索关键词，而不是缓存关键词包含搜索关键词
-                // 但为了找到可能包含所需信息的缓存，我们需要检查已有的缓存
-                // 正确的逻辑是：如果缓存关键词是更广泛的搜索词，那么可能包含我们需要的信息
-                // 例如："浪"是"浪浪山"的更广泛搜索词，所以"浪"的缓存可能包含"浪浪山"的信息
-                // 但是"浪".contains("浪浪山")是false，所以我们需要另一种判断方式
-                // 更合理的做法是直接检查所有缓存结果中是否包含关键词
-                logger.info("Found search cache for key: " + key + ", extracting subset for keyword: " + keyword);
-                List<Movie> cachedMovies = (List<Movie>) cacheEntry.getData();
-                // 过滤出包含关键词的电影
-                List<Movie> filteredMovies = cachedMovies.stream()
-                        .filter(movie -> movie.getName().contains(keyword) || 
-                                (movie.getDescription() != null && movie.getDescription().contains(keyword)))
-                        .collect(Collectors.toList());
-                if (!filteredMovies.isEmpty()) {
-                    logger.info("Filtered " + filteredMovies.size() + " movies from cache");
-                    return filteredMovies;
-                }
-            }
-        }
-        
         // 遍历文件缓存查找可能的父级缓存
         try {
-            Path cacheDir = Paths.get(CACHE_DIR);
+            Path cacheDir = Paths.get(SEARCH_CACHE_DIR);
             logger.info("Checking file cache directory: " + cacheDir.toString());
             if (Files.exists(cacheDir)) {
-                // 使用 Files.list 简化处理
+                // 遍历所有缓存文件
                 try (var files = Files.list(cacheDir)) {
                     for (Path path : (Iterable<Path>) files::iterator) {
                         if (Files.isRegularFile(path) && path.toString().endsWith(".cache")) {
@@ -176,37 +169,37 @@ public class CacheManager {
                                 String key = fileName.substring(0, fileName.length() - 6); // 移除 ".cache" 后缀
                                 logger.info("Checking file cache: " + key);
                                 
-                                // 检查是否为搜索缓存
+                                // 检查是否为当前baseUrl的搜索缓存
                                 if (key.startsWith("search_" + baseUrl + "_")) {
-                                    // 检查缓存关键词是否可以提供搜索关键词的信息
+                                    // 检查缓存关键词是否包含搜索关键词
                                     String cachedKeyword = key.substring(("search_" + baseUrl + "_").length());
-                                    logger.info("Checking file cached keyword '" + cachedKeyword + "' for content containing search keyword '" + keyword + "'");
-                                    // 检查文件是否过期
-                                    if (!isFileExpired(path)) {
-                                        logger.info("Found search file cache for key: " + key + ", extracting subset for keyword: " + keyword);
+                                    logger.info("Comparing file cached keyword '" + cachedKeyword + "' with search keyword '" + keyword + "'");
+                                    
+                                    // 如果缓存关键词包含搜索关键词，则可以从缓存中提取数据
+                                    if (cachedKeyword.contains(keyword)) {
+                                        logger.info("Found broader search file cache for key: " + key + ", extracting subset for keyword: " + keyword);
                                         String json = Files.readString(path);
-                                        List<Movie> cachedMovies = objectMapper.readValue(json, 
-                                            TypeFactory.defaultInstance().constructCollectionType(List.class, Movie.class));
+                                        CacheFileContent<List<Movie>> cacheFileContent = objectMapper.readValue(json, 
+                                            new TypeReference<CacheFileContent<List<Movie>>>() {});
                                         
-                                        // 过滤出包含关键词的电影
-                                        List<Movie> movies = cachedMovies.stream()
-                                                .filter(movie -> movie.getName().contains(keyword) || 
-                                                        (movie.getDescription() != null && movie.getDescription().contains(keyword)))
-                                                .collect(Collectors.toList());
-                                        
-                                        // 更新内存缓存
-                                        memoryCache.put(key, new CacheEntry(cachedMovies));
-                                        
-                                        // 返回过滤后的结果
-                                        if (!movies.isEmpty()) {
-                                            logger.info("Filtered " + movies.size() + " movies from file cache");
-                                            // 更新内存缓存
-                                            String subsetCacheKey = "search_" + baseUrl + "_" + keyword;
-                                            memoryCache.put(subsetCacheKey, new CacheEntry(movies));
-                                            return movies;
+                                        // 检查是否过期
+                                        if (!cacheFileContent.isExpired()) {
+                                            List<Movie> cachedMovies = cacheFileContent.getData();
+                                            
+                                            // 过滤出包含关键词的电影
+                                            List<Movie> movies = cachedMovies.stream()
+                                                    .filter(movie -> movie.getName().contains(keyword) || 
+                                                            (movie.getDescription() != null && movie.getDescription().contains(keyword)))
+                                                    .collect(Collectors.toList());
+                                            
+                                            // 返回过滤后的结果
+                                            if (!movies.isEmpty()) {
+                                                logger.info("Filtered " + movies.size() + " movies from file cache");
+                                                return movies;
+                                            }
+                                        } else {
+                                            logger.info("File cache is expired: " + path.toString() + ", expired at: " + cacheFileContent.getExpireTimeString());
                                         }
-                                    } else {
-                                        logger.info("File cache is expired: " + path.toString());
                                     }
                                 }
                             } catch (IOException e) {
@@ -252,16 +245,20 @@ public class CacheManager {
         
         try {
             // 更新内存缓存
-            memoryCache.put(cacheKey, new CacheEntry(movies));
+            CacheEntry cacheEntry = new CacheEntry(movies);
+            memoryCache.put(cacheKey, cacheEntry);
             
             // 更新文件缓存
-            Path cacheFile = getCacheFilePath(cacheKey);
+            Path cacheFile = getSearchCacheFilePath(cacheKey);
             Files.createDirectories(cacheFile.getParent());
             
-            String json = objectMapper.writeValueAsString(movies);
+            // 创建带过期时间的缓存内容
+            CacheFileContent<List<Movie>> cacheFileContent = new CacheFileContent<>(movies, cacheEntry.getExpireTime());
+            String json = objectMapper.writeValueAsString(cacheFileContent);
             Files.writeString(cacheFile, json);
             
             logger.info("Cached search results for key: " + cacheKey);
+            logger.info("Cache will expire at: " + cacheEntry.getExpireTimeString());
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error caching search results", e);
         }
@@ -281,22 +278,31 @@ public class CacheManager {
         CacheEntry memoryEntry = memoryCache.get(cacheKey);
         if (memoryEntry != null && !memoryEntry.isExpired()) {
             logger.info("Found episodes in memory cache for key: " + cacheKey);
+            logger.info("Cache will expire at: " + memoryEntry.getExpireTimeString());
             return (List<Movie.Episode>) memoryEntry.getData();
         }
         
         // 检查文件缓存
         try {
-            Path cacheFile = getCacheFilePath(cacheKey);
-            if (Files.exists(cacheFile) && !isFileExpired(cacheFile)) {
+            Path cacheFile = getEpisodesCacheFilePath(cacheKey);
+            if (Files.exists(cacheFile)) {
                 String json = Files.readString(cacheFile);
-                List<Movie.Episode> episodes = objectMapper.readValue(json, 
-                    new TypeReference<List<Movie.Episode>>() {});
+                CacheFileContent<List<Movie.Episode>> cacheFileContent = objectMapper.readValue(json, 
+                    new TypeReference<CacheFileContent<List<Movie.Episode>>>() {});
                 
-                // 更新内存缓存
-                memoryCache.put(cacheKey, new CacheEntry(episodes));
-                
-                logger.info("Loaded episodes from file cache for key: " + cacheKey);
-                return episodes;
+                // 检查是否过期
+                if (!cacheFileContent.isExpired()) {
+                    List<Movie.Episode> episodes = cacheFileContent.getData();
+                    
+                    // 更新内存缓存
+                    memoryCache.put(cacheKey, new CacheEntry(episodes));
+                    
+                    logger.info("Loaded episodes from file cache for key: " + cacheKey);
+                    logger.info("Cache will expire at: " + cacheFileContent.getExpireTimeString());
+                    return episodes;
+                } else {
+                    logger.info("File cache expired at: " + cacheFileContent.getExpireTimeString());
+                }
             }
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error reading episodes from cache", e);
@@ -317,16 +323,20 @@ public class CacheManager {
         
         try {
             // 更新内存缓存
-            memoryCache.put(cacheKey, new CacheEntry(episodes));
+            CacheEntry cacheEntry = new CacheEntry(episodes);
+            memoryCache.put(cacheKey, cacheEntry);
             
             // 更新文件缓存
-            Path cacheFile = getCacheFilePath(cacheKey);
+            Path cacheFile = getEpisodesCacheFilePath(cacheKey);
             Files.createDirectories(cacheFile.getParent());
             
-            String json = objectMapper.writeValueAsString(episodes);
+            // 创建带过期时间的缓存内容
+            CacheFileContent<List<Movie.Episode>> cacheFileContent = new CacheFileContent<>(episodes, cacheEntry.getExpireTime());
+            String json = objectMapper.writeValueAsString(cacheFileContent);
             Files.writeString(cacheFile, json);
             
             logger.info("Cached episodes for key: " + cacheKey);
+            logger.info("Cache will expire at: " + cacheEntry.getExpireTimeString());
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error caching episodes", e);
         }
@@ -346,20 +356,31 @@ public class CacheManager {
         CacheEntry memoryEntry = memoryCache.get(cacheKey);
         if (memoryEntry != null && !memoryEntry.isExpired()) {
             logger.info("Found M3U8 URL in memory cache for key: " + cacheKey);
+            logger.info("Cache will expire at: " + memoryEntry.getExpireTimeString());
             return (String) memoryEntry.getData();
         }
         
         // 检查文件缓存
         try {
-            Path cacheFile = getCacheFilePath(cacheKey);
-            if (Files.exists(cacheFile) && !isFileExpired(cacheFile)) {
-                String m3u8Url = Files.readString(cacheFile);
+            Path cacheFile = getM3u8CacheFilePath(cacheKey);
+            if (Files.exists(cacheFile)) {
+                String json = Files.readString(cacheFile);
+                CacheFileContent<String> cacheFileContent = objectMapper.readValue(json, 
+                    new TypeReference<CacheFileContent<String>>() {});
                 
-                // 更新内存缓存
-                memoryCache.put(cacheKey, new CacheEntry(m3u8Url));
-                
-                logger.info("Loaded M3U8 URL from file cache for key: " + cacheKey);
-                return m3u8Url;
+                // 检查是否过期
+                if (!cacheFileContent.isExpired()) {
+                    String m3u8Url = cacheFileContent.getData();
+                    
+                    // 更新内存缓存
+                    memoryCache.put(cacheKey, new CacheEntry(m3u8Url));
+                    
+                    logger.info("Loaded M3U8 URL from file cache for key: " + cacheKey);
+                    logger.info("Cache will expire at: " + cacheFileContent.getExpireTimeString());
+                    return m3u8Url;
+                } else {
+                    logger.info("File cache expired at: " + cacheFileContent.getExpireTimeString());
+                }
             }
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error reading M3U8 URL from cache", e);
@@ -380,31 +401,92 @@ public class CacheManager {
         
         try {
             // 更新内存缓存
-            memoryCache.put(cacheKey, new CacheEntry(m3u8Url));
+            CacheEntry cacheEntry = new CacheEntry(m3u8Url);
+            memoryCache.put(cacheKey, cacheEntry);
             
             // 更新文件缓存
-            Path cacheFile = getCacheFilePath(cacheKey);
+            Path cacheFile = getM3u8CacheFilePath(cacheKey);
             Files.createDirectories(cacheFile.getParent());
             
-            Files.writeString(cacheFile, m3u8Url);
+            // 创建带过期时间的缓存内容
+            CacheFileContent<String> cacheFileContent = new CacheFileContent<>(m3u8Url, cacheEntry.getExpireTime());
+            String json = objectMapper.writeValueAsString(cacheFileContent);
+            Files.writeString(cacheFile, json);
             
             logger.info("Cached M3U8 URL for key: " + cacheKey);
+            logger.info("Cache will expire at: " + cacheEntry.getExpireTimeString());
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error caching M3U8 URL", e);
         }
     }
     
     /**
-     * 获取缓存文件路径
+     * 缓存文件内容包装类
+     */
+    private static class CacheFileContent<T> {
+        private final T data;
+        private final long expireTime;
+        
+        public CacheFileContent(T data, long expireTime) {
+            this.data = data;
+            this.expireTime = expireTime;
+        }
+        
+        public T getData() {
+            return data;
+        }
+        
+        public long getExpireTime() {
+            return expireTime;
+        }
+        
+        public boolean isExpired() {
+            return System.currentTimeMillis() > expireTime;
+        }
+        
+        public String getExpireTimeString() {
+            return LocalDateTime.ofEpochSecond(expireTime/1000, 0, java.time.ZoneOffset.UTC)
+                    .format(DateTimeFormatter.ofPattern("yyyy年MM月dd日HH时mm分ss秒"));
+        }
+    }
+    
+    /**
+     * 获取搜索缓存文件路径
      * 
      * @param cacheKey 缓存键
      * @return 缓存文件路径
      */
-    private Path getCacheFilePath(String cacheKey) {
+    private Path getSearchCacheFilePath(String cacheKey) {
         // 在Windows系统中，文件名不能包含以下字符: < > : " / \ | ? *
         // 将这些字符替换为下划线
         String safeCacheKey = cacheKey.replaceAll("[<>:\"/\\\\|?*]", "_");
-        return Paths.get(CACHE_DIR, safeCacheKey + ".cache");
+        return Paths.get(SEARCH_CACHE_DIR, safeCacheKey + ".cache");
+    }
+    
+    /**
+     * 获取剧集缓存文件路径
+     * 
+     * @param cacheKey 缓存键
+     * @return 缓存文件路径
+     */
+    private Path getEpisodesCacheFilePath(String cacheKey) {
+        // 在Windows系统中，文件名不能包含以下字符: < > : " / \ | ? *
+        // 将这些字符替换为下划线
+        String safeCacheKey = cacheKey.replaceAll("[<>:\"/\\\\|?*]", "_");
+        return Paths.get(EPISODES_CACHE_DIR, safeCacheKey + ".cache");
+    }
+    
+    /**
+     * 获取M3U8缓存文件路径
+     * 
+     * @param cacheKey 缓存键
+     * @return 缓存文件路径
+     */
+    private Path getM3u8CacheFilePath(String cacheKey) {
+        // 在Windows系统中，文件名不能包含以下字符: < > : " / \ | ? *
+        // 将这些字符替换为下划线
+        String safeCacheKey = cacheKey.replaceAll("[<>:\"/\\\\|?*]", "_");
+        return Paths.get(M3U8_CACHE_DIR, safeCacheKey + ".cache");
     }
     
     /**
@@ -423,17 +505,30 @@ public class CacheManager {
      * 清理过期的缓存文件
      */
     public void cleanupExpiredCache() {
+        cleanupExpiredCacheDir(SEARCH_CACHE_DIR);
+        cleanupExpiredCacheDir(EPISODES_CACHE_DIR);
+        cleanupExpiredCacheDir(M3U8_CACHE_DIR);
+    }
+    
+    /**
+     * 清理指定目录下的过期缓存文件
+     * 
+     * @param cacheDir 缓存目录
+     */
+    private void cleanupExpiredCacheDir(String cacheDir) {
         try {
-            Path cacheDir = Paths.get(CACHE_DIR);
-            if (!Files.exists(cacheDir)) {
+            Path dirPath = Paths.get(cacheDir);
+            if (!Files.exists(dirPath)) {
                 return;
             }
             
-            Files.walk(cacheDir)
+            Files.walk(dirPath)
                 .filter(Files::isRegularFile)
                 .filter(path -> {
                     try {
-                        return isFileExpired(path);
+                        String json = Files.readString(path);
+                        CacheFileContent cacheFileContent = objectMapper.readValue(json, CacheFileContent.class);
+                        return cacheFileContent.isExpired();
                     } catch (IOException e) {
                         logger.log(Level.WARNING, "Error checking file expiration", e);
                         return false;
@@ -448,7 +543,7 @@ public class CacheManager {
                     }
                 });
         } catch (IOException e) {
-            logger.log(Level.WARNING, "Error during cache cleanup", e);
+            logger.log(Level.WARNING, "Error during cache cleanup for directory: " + cacheDir, e);
         }
     }
 }
