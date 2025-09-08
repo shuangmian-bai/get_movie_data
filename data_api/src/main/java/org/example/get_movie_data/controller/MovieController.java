@@ -146,14 +146,30 @@ public class MovieController {
      * @param baseUrl 基础URL，用于确定使用哪个数据源
      * @param episodeUrl 具体播放地址
      * @param datasource 数据源ID（可选），直接指定数据源
-     * @return m3u8地址
+     * @return 包含m3u8地址的响应
      */
     @GetMapping("/m3u8")
-    public String getM3u8Url(@RequestParam String baseUrl, 
+    public MovieResponse getM3u8Url(@RequestParam String baseUrl, 
                             @RequestParam String episodeUrl,
                             @RequestParam(required = false) String datasource) {
         logger.info("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
         MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
-        return service.getM3u8Url(baseUrl, episodeUrl);
+        String m3u8Url = service.getM3u8Url(baseUrl, episodeUrl);
+        
+        MovieResponse response = new MovieResponse();
+        response.setMovie(m3u8Url);
+        return response;
+    }
+}
+
+class MovieResponse {
+    private String movie;
+
+    public String getMovie() {
+        return movie;
+    }
+
+    public void setMovie(String movie) {
+        this.movie = movie;
     }
 }
