@@ -8,6 +8,7 @@ import org.springframework.core.io.Resource;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Unmarshaller;
+import java.io.File;
 import java.io.InputStream;
 
 /**
@@ -33,6 +34,17 @@ public class DataSourceConfigLoader {
     public DataSourceConfig dataSourceConfig() {
         try {
             System.out.println("Attempting to load configuration file...");
+            
+            // 首先尝试从外部文件加载配置
+            File externalConfig = new File("config/movie-data-config.xml");
+            if (externalConfig.exists()) {
+                System.out.println("Loading configuration from external file: " + externalConfig.getAbsolutePath());
+                JAXBContext context = JAXBContext.newInstance(DataSourceConfig.class);
+                Unmarshaller unmarshaller = context.createUnmarshaller();
+                DataSourceConfig config = (DataSourceConfig) unmarshaller.unmarshal(externalConfig);
+                System.out.println("Successfully loaded external configuration");
+                return config;
+            }
             
             // 获取配置文件资源
             Resource resource = new ClassPathResource("config/movie-data-config.xml");
