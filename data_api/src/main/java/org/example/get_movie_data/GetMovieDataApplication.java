@@ -64,7 +64,7 @@ public class GetMovieDataApplication {
 			}
 			
 			// 创建movie-data-config.xml文件
-			Path configFile = jarDir.resolve("movie-data-config.xml");
+			Path configFile = jarDir.resolve("config/movie-data-config.xml");
 			if (!Files.exists(configFile)) {
 				// 从jar包中提取配置文件
 				extractResourceFromJar(jarUri, "config/movie-data-config.xml", configFile);
