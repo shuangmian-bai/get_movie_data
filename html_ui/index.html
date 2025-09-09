@@ -3,33 +3,56 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>双面影视数据原型</title>
+    <title>MovieHub</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-<div class="container">
-    <!-- 左侧面板：搜索与列表 -->
-    <div class="left-panel">
-        <header>
-            <h1>🎬 双面影视</h1>
-            <input type="text" id="searchInput" placeholder="输入电影/电视剧名称..." />
-            <button id="searchBtn">搜索</button>
+    <div class="app-container">
+        <!-- 顶部导航栏 -->
+        <header class="navbar">
+            <div class="navbar-content">
+                <div class="logo">
+                    <h1>MovieHub</h1>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="搜索电影、电视剧..." />
+                    <button id="searchBtn"><i class="fas fa-search"></i></button>
+                </div>
+                <div class="user-actions">
+                    <!-- 移除数据源选择 -->
+                </div>
+            </div>
         </header>
-        <main id="resultsList">
-            <p>请输入关键词开始搜索...</p>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 电影列表区域 -->
+            <section class="movies-section">
+                <div class="section-header">
+                    <h2 id="sectionTitle">热门影片</h2>
+                </div>
+                <div class="movies-grid" id="resultsList">
+                    <div class="placeholder-message">
+                        <p>请输入关键词搜索影片</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 电影详情区域 -->
+            <section class="details-section">
+                <div id="movieDetail">
+                    <div class="detail-placeholder">
+                        <i class="fas fa-film"></i>
+                        <p>选择一部影片查看详情</p>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
-    <!-- 右侧面板：详情与播放 -->
-    <div class="right-panel">
-        <div id="movieDetail">
-            <div class="placeholder">选择一部电影查看详情</div>
-        </div>
-    </div>
-</div>
-
-<!-- 引入 hls.js 支持 M3U8 播放 -->
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-<script src="script.js"></script>
+    <!-- 引入 hls.js 支持 M3U8 播放 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="script.js"></script>
 </body>
 </html>

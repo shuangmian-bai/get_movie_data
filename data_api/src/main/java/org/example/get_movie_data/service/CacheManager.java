@@ -226,10 +226,13 @@ public class CacheManager {
                                             // 返回过滤后的结果
                                             if (!movies.isEmpty()) {
                                                 logger.info("Filtered " + movies.size() + " movies from file cache");
+                                                // 更新内存缓存
+                                                String subsetCacheKey = "search_" + baseUrl + "_" + keyword;
+                                                memoryCache.put(subsetCacheKey, new CacheEntry(movies));
                                                 return movies;
                                             }
                                         } else {
-                                            logger.info("File cache is expired: " + path.toString() + ", expired at: " + cacheFileContent.getExpireTimeString());
+                                            logger.info("File cache is expired: " + path.toString());
                                         }
                                     }
                                 }
