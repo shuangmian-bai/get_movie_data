@@ -1,5 +1,6 @@
 package com.example.yuny;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -73,7 +74,7 @@ public class YunyMovieService implements MovieService {
     }
 
     //创建爬取一页数据函数，传入搜索关键词，页码和baseurl
-    public List<Movie> getMovies(String encodedKeyword, int page, String baseUrl) {
+    public List<Movie> getMovies(String encodedKeyword, int page, String baseUrl) throws JsonProcessingException {
         // 构造请求URL
         String url = baseUrl + "/videoSearch?key=" + encodedKeyword + "&current=" + page;
         System.out.println("正在请求URL: " + url);
@@ -99,14 +100,42 @@ public class YunyMovieService implements MovieService {
         String data_info = jsonData.split("data")[2].split("}")[0].split(":")[1];
         //转换为整数
         int data = Integer.parseInt(data_info);
-        System.out.println(data);
 
-//        String jsonData = nuxtDataElement.data().trim();
-//
-//        //json是个数组，我要拿到索引为5的数据
+        //新建一个解析对象OuterArrayParser
+        OuterArrayParser parser = new OuterArrayParser();
+        List<String> dataArray = parser.parseOuterArray(jsonData);
 
+        //找到dataArray的索引8的数据
+        String dataArray_8 = dataArray.get(8);
+        //解析
+        data = Integer.parseInt(dataArray_8.split("records")[1].split(",")[0].split(":")[1]);
 
-//        System.out.println(jsonData);
+        String dataArray_9 = dataArray.get(9);
+        List<String> dataArray2 = parser.parseOuterArray(dataArray_9);
+
+        //遍历dataArray
+        for (String dataArray_9_item : dataArray2) {
+            //转换为int
+            int dataArray_9_item_int = Integer.parseInt(dataArray_9_item);
+            String datas = dataArray.get(dataArray_9_item_int);
+            //datas是一个json，我要id，name，description，tags
+            JsonNode jsonNode = new ObjectMapper().readTree(datas);
+            String id = jsonNode.get("id").asText();
+            String name = jsonNode.get("name").asText();
+            String description = jsonNode.get("description").asText();
+            String cover = jsonNode.get("cover").asText();
+
+            id = dataArray.get(Integer.parseInt(id));
+            name = dataArray.get(Integer.parseInt(name));
+            description = dataArray.get(Integer.parseInt(description));
+            cover = dataArray.get(Integer.parseInt(cover));
+            System.out.println("===============================");
+            System.out.println("id:"+id);
+            System.out.println("name:"+name);
+            System.out.println("description:"+description);
+            System.out.println("cover:"+cover);
+
+        }
 
         return null;
     }

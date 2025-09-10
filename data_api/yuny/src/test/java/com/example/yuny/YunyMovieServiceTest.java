@@ -20,7 +20,7 @@ class YunyMovieServiceTest {
     void testSearchMoviesWithSpecialCharacters() {
         // 测试包含特殊字符的搜索关键词
         YunyMovieService service = new YunyMovieService();
-        List<Movie> movies = service.searchMovies("https://www.yuny.tv", "铠甲");
+        List<Movie> movies = service.searchMovies("https://www.yuny.tv", "浪浪山");
         assertNotNull(movies, "搜索结果不应为null");
         System.out.println("包含特殊字符的搜索返回的电影数量: " + movies.size());
     }
