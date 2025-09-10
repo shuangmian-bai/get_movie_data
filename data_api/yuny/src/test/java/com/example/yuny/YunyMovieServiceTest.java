@@ -31,8 +31,8 @@ class YunyMovieServiceTest {
         YunyMovieService service = new YunyMovieService();
         List<Movie.Episode> episodes = service.getEpisodes("https://www.yuny.tv", "https://www.yuny.tv/videoDetail/14447");
         assertNotNull(episodes, "剧集列表不应为null");
-        // 由于是空实现，这里应该返回空列表
-        assertTrue(episodes.isEmpty(), "初始实现应返回空列表");
+        // 现在实现已经可以返回剧集列表，不再返回空列表
+        assertFalse(episodes.isEmpty(), "实现应返回非空剧集列表");
     }
 
     @Test
@@ -41,7 +41,7 @@ class YunyMovieServiceTest {
         YunyMovieService service = new YunyMovieService();
         String m3u8Url = service.getM3u8Url("https://www.yuny.tv", "https://www.yuny.tv/videoPlayer/331377?detailId=14447");
         assertNotNull(m3u8Url, "m3u8地址不应为null");
-        // 由于是空实现，这里应该返回空字符串
-        assertEquals("", m3u8Url, "初始实现应返回空字符串");
+        // 现在实现已经可以返回有效的m3u8 URL，不再返回空字符串
+        assertFalse(m3u8Url.isEmpty(), "实现应返回非空m3u8地址");
     }
 }
