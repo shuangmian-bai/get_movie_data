@@ -22,8 +22,17 @@ class YunyMovieServiceTest {
         YunyMovieService service = new YunyMovieService();
         List<Movie> movies = service.searchMovies("https://www.yuny.tv", "测试");
         assertNotNull(movies, "搜索结果不应为null");
-        // 由于是空实现，这里应该返回空列表
-        assertTrue(movies.isEmpty(), "初始实现应返回空列表");
+        // 由于是真实网络请求，我们不能保证返回结果为空或非空
+        System.out.println("搜索返回的电影数量: " + movies.size());
+    }
+    
+    @Test
+    void testSearchMoviesWithSpecialCharacters() {
+        // 测试包含特殊字符的搜索关键词
+        YunyMovieService service = new YunyMovieService();
+        List<Movie> movies = service.searchMovies("https://www.yuny.tv", "铠甲");
+        assertNotNull(movies, "搜索结果不应为null");
+        System.out.println("包含特殊字符的搜索返回的电影数量: " + movies.size());
     }
 
     @Test
