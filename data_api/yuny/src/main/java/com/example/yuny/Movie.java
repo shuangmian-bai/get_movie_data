@@ -28,6 +28,9 @@ public class Movie {
     /** 海报图片地址 */
     private String poster;
     
+    /** 是否完结 */
+    private boolean finished = false; // 默认设置为未完结
+    
     /** 剧集列表 */
     private List<Episode> episodeList;
 
@@ -119,6 +122,24 @@ public class Movie {
      */
     public void setPoster(String poster) {
         this.poster = poster;
+    }
+
+    /**
+     * 获取电影是否完结状态
+     *
+     * @return true表示已完结，false表示未完结
+     */
+    public boolean isFinished() {
+        return finished;
+    }
+
+    /**
+     * 设置电影是否完结状态
+     *
+     * @param finished true表示已完结，false表示未完结
+     */
+    public void setFinished(boolean finished) {
+        this.finished = finished;
     }
 
     /**
