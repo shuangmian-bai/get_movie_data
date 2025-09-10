@@ -91,9 +91,22 @@ public class YunyMovieService implements MovieService {
         List<Movie> movies = new ArrayList<>();
 
 
+        //存储为变量
         String jsonData = nuxtDataElement.data().trim();
-
         System.out.println(jsonData);
+
+        //分割，找到数据索引
+        String data_info = jsonData.split("data")[2].split("}")[0].split(":")[1];
+        //转换为整数
+        int data = Integer.parseInt(data_info);
+        System.out.println(data);
+
+//        String jsonData = nuxtDataElement.data().trim();
+//
+//        //json是个数组，我要拿到索引为5的数据
+
+
+//        System.out.println(jsonData);
 
         return null;
     }
