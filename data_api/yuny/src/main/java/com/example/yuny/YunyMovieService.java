@@ -208,9 +208,39 @@ public class YunyMovieService implements MovieService {
      */
     @Override
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
-        // TODO: 实现具体的剧集获取逻辑
-        // 这里暂时返回空列表，实际应该通过网络请求获取数据
-        return new ArrayList<>();
+        try {
+            //发送HTTP GET请求获取网页内容
+            String html = HttpUtils.get(playUrl);
+            //创建doc解析对象
+            Document doc = Jsoup.parse(html);
+            //搜索#__nuxt > div > section > section > div.flex-1.flex.flex-col.overflow-y-auto > div.flex-1.pr-5 > div.video-detail-main > div.episode_box_main > div并且遍历里面全部的a标签
+            Elements elements = doc.select("#__nuxt > div > section > section > div.flex-1.flex.flex-col.overflow-y-auto > div.flex-1.pr-5 > div.video-detail-main > div.episode_box_main > div > a");
+            
+            List<Movie.Episode> episodes = new ArrayList<>();
+            
+            for (Element element : elements) {
+                //文本为title，href为episodeUrl
+                String title = element.text();
+                String episodeUrl = baseUrl + element.attr("href");
+                
+                // 创建Episode对象并设置属性
+                Movie.Episode episode = new Movie.Episode();
+                episode.setTitle(title);
+                episode.setEpisodeUrl(episodeUrl);
+                
+                episodes.add(episode);
+                
+                System.out.println("==================================");
+                System.out.println("title:"+title);
+                System.out.println("episodeUrl:"+episodeUrl);
+            }
+            
+            return episodes;
+        } catch (Exception e) {
+            e.printStackTrace();
+            // 发生异常时返回空列表而不是null
+            return new ArrayList<>();
+        }
     }
 
     /**

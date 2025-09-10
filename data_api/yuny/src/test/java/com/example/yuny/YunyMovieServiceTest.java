@@ -29,7 +29,7 @@ class YunyMovieServiceTest {
     void testGetEpisodes() {
         // 测试获取剧集功能
         YunyMovieService service = new YunyMovieService();
-        List<Movie.Episode> episodes = service.getEpisodes("https://www.yuny.tv", "https://www.yuny.tv/play/123");
+        List<Movie.Episode> episodes = service.getEpisodes("https://www.yuny.tv", "https://www.yuny.tv/videoDetail/14447");
         assertNotNull(episodes, "剧集列表不应为null");
         // 由于是空实现，这里应该返回空列表
         assertTrue(episodes.isEmpty(), "初始实现应返回空列表");
@@ -39,7 +39,7 @@ class YunyMovieServiceTest {
     void testGetM3u8Url() {
         // 测试获取m3u8地址功能
         YunyMovieService service = new YunyMovieService();
-        String m3u8Url = service.getM3u8Url("https://www.yuny.tv", "https://www.yuny.tv/play/123/1");
+        String m3u8Url = service.getM3u8Url("https://www.yuny.tv", "https://www.yuny.tv/videoPlayer/331377?detailId=14447");
         assertNotNull(m3u8Url, "m3u8地址不应为null");
         // 由于是空实现，这里应该返回空字符串
         assertEquals("", m3u8Url, "初始实现应返回空字符串");
