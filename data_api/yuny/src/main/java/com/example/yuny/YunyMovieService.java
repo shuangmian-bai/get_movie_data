@@ -91,7 +91,6 @@ public class YunyMovieService implements MovieService {
 
         List<Movie> movies = new ArrayList<>();
 
-
         //存储为变量
         String jsonData = nuxtDataElement.data().trim();
         System.out.println(jsonData);
@@ -129,15 +128,28 @@ public class YunyMovieService implements MovieService {
             name = dataArray.get(Integer.parseInt(name));
             description = dataArray.get(Integer.parseInt(description));
             cover = dataArray.get(Integer.parseInt(cover));
+            
+            // 创建Movie对象并设置属性
+            Movie movie = new Movie();
+            movie.setName(name);
+            movie.setDescription(description);
+            movie.setPoster(cover);
+            // 设置播放地址，根据网站结构，应该是https://www.yuny.tv/videoDetail/8554
+            String playUrl = baseUrl + "/videoDetail/" + id;
+            
             System.out.println("===============================");
             System.out.println("id:"+id);
             System.out.println("name:"+name);
             System.out.println("description:"+description);
             System.out.println("cover:"+cover);
-
+            System.out.println("playUrl:"+playUrl);
+            movie.setPlayUrl(playUrl);
+            
+            // 添加到电影列表
+            movies.add(movie);
         }
 
-        return null;
+        return movies;
     }
 
     /**
