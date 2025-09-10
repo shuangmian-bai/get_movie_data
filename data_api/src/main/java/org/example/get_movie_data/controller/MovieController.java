@@ -31,6 +31,12 @@ import java.util.logging.Level;
 public class MovieController {
     
     private static final Logger logger = Logger.getLogger(MovieController.class.getName());
+    
+    // 限制最大并发数，避免网络资源紧张
+    private static final int MAX_CONCURRENT_REQUESTS = 3;
+    
+    // 请求间隔（毫秒），避免过于频繁的请求
+    private static final int REQUEST_INTERVAL_MS = 500;
 
     @Autowired
     private MovieServiceRouter movieServiceRouter;
@@ -68,21 +74,35 @@ public class MovieController {
             return new ArrayList<>();
         }
         
-        // 创建线程池
-        ExecutorService executor = Executors.newFixedThreadPool(Math.min(urlMappings.size(), 10));
+        // 使用信号量限制最大并发数
+        Semaphore semaphore = new Semaphore(MAX_CONCURRENT_REQUESTS);
+        
+        // 创建线程池，限制并发线程数
+        ExecutorService executor = Executors.newFixedThreadPool(MAX_CONCURRENT_REQUESTS);
         
         // 存储所有Future结果
         List<Future<List<Movie>>> futures = new ArrayList<>();
         
         // 向每个URL映射提交任务
-        for (DataSourceConfig.UrlMapping urlMapping : urlMappings) {
+        for (int i = 0; i < urlMappings.size(); i++) {
+            DataSourceConfig.UrlMapping urlMapping = urlMappings.get(i);
             // 跳过通配符匹配
             if ("*".equals(urlMapping.getBaseUrl())) {
                 continue;
             }
             
+            // 在提交任务前增加延迟，避免同时发起大量请求
+            final int index = i; // 保存循环索引用于日志
             Future<List<Movie>> future = executor.submit(() -> {
                 try {
+                    // 获取信号量许可
+                    semaphore.acquire();
+                    
+                    // 添加请求间隔，避免过于频繁的请求
+                    if (index > 0) {
+                        Thread.sleep(REQUEST_INTERVAL_MS);
+                    }
+                    
                     logger.info("Searching movies from URL: " + urlMapping.getBaseUrl());
                     // 直接调用内部方法而不是通过HTTP请求
                     MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(urlMapping.getBaseUrl());
@@ -99,6 +119,9 @@ public class MovieController {
                 } catch (Exception e) {
                     logger.log(Level.WARNING, "Error searching movies from URL " + urlMapping.getBaseUrl(), e);
                     return new ArrayList<>();
+                } finally {
+                    // 释放信号量许可
+                    semaphore.release();
                 }
             });
             futures.add(future);
