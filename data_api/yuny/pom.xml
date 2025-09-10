@@ -46,6 +46,29 @@
                     <target>17</target>
                 </configuration>
             </plugin>
+            
+            <!-- 添加Maven Shade插件用于创建包含依赖的jar包 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <!-- 如果需要设置主类，可以取消下面一行的注释并指定主类 -->
+                                    <!-- <mainClass>your.main.Class</mainClass> -->
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>
