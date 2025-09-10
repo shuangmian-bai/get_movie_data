@@ -11,6 +11,8 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 // 添加Jackson库相关导入
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,6 +27,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * @version 1.0.0
  */
 public class YunyMovieService implements MovieService {
+    
+    // 控制最大线程数量的变量
+    private static final int MAX_THREAD_COUNT = 5;
     
     /**
      * 根据搜索关键词获取影视信息
@@ -60,10 +65,8 @@ public class YunyMovieService implements MovieService {
             int pageCount = (int) Math.ceil((double) totalMovies / movieCount);
             System.out.println("共有"+pageCount+"页数据");
 
-            getMovies(encodedKeyword, 1, baseUrl);
-
-
-            return null;
+            // 使用多线程爬取所有页面数据
+            return fetchMoviesWithMultiThread(encodedKeyword, pageCount, baseUrl);
 
 
         }
@@ -71,6 +74,51 @@ public class YunyMovieService implements MovieService {
             e.printStackTrace();
             return new ArrayList<>(); // 返回空列表而不是null
         }
+    }
+
+    /**
+     * 使用多线程方式爬取所有页面的电影数据
+     * @param encodedKeyword 已编码的搜索关键词
+     * @param pageCount 总页数
+     * @param baseUrl 基础URL
+     * @return 所有电影数据列表
+     */
+    private List<Movie> fetchMoviesWithMultiThread(String encodedKeyword, int pageCount, String baseUrl) {
+        // 创建线程池，控制最大线程数量
+        ExecutorService executor = Executors.newFixedThreadPool(MAX_THREAD_COUNT);
+        List<Future<List<Movie>>> futures = new ArrayList<>();
+        
+        // 提交所有页面爬取任务
+        for (int page = 1; page <= pageCount; page++) {
+            final int currentPage = page;
+            Future<List<Movie>> future = executor.submit(() -> {
+                try {
+                    return getMovies(encodedKeyword, currentPage, baseUrl);
+                } catch (Exception e) {
+                    System.err.println("爬取第" + currentPage + "页数据时出错: " + e.getMessage());
+                    e.printStackTrace();
+                    return new ArrayList<>();
+                }
+            });
+            futures.add(future);
+        }
+        
+        // 关闭线程池，不再接受新任务
+        executor.shutdown();
+        
+        // 收集所有结果
+        List<Movie> allMovies = new ArrayList<>();
+        for (Future<List<Movie>> future : futures) {
+            try {
+                List<Movie> movies = future.get(30, TimeUnit.SECONDS); // 设置超时时间
+                allMovies.addAll(movies);
+            } catch (Exception e) {
+                System.err.println("获取任务结果时出错: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        
+        return allMovies;
     }
 
     //创建爬取一页数据函数，传入搜索关键词，页码和baseurl
