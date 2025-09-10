@@ -83,7 +83,16 @@ public class YunyMovieService implements MovieService {
         //获取#__nuxt > div > section > section > div.flex-1.flex.flex-col.overflow-y-auto > div.flex-1.pr-5 > div:nth-child(2) > div.search_result_list.flex.flex-wrap.gap-\[--fs-spacing\]的全部a标签并且遍历
         for (Element a : doc.select("div.search_result_list").select("a")) {
             System.out.println("======================================");
-            System.out.println(a);
+            //body > div.search_results > a > div > div.search_result_list_item_content_description > div.search_result_list_item_content_title的文本为名称
+            String name = a.select("div > div.search_result_list_item_content_description > div.search_result_list_item_content_title").text();
+            //body > div.search_results > a > div > div.search_result_list_item_content_description > div.mt-1.mb-2.overflow-hidden.text-ellipsis.line-clamp-2.break-all的文本为简介
+            String description = a.select("div > div.search_result_list_item_content_description > div.mt-1.mb-2.overflow-hidden.text-ellipsis.line-clamp-2.break-all").text();
+            //body > div.search_results > a的href为播放地址
+            String playUrl = baseUrl + a.attr("href");
+            System.out.println("名称：" + name);
+            System.out.println("简介：" + description);
+            System.out.println("播放地址：" + playUrl);
+
         }
 
         return new ArrayList<>();
