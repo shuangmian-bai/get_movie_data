@@ -56,14 +56,38 @@ public class YunyMovieService implements MovieService {
             System.out.println("共有"+pageCount+"页数据");
 
 
+            getMovies(encodedKeyword, 1, baseUrl);
 
             
-            return null;
+            return new ArrayList<>(); // 暂时返回空列表
         }
         catch (Exception e) {
             e.printStackTrace();
             return new ArrayList<>(); // 返回空列表而不是null
         }
+    }
+
+    //创建爬取一页数据函数，传入搜索关键词，页码和baseurl
+    public List<Movie> getMovies(String encodedKeyword, int page, String baseUrl) {
+        //https://www.yuny.tv/videoSearch?key={keyword}&current={page}
+        //构造url，注意这里keyword已经是编码过的了
+        String url = baseUrl + "/videoSearch?key=" + encodedKeyword + "&current=" + page;
+        System.out.println("正在请求URL: " + url);
+
+        //发送请求
+        String html = HttpUtils.get(url);
+
+        //创建doc解析对象
+        Document doc = Jsoup.parse(html);
+
+        //获取#__nuxt > div > section > section > div.flex-1.flex.flex-col.overflow-y-auto > div.flex-1.pr-5 > div:nth-child(2) > div.search_result_list.flex.flex-wrap.gap-\[--fs-spacing\]的全部a标签并且遍历
+        for (Element a : doc.select("div.search_result_list").select("a")) {
+            System.out.println("======================================");
+            System.out.println(a);
+        }
+
+        return new ArrayList<>();
+
     }
 
 
