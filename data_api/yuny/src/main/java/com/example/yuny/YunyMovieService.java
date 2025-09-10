@@ -12,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 // 添加Jackson库相关导入
@@ -251,8 +253,31 @@ public class YunyMovieService implements MovieService {
      */
     @Override
     public String getM3u8Url(String baseUrl, String episodeUrl) {
-        // TODO: 实现具体的m3u8地址解析逻辑
-        // 这里暂时返回空字符串，实际应该通过网络请求获取数据
-        return "";
+        try {
+            //发送HTTP GET请求获取网页内容
+            String html = HttpUtils.get(episodeUrl);
+            
+            if (html == null || html.isEmpty()) {
+                System.err.println("HTTP请求返回空内容");
+                return "";
+            }
+            
+            //利用正则表达式提取http开头.m3u8结尾的数据,并且保存字符串
+            Pattern pattern = Pattern.compile("http[s]?://[\\w\\./\\-?&=]+\\.m3u8");
+            Matcher matcher = pattern.matcher(html);
+            
+            // 检查是否有匹配的内容
+            if (matcher.find()) {
+                String m3u8Url = matcher.group();
+                System.out.println("m3u8Url:"+m3u8Url);
+                return m3u8Url;
+            } else {
+                System.err.println("未找到匹配的m3u8地址");
+                return "";
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "";
+        }
     }
 }
