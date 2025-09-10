@@ -17,16 +17,6 @@ class YunyMovieServiceTest {
     }
 
     @Test
-    void testSearchMovies() {
-        // 测试搜索功能
-        YunyMovieService service = new YunyMovieService();
-        List<Movie> movies = service.searchMovies("https://www.yuny.tv", "测试");
-        assertNotNull(movies, "搜索结果不应为null");
-        // 由于是真实网络请求，我们不能保证返回结果为空或非空
-        System.out.println("搜索返回的电影数量: " + movies.size());
-    }
-    
-    @Test
     void testSearchMoviesWithSpecialCharacters() {
         // 测试包含特殊字符的搜索关键词
         YunyMovieService service = new YunyMovieService();

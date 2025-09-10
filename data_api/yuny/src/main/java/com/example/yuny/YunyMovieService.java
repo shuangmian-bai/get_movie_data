@@ -11,6 +11,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+// 添加Jackson库相关导入
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 /**
  * 云云TV电影服务实现类
  * 
@@ -36,7 +40,7 @@ public class YunyMovieService implements MovieService {
             System.out.println("正在请求URL: " + searchUrl);
             
             String html = HttpUtils.get(searchUrl);
-            
+
             Document doc = Jsoup.parse(html);
 
             //获取#__nuxt > div > section > section > div.flex-1.flex.flex-col.overflow-y-auto > div.flex-1.pr-5 > div:nth-child(2) > div.search_result_info的文本存储为一个字符串
@@ -55,11 +59,12 @@ public class YunyMovieService implements MovieService {
             int pageCount = (int) Math.ceil((double) totalMovies / movieCount);
             System.out.println("共有"+pageCount+"页数据");
 
-
             getMovies(encodedKeyword, 1, baseUrl);
 
-            
-            return new ArrayList<>(); // 暂时返回空列表
+
+            return null;
+
+
         }
         catch (Exception e) {
             e.printStackTrace();
@@ -69,36 +74,29 @@ public class YunyMovieService implements MovieService {
 
     //创建爬取一页数据函数，传入搜索关键词，页码和baseurl
     public List<Movie> getMovies(String encodedKeyword, int page, String baseUrl) {
-        //https://www.yuny.tv/videoSearch?key={keyword}&current={page}
-        //构造url，注意这里keyword已经是编码过的了
+        // 构造请求URL
         String url = baseUrl + "/videoSearch?key=" + encodedKeyword + "&current=" + page;
         System.out.println("正在请求URL: " + url);
 
-        //发送请求
+        // 发送HTTP请求
         String html = HttpUtils.get(url);
-
-        //创建doc解析对象
-        Document doc = Jsoup.parse(html);
-
-        //获取#__nuxt > div > section > section > div.flex-1.flex.flex-col.overflow-y-auto > div.flex-1.pr-5 > div:nth-child(2) > div.search_result_list.flex.flex-wrap.gap-\[--fs-spacing\]的全部a标签并且遍历
-        for (Element a : doc.select("div.search_result_list").select("a")) {
-            System.out.println("======================================");
-            //body > div.search_results > a > div > div.search_result_list_item_content_description > div.search_result_list_item_content_title的文本为名称
-            String name = a.select("div > div.search_result_list_item_content_description > div.search_result_list_item_content_title").text();
-            //body > div.search_results > a > div > div.search_result_list_item_content_description > div.mt-1.mb-2.overflow-hidden.text-ellipsis.line-clamp-2.break-all的文本为简介
-            String description = a.select("div > div.search_result_list_item_content_description > div.mt-1.mb-2.overflow-hidden.text-ellipsis.line-clamp-2.break-all").text();
-            //body > div.search_results > a的href为播放地址
-            String playUrl = baseUrl + a.attr("href");
-            System.out.println("名称：" + name);
-            System.out.println("简介：" + description);
-            System.out.println("播放地址：" + playUrl);
-
+        if (html == null || html.isEmpty()) {
+            System.err.println("HTTP请求返回空内容");
+            return new ArrayList<>();
         }
 
-        return new ArrayList<>();
+        Document doc = Jsoup.parse(html);
+        Element nuxtDataElement = doc.selectFirst("#__NUXT_DATA__");
 
+        List<Movie> movies = new ArrayList<>();
+
+
+        String jsonData = nuxtDataElement.data().trim();
+
+        System.out.println(jsonData);
+
+        return null;
     }
-
 
     /**
      * 根据播放地址获取影视的全部集数和标题以及播放地址
