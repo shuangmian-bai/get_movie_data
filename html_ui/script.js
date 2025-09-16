@@ -175,7 +175,8 @@ async function loadMovieDetail(movie) {
             btn.onclick = async () => {
                 try {
                     const m3u8Res = await fetch(`${API_BASE}/api/movie/m3u8?baseUrl=${encodeURIComponent(baseUrl)}&episodeUrl=${encodeURIComponent(ep.episodeUrl)}`);
-                    const m3u8Url = await m3u8Res.text();
+                    const m3u8Data = await m3u8Res.json();
+                    const m3u8Url = m3u8Data.movie;
                     
                     if (m3u8Url && m3u8Url.includes(".m3u8")) {
                         if (Hls.isSupported()) {

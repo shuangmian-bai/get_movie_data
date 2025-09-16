@@ -392,3 +392,19 @@ body {
         height: 200px;
     }
 }
+
+/* 免责声明 */
+.disclaimer {
+    background-color: #000;
+    color: #888;
+    text-align: center;
+    padding: 15px 4%;
+    font-size: 12px;
+    border-top: 1px solid #333;
+    margin-top: auto;
+}
+
+.disclaimer p {
+    margin: 0;
+    line-height: 1.4;
+}
