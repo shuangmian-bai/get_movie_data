@@ -10,7 +10,9 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -68,13 +70,64 @@ public class YunyMovieService implements MovieService {
             System.out.println("共有"+pageCount+"页数据");
 
             // 使用多线程爬取所有页面数据
-            return fetchMoviesWithMultiThread(encodedKeyword, pageCount, baseUrl);
+            List<Movie> movies = fetchMoviesWithMultiThread(encodedKeyword, pageCount, baseUrl);
+            
+            // 去除重复的电影条目
+            return removeDuplicateMovies(movies);
 
 
         }
         catch (Exception e) {
             e.printStackTrace();
             return new ArrayList<>(); // 返回空列表而不是null
+        }
+    }
+
+    /**
+     * 去除重复的电影条目
+     * @param movies 电影列表
+     * @return 去重后的电影列表
+     */
+    private List<Movie> removeDuplicateMovies(List<Movie> movies) {
+        // 使用LinkedHashSet保持插入顺序并去重
+        Set<String> seenNames = new LinkedHashSet<>();
+        List<Movie> uniqueMovies = new ArrayList<>();
+        
+        for (Movie movie : movies) {
+            // 清理数据格式问题
+            cleanMovieData(movie);
+            
+            // 检查是否已存在相同名称的电影
+            if (!seenNames.contains(movie.getName())) {
+                seenNames.add(movie.getName());
+                uniqueMovies.add(movie);
+            }
+        }
+        
+        return uniqueMovies;
+    }
+    
+    /**
+     * 清理电影数据格式问题
+     * @param movie 电影对象
+     */
+    private void cleanMovieData(Movie movie) {
+        // 去除名称、描述、海报链接中的多余引号
+        if (movie.getName() != null) {
+            movie.setName(movie.getName().replaceAll("^\"|\"$", ""));
+        }
+        
+        if (movie.getDescription() != null) {
+            movie.setDescription(movie.getDescription().replaceAll("^\"|\"$", ""));
+        }
+        
+        if (movie.getPoster() != null) {
+            movie.setPoster(movie.getPoster().replaceAll("^\"|\"$", ""));
+        }
+        
+        // 确保海报链接是完整的URL
+        if (movie.getPoster() != null && !movie.getPoster().startsWith("http")) {
+            movie.setPoster("https://image.yunyf.com" + movie.getPoster());
         }
     }
 
