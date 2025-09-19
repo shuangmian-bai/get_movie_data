@@ -80,69 +80,82 @@ public class MovieController {
         // 创建线程池，限制并发线程数
         ExecutorService executor = Executors.newFixedThreadPool(MAX_CONCURRENT_REQUESTS);
         
-        // 存储所有Future结果
-        List<Future<List<Movie>>> futures = new ArrayList<>();
-        
-        // 向每个URL映射提交任务
-        for (int i = 0; i < urlMappings.size(); i++) {
-            DataSourceConfig.UrlMapping urlMapping = urlMappings.get(i);
-            // 跳过通配符匹配
-            if ("*".equals(urlMapping.getBaseUrl())) {
-                continue;
+        try {
+            // 存储所有Future结果
+            List<Future<List<Movie>>> futures = new ArrayList<>();
+            
+            // 向每个URL映射提交任务
+            for (int i = 0; i < urlMappings.size(); i++) {
+                DataSourceConfig.UrlMapping urlMapping = urlMappings.get(i);
+                // 跳过通配符匹配
+                if ("*".equals(urlMapping.getBaseUrl())) {
+                    continue;
+                }
+                
+                // 在提交任务前增加延迟，避免同时发起大量请求
+                final int index = i; // 保存循环索引用于日志
+                Future<List<Movie>> future = executor.submit(() -> {
+                    try {
+                        // 获取信号量许可
+                        semaphore.acquire();
+                        
+                        // 添加请求间隔，避免过于频繁的请求
+                        if (index > 0) {
+                            Thread.sleep(REQUEST_INTERVAL_MS);
+                        }
+                        
+                        logger.info("Searching movies from URL: " + urlMapping.getBaseUrl());
+                        // 直接调用内部方法而不是通过HTTP请求
+                        MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(urlMapping.getBaseUrl());
+                        List<Movie> movies = service.searchMovies(urlMapping.getBaseUrl(), keyword);
+                        
+                        // 为每个电影对象设置baseUrl字段
+                        if (movies != null) {
+                            for (Movie movie : movies) {
+                                movie.setBaseUrl(urlMapping.getBaseUrl());
+                            }
+                            return movies;
+                        }
+                        return new ArrayList<>();
+                    } catch (Exception e) {
+                        logger.log(Level.WARNING, "Error searching movies from URL " + urlMapping.getBaseUrl(), e);
+                        return new ArrayList<>();
+                    } finally {
+                        // 释放信号量许可
+                        semaphore.release();
+                    }
+                });
+                futures.add(future);
             }
             
-            // 在提交任务前增加延迟，避免同时发起大量请求
-            final int index = i; // 保存循环索引用于日志
-            Future<List<Movie>> future = executor.submit(() -> {
+            // 收集所有结果
+            List<Movie> allMovies = new ArrayList<>();
+            for (Future<List<Movie>> future : futures) {
                 try {
-                    // 获取信号量许可
-                    semaphore.acquire();
-                    
-                    // 添加请求间隔，避免过于频繁的请求
-                    if (index > 0) {
-                        Thread.sleep(REQUEST_INTERVAL_MS);
-                    }
-                    
-                    logger.info("Searching movies from URL: " + urlMapping.getBaseUrl());
-                    // 直接调用内部方法而不是通过HTTP请求
-                    MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(urlMapping.getBaseUrl());
-                    List<Movie> movies = service.searchMovies(urlMapping.getBaseUrl(), keyword);
-                    
-                    // 为每个电影对象设置baseUrl字段
-                    if (movies != null) {
-                        for (Movie movie : movies) {
-                            movie.setBaseUrl(urlMapping.getBaseUrl());
-                        }
-                        return movies;
-                    }
-                    return new ArrayList<>();
+                    List<Movie> movies = future.get(30, TimeUnit.SECONDS); // 30秒超时
+                    allMovies.addAll(movies);
+                } catch (TimeoutException e) {
+                    logger.log(Level.WARNING, "Timeout getting result from future", e);
+                    future.cancel(true); // 取消任务
                 } catch (Exception e) {
-                    logger.log(Level.WARNING, "Error searching movies from URL " + urlMapping.getBaseUrl(), e);
-                    return new ArrayList<>();
-                } finally {
-                    // 释放信号量许可
-                    semaphore.release();
+                    logger.log(Level.WARNING, "Error getting result from future", e);
                 }
-            });
-            futures.add(future);
-        }
-        
-        // 收集所有结果
-        List<Movie> allMovies = new ArrayList<>();
-        for (Future<List<Movie>> future : futures) {
+            }
+            
+            logger.info("Total movies found from all sources: " + allMovies.size());
+            return allMovies;
+        } finally {
+            // 关闭线程池
+            executor.shutdown();
             try {
-                List<Movie> movies = future.get(30, TimeUnit.SECONDS); // 30秒超时
-                allMovies.addAll(movies);
-            } catch (Exception e) {
-                logger.log(Level.WARNING, "Error getting result from future", e);
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
             }
         }
-        
-        // 关闭线程池
-        executor.shutdown();
-        
-        logger.info("Total movies found from all sources: " + allMovies.size());
-        return allMovies;
     }
 
 

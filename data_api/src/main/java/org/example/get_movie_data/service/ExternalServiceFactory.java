@@ -118,7 +118,28 @@ public class ExternalServiceFactory {
             return null;
         }
     }
-
+    
+    /**
+     * 关闭工厂，清理资源
+     */
+    public void shutdown() {
+        logger.info("Shutting down ExternalServiceFactory...");
+        
+        // 关闭所有类加载器
+        for (Map.Entry<String, URLClassLoader> entry : classLoaderCache.entrySet()) {
+            try {
+                entry.getValue().close();
+                logger.info("Closed classloader for datasource: " + entry.getKey());
+            } catch (Exception e) {
+                logger.log(Level.WARNING, "Error closing classloader for datasource: " + entry.getKey(), e);
+            }
+        }
+        
+        // 清空缓存
+        classLoaderCache.clear();
+        logger.info("ExternalServiceFactory shutdown completed");
+    }
+    
     /**
      * 外部电影服务适配器
      * 

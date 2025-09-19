@@ -19,6 +19,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 缓存管理器
@@ -40,11 +43,68 @@ public class CacheManager {
     // 缓存过期时间（毫秒）- 默认2小时
     private static final long CACHE_EXPIRE_TIME = 2 * 60 * 60 * 1000;
     
+    // 内存缓存清理间隔（毫秒）- 默认30分钟
+    private static final long CACHE_CLEANUP_INTERVAL = 30 * 60 * 1000;
+    
     // ObjectMapper用于序列化和反序列化
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     // 内存缓存，避免频繁读取文件
     private final ConcurrentHashMap<String, CacheEntry> memoryCache = new ConcurrentHashMap<>();
+    
+    // 定时清理服务
+    private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
+    
+    public CacheManager() {
+        // 启动定时清理任务
+        startCleanupTask();
+    }
+    
+    /**
+     * 启动定时清理任务
+     */
+    private void startCleanupTask() {
+        cleanupExecutor.scheduleWithFixedDelay(this::cleanupExpiredEntries, 
+                                              CACHE_CLEANUP_INTERVAL, 
+                                              CACHE_CLEANUP_INTERVAL, 
+                                              TimeUnit.MILLISECONDS);
+        logger.info("Started cache cleanup task with interval: " + CACHE_CLEANUP_INTERVAL + "ms");
+    }
+    
+    /**
+     * 清理过期的内存缓存条目
+     */
+    private void cleanupExpiredEntries() {
+        logger.info("Starting cache cleanup, current cache size: " + memoryCache.size());
+        int cleanedCount = 0;
+        
+        for (String key : memoryCache.keySet()) {
+            CacheEntry entry = memoryCache.get(key);
+            if (entry != null && entry.isExpired()) {
+                memoryCache.remove(key);
+                cleanedCount++;
+            }
+        }
+        
+        logger.info("Cache cleanup completed. Removed " + cleanedCount + " expired entries. Remaining cache size: " + memoryCache.size());
+    }
+    
+    /**
+     * 关闭缓存管理器，清理资源
+     */
+    public void shutdown() {
+        cleanupExecutor.shutdown();
+        try {
+            if (!cleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                cleanupExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            cleanupExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        memoryCache.clear();
+        logger.info("CacheManager shutdown completed");
+    }
     
     /**
      * 缓存条目内部类

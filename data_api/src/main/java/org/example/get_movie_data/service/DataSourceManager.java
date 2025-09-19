@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
@@ -50,6 +51,29 @@ public class DataSourceManager implements MovieServiceRouter {
         serviceCache.put("default", new CachedMovieService(new DefaultMovieService(), cacheManager));
         
         logger.info("DataSourceManager initialized with default service");
+    }
+    
+    /**
+     * 销毁方法，清理资源
+     */
+    @PreDestroy
+    public void destroy() {
+        logger.info("Destroying DataSourceManager...");
+        
+        // 清理外部服务工厂资源
+        if (externalServiceFactory != null) {
+            externalServiceFactory.shutdown();
+        }
+        
+        // 清理缓存管理器资源
+        if (cacheManager != null) {
+            cacheManager.shutdown();
+        }
+        
+        // 清理服务缓存
+        serviceCache.clear();
+        
+        logger.info("DataSourceManager destroyed");
     }
     
     /**
