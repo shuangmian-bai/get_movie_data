@@ -20,9 +20,6 @@
             <name>茶杯狐数据源</name>
             <description>从茶杯狐网站获取电影数据</description>
         </datasource>
-
-
-
     </datasources>
 
     <!-- URL映射配置部分 -->
@@ -31,6 +28,7 @@
         <urlMapping baseUrl="https://www.yuny.tv" datasource="yuny"/>
         <urlMapping baseUrl="https://bfzy.tv" datasource="bfzy"/>
         <urlMapping baseUrl="https://www.chabeigu.com" datasource="chabeigu"/>
+
 
         <!-- 通配符匹配，作为默认数据源 -->
         <urlMapping baseUrl="*" datasource="test_demo"/>

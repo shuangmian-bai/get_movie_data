@@ -1,14 +1,29 @@
 package org.example.get_movie_data;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.example.get_movie_data.model.Movie;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.*;
-import java.util.jar.JarFile;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * 电影数据获取服务主应用类
@@ -21,6 +36,7 @@ import java.util.jar.JarEntry;
  */
 
 @SpringBootApplication
+@EnableScheduling
 public class GetMovieDataApplication {
 
 	public static void main(String[] args) {

@@ -58,6 +58,8 @@ public class CacheManager {
     public CacheManager() {
         // 启动定时清理任务
         startCleanupTask();
+        // 初始化时记录内存使用情况
+        logMemoryUsage("initialization");
     }
     
     /**
@@ -78,6 +80,9 @@ public class CacheManager {
         logger.info("Starting cache cleanup, current cache size: " + memoryCache.size());
         int cleanedCount = 0;
         
+        // 记录清理前的内存信息
+        logMemoryUsage("before cleanup");
+        
         for (String key : memoryCache.keySet()) {
             CacheEntry entry = memoryCache.get(key);
             if (entry != null && entry.isExpired()) {
@@ -87,12 +92,40 @@ public class CacheManager {
         }
         
         logger.info("Cache cleanup completed. Removed " + cleanedCount + " expired entries. Remaining cache size: " + memoryCache.size());
+        
+        // 记录清理后的内存信息
+        logMemoryUsage("after cleanup");
+    }
+    
+    /**
+     * 记录当前JVM内存使用情况
+     * 
+     * @param stage 当前阶段描述
+     */
+    private void logMemoryUsage(String stage) {
+        Runtime runtime = Runtime.getRuntime();
+        long totalMemory = runtime.totalMemory();
+        long freeMemory = runtime.freeMemory();
+        long usedMemory = totalMemory - freeMemory;
+        long maxMemory = runtime.maxMemory();
+        
+        double usedMemoryMB = usedMemory / (1024.0 * 1024.0);
+        double totalMemoryMB = totalMemory / (1024.0 * 1024.0);
+        double maxMemoryMB = maxMemory / (1024.0 * 1024.0);
+        double memoryUsagePercent = (usedMemory * 100.0) / maxMemory;
+        
+        logger.info("JVM Memory " + stage + " - " +
+                   "Used: " + String.format("%.2f", usedMemoryMB) + " MB, " +
+                   "Total: " + String.format("%.2f", totalMemoryMB) + " MB, " +
+                   "Max: " + String.format("%.2f", maxMemoryMB) + " MB, " +
+                   "Usage: " + String.format("%.1f", memoryUsagePercent) + "%");
     }
     
     /**
      * 关闭缓存管理器，清理资源
      */
     public void shutdown() {
+        logMemoryUsage("before shutdown");
         cleanupExecutor.shutdown();
         try {
             if (!cleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -103,6 +136,7 @@ public class CacheManager {
             Thread.currentThread().interrupt();
         }
         memoryCache.clear();
+        logMemoryUsage("after shutdown");
         logger.info("CacheManager shutdown completed");
     }
     
