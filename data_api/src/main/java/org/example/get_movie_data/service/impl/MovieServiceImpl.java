@@ -358,7 +358,7 @@ public class MovieServiceImpl implements MovieService {
                 System.out.println("Search movies result: " + result);
                 System.out.println("Search movies result size: " + (result != null ? result.size() : "null"));
                 
-                // 转换结果类型
+                // 转换结果类型，但不进行额外的编码处理
                 if (result != null) {
                     List<Movie> convertedResult = new ArrayList<>();
                     for (Object obj : result) {
@@ -368,6 +368,12 @@ public class MovieServiceImpl implements MovieService {
                         Object finished = obj.getClass().getMethod("isFinished").invoke(obj);
                         Object playUrl = obj.getClass().getMethod("getPlayUrl").invoke(obj);
                         Object episodes = obj.getClass().getMethod("getEpisodes").invoke(obj);
+                        Object poster = null;
+                        try {
+                            poster = obj.getClass().getMethod("getPoster").invoke(obj);
+                        } catch (NoSuchMethodException e) {
+                            // 忽略，某些类可能没有getPoster方法
+                        }
                         
                         Movie movie = new Movie();
                         movie.setName(name != null ? name.toString() : "");
@@ -375,6 +381,9 @@ public class MovieServiceImpl implements MovieService {
                         movie.setFinished(finished != null ? (Boolean) finished : false);
                         movie.setPlayUrl(playUrl != null ? playUrl.toString() : "");
                         movie.setEpisodes(episodes != null ? (Integer) episodes : 0);
+                        if (poster != null) {
+                            movie.setPoster(poster.toString());
+                        }
                         convertedResult.add(movie);
                     }
                     System.out.println("Converted result size: " + convertedResult.size());
@@ -408,6 +417,7 @@ public class MovieServiceImpl implements MovieService {
                 System.out.println("Calling getM3u8Url with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl);
                 String result = (String) getM3u8UrlMethod.invoke(customMovieService, baseUrl, episodeUrl);
                 System.out.println("Get m3u8Url result: " + result);
+                // 直接返回结果，不进行额外处理
                 return result;
             } catch (Exception e) {
                 System.err.println("Error in getM3u8Url:");

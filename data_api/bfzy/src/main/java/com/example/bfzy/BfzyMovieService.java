@@ -297,9 +297,8 @@ public class BfzyMovieService {
      * @return M3U8播放地址
      */
     public String getM3u8Url(String baseUrl, String episodeUrl) {
-        // 对episodeUrl进行编码处理，将中文部分重新编码
-        String encodedEpisodeUrl = encodeChineseToUnicode(episodeUrl);
-        return encodedEpisodeUrl;
+        // 直接返回episodeUrl，不进行额外编码处理
+        return episodeUrl;
     }
     
     /**
