@@ -14,16 +14,17 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 /**
- * 数据源管理器
+ * 电影服务管理器
  * 
  * 负责管理所有数据源服务实例，包括内部默认服务和外部加载的服务。
+ * 整合了原来DataSourceManager和MovieServiceImpl的功能，减少耦合。
  * 
  * @author get_movie_data team
  * @version 1.0.0
  */
 @Component
-public class DataSourceManager implements MovieServiceRouter {
-    private static final Logger logger = Logger.getLogger(DataSourceManager.class.getName());
+public class MovieServiceManager implements MovieServiceRouter {
+    private static final Logger logger = Logger.getLogger(MovieServiceManager.class.getName());
     
     @Autowired
     private ConfigManager configManager;
@@ -39,7 +40,7 @@ public class DataSourceManager implements MovieServiceRouter {
     
     @PostConstruct
     public void init() {
-        logger.info("Initializing DataSourceManager...");
+        logger.info("Initializing MovieServiceManager...");
         
         // 初始化缓存管理器
         cacheManager = new CacheManager();
@@ -50,7 +51,7 @@ public class DataSourceManager implements MovieServiceRouter {
         // 添加默认服务
         serviceCache.put("default", new CachedMovieService(new DefaultMovieService(), cacheManager));
         
-        logger.info("DataSourceManager initialized with default service");
+        logger.info("MovieServiceManager initialized with default service");
     }
     
     /**
@@ -58,7 +59,7 @@ public class DataSourceManager implements MovieServiceRouter {
      */
     @PreDestroy
     public void destroy() {
-        logger.info("Destroying DataSourceManager...");
+        logger.info("Destroying MovieServiceManager...");
         
         // 清理外部服务工厂资源
         if (externalServiceFactory != null) {
@@ -73,7 +74,7 @@ public class DataSourceManager implements MovieServiceRouter {
         // 清理服务缓存
         serviceCache.clear();
         
-        logger.info("DataSourceManager destroyed");
+        logger.info("MovieServiceManager destroyed");
     }
     
     /**
@@ -187,39 +188,6 @@ public class DataSourceManager implements MovieServiceRouter {
         
         // 使用外部服务工厂创建服务实例
         return externalServiceFactory.createMovieService(datasourceId, className);
-    }
-    
-    /**
-     * 根据ID查找数据源配置
-     * 
-     * @param config 配置对象
-     * @param id 数据源ID
-     * @return 数据源配置，如果未找到则返回null
-     */
-    private DataSourceConfig.Datasource getDatasourceById(DataSourceConfig config, String id) {
-        if (config.getDatasources() != null) {
-            for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
-                if (id.equals(datasource.getId())) {
-                    return datasource;
-                }
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * 检查URL是否匹配指定的模式
-     * 
-     * @param url 待检查的URL
-     * @param pattern URL模式
-     * @return 是否匹配
-     */
-    private boolean matchesUrlPattern(String url, String pattern) {
-        if ("*".equals(pattern)) {
-            return true; // 通配符匹配所有URL
-        }
-        
-        return url.startsWith(pattern);
     }
     
     /**

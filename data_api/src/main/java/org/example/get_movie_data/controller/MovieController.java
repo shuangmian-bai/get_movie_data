@@ -1,9 +1,8 @@
 package org.example.get_movie_data.controller;
 
 import org.example.get_movie_data.model.Movie;
-import org.example.get_movie_data.model.MovieSimple;
 import org.example.get_movie_data.service.MovieService;
-import org.example.get_movie_data.service.MovieServiceRouter;
+import org.example.get_movie_data.service.MovieServiceManager;
 import org.example.get_movie_data.service.DataSourceConfig;
 import org.example.get_movie_data.service.ConfigManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +38,7 @@ public class MovieController {
     private static final int REQUEST_INTERVAL_MS = 500;
 
     @Autowired
-    private MovieServiceRouter movieServiceRouter;
+    private MovieServiceManager movieServiceManager;
     
     @Autowired
     private ConfigManager configManager;
@@ -106,7 +105,7 @@ public class MovieController {
                         
                         logger.info("Searching movies from URL: " + urlMapping.getBaseUrl());
                         // 直接调用内部方法而不是通过HTTP请求
-                        MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(urlMapping.getBaseUrl());
+                        MovieService service = movieServiceManager.getMovieServiceByBaseUrl(urlMapping.getBaseUrl());
                         List<Movie> movies = service.searchMovies(urlMapping.getBaseUrl(), keyword);
                         
                         // 为每个电影对象设置baseUrl字段
@@ -172,7 +171,7 @@ public class MovieController {
                                           @RequestParam String playUrl,
                                           @RequestParam(required = false) String datasource) {
         logger.info("MovieController.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", datasource: " + datasource);
-        MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
+        MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
         return service.getEpisodes(baseUrl, playUrl);
     }
 
@@ -189,7 +188,7 @@ public class MovieController {
                             @RequestParam String episodeUrl,
                             @RequestParam(required = false) String datasource) {
         logger.info("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
-        MovieService service = movieServiceRouter.getMovieServiceByBaseUrl(baseUrl);
+        MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
         String m3u8Url = service.getM3u8Url(baseUrl, episodeUrl);
         
         MovieResponse response = new MovieResponse();

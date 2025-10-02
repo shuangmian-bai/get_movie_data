@@ -1,30 +1,50 @@
 package org.example.get_movie_data.config;
 
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.context.annotation.Bean;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 
 /**
- * 全局CORS配置类
+ * Web配置类
  * 
- * 提供最全面的跨域支持配置
+ * 配置CORS跨域支持和其他Web相关配置
  * 
  * @author get_movie_data team
  * @version 1.0.0
  */
 @Configuration
-public class GlobalCorsConfig {
+public class WebConfig implements WebMvcConfigurer {
 
+    /**
+     * 配置CORS跨域支持
+     * 
+     * @param registry CORS注册器
+     */
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .exposedHeaders("*")
+                .allowCredentials(false)
+                .maxAge(3600);
+    }
+    
     /**
      * 配置全局CORS过滤器
      * 
      * @return FilterRegistrationBean<CorsFilter> 过滤器注册Bean
      */
     @Bean
-    public FilterRegistrationBean<CorsFilter> globalCorsFilter() {
+    public FilterRegistrationBean<CorsFilter> corsFilter() {
         // 创建CorsConfiguration对象并进行配置
         CorsConfiguration config = new CorsConfiguration();
         
