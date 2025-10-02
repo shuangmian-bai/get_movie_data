@@ -23,7 +23,7 @@ import java.util.logging.Level;
  * @version 1.0.0
  */
 @Component
-public class MovieServiceManager implements MovieServiceRouter {
+public class MovieServiceManager {
     private static final Logger logger = Logger.getLogger(MovieServiceManager.class.getName());
     
     @Autowired
@@ -83,7 +83,6 @@ public class MovieServiceManager implements MovieServiceRouter {
      * @param baseUrl 基础URL
      * @return 对应的电影服务实例
      */
-    @Override
     public MovieService getMovieServiceByBaseUrl(String baseUrl) {
         logger.info("Getting movie service for baseUrl: " + baseUrl);
         

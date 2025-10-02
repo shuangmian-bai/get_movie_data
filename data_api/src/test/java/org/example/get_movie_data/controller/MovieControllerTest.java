@@ -78,7 +78,7 @@ public class MovieControllerTest {
 
         logger.info("Testing get m3u8 URL API: " + url);
 
-        ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+        ResponseEntity<MovieResponse> response = restTemplate.getForEntity(url, MovieResponse.class);
         
         logger.info("Get m3u8 URL response status: " + response.getStatusCode());
         logger.info("Get m3u8 URL response body: " + response.getBody());
