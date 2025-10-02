@@ -189,6 +189,7 @@ public class MovieController {
                             @RequestParam(required = false) String datasource) {
         logger.info("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
         MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
+        // 直接返回子项目处理后的结果，不做任何额外处理
         String m3u8Url = service.getM3u8Url(baseUrl, episodeUrl);
         
         MovieResponse response = new MovieResponse();
