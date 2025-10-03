@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /**
  * 电影数据控制器
@@ -141,7 +143,36 @@ public class MovieController {
                 }
             }
             
+            // 集中输出从各数据源获取到的数据信息
             logger.info("Total movies found from all sources: " + allMovies.size());
+            if (logger.isLoggable(Level.INFO)) {
+                StringBuilder logBuilder = new StringBuilder();
+                logBuilder.append("Detailed data source information:\n");
+                
+                // 按数据源分组统计
+                Map<String, Long> sourceCountMap = allMovies.stream()
+                    .collect(Collectors.groupingBy(Movie::getBaseUrl, Collectors.counting()));
+                
+                for (Map.Entry<String, Long> entry : sourceCountMap.entrySet()) {
+                    logBuilder.append("  DataSource: ").append(entry.getKey())
+                        .append(", Movie Count: ").append(entry.getValue()).append("\n");
+                }
+                
+                // 输出部分电影信息
+                logBuilder.append("Sample movies:\n");
+                int count = 0;
+                for (Movie movie : allMovies) {
+                    if (count++ >= 5) break; // 只显示前5个
+                    logBuilder.append("  Name: ").append(movie.getName())
+                        .append(", BaseUrl: ").append(movie.getBaseUrl()).append("\n");
+                }
+                
+                if (allMovies.size() > 5) {
+                    logBuilder.append("  ... and ").append(allMovies.size() - 5).append(" more movies\n");
+                }
+                
+                logger.info(logBuilder.toString());
+            }
             return allMovies;
         } finally {
             // 关闭线程池
