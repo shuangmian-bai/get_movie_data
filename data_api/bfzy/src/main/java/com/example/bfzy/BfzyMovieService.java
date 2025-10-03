@@ -93,7 +93,6 @@ public class BfzyMovieService {
 
         //遍历
         for (JsonElement postElement : postsArray) {
-            System.out.println("========================================");
             //电影名称就是vod_name字段
             String name = postElement.getAsJsonObject().get("vod_name").getAsString();
             //海报信息是vod_pic字段
@@ -102,11 +101,7 @@ public class BfzyMovieService {
             String playUrl = postElement.getAsJsonObject().get("vod_play_url").getAsString();
             //简介是vod_content字段
             String description = postElement.getAsJsonObject().get("vod_content").getAsString();
-            System.out.println("name:" + name);
-            System.out.println("poster:" + poster);
-            System.out.println("playUrl:" + playUrl);
-            System.out.println("description:" + description);
-            
+
             // 处理Unicode转义字符
             name = unescapeUnicode(name);
             description = unescapeUnicode(description);
@@ -197,8 +192,6 @@ public class BfzyMovieService {
         List<Movie> movies = new ArrayList<>();
 
         for (Element item : movieItems) {
-            System.out.println("==================================");
-            
             // 选择电影名称
             String name = unescapeUnicode(item.select(".module-poster-item-title").text());
             
@@ -210,11 +203,6 @@ public class BfzyMovieService {
             
             // 获取海报信息
             String poster = item.select(".lazy.lazyload").attr("data-original");
-            
-            System.out.println("name: " + name);
-            System.out.println("description: " + description);
-            System.out.println("playUrl: " + playUrl);
-            System.out.println("poster: " + poster);
 
             // 创建Movie对象并设置属性
             Movie movie = new Movie();

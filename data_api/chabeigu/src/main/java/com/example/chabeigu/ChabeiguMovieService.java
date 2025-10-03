@@ -53,7 +53,6 @@ public class ChabeiguMovieService {
 
         //获取到有多少页数据
         Elements pageElements = doc.select("#page > a:nth-child(9)");
-        System.out.println("pageElements : "+pageElements);
         int pageCount = 1; // 默认值改为1
         if (!pageElements.isEmpty()) {
             Element pageElement = pageElements.first();
@@ -76,9 +75,6 @@ public class ChabeiguMovieService {
         } else {
             pageCount = 1; // 没有找到元素时默认为1
         }
-
-        System.out.println("总页数: " + pageCount);
-
         // 使用多线程获取所有页面数据
         List<Movie> movies = getAllPageData(keyword, pageCount);
 
@@ -149,7 +145,6 @@ public class ChabeiguMovieService {
         List<Movie> movies = new ArrayList<>();
 
         for (Element item : movieItems) {
-            System.out.println("==================================");
             // 使用更简单的相对选择器
             String name = item.select(".video-info-header h3 a").text();
             // 选择剧情描述
@@ -162,13 +157,6 @@ public class ChabeiguMovieService {
             String type = item.select(".video-info-items .video-info-item").first().text();
             //获取地区信息
             String area = item.select(".video-info-items .video-info-item").get(1).text();
-
-            System.out.println(item);
-
-            System.out.println("name: " + name);
-            System.out.println("description: " + description);
-            System.out.println("playUrl: " + playUrl);
-            System.out.println("poster: " + poster);
 
             //创建Movie对象并设置属性
             Movie movie = new Movie();
@@ -228,9 +216,7 @@ public class ChabeiguMovieService {
         for (Element element : elements) {
             String title = element.select("span").text();
             String episodeUrl = baseUrl + element.attr("href");
-            System.out.println("title: " + title);
-            System.out.println("episodeUrl: " + episodeUrl);
-            
+
             // 构造剧集对象并添加到列表中
             Movie.Episode episode = new Movie.Episode();
             episode.setTitle(title);
@@ -258,7 +244,6 @@ public class ChabeiguMovieService {
         if (matcher.find()) {
             m3u8Url = matcher.group();
             m3u8Url = m3u8Url.split("\"")[m3u8Url.split("\"").length - 1];
-            System.out.println("m3u8Url: " + m3u8Url);
             return m3u8Url;
         }
 
