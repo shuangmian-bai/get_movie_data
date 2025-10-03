@@ -147,7 +147,7 @@ public class MovieControllerTest {
         when(movieServiceManager.getMovieServiceByBaseUrl(baseUrl)).thenReturn(movieService);
         
         // 模拟返回结果
-        String mockM3u8Url = "http://test.com/m3u8/1.m3u8";
+        String mockM3u8Url = "http://test.com/测试字符/1.m3u8";
         when(movieService.getM3u8Url(baseUrl, episodeUrl)).thenReturn(mockM3u8Url);
         
         // 执行测试
