@@ -36,11 +36,11 @@ public class DataSourceConfigLoader {
         try {
             System.out.println("Attempting to load configuration file...");
             
-            // 首先尝试从外部文件加载配置 (相对于应用运行目录)
+            // 从外部文件加载配置 (相对于应用运行目录)
             File externalConfig = Paths.get("config", "movie-data-config.xml").toFile();
-            System.out.println("Checking for external config at: " + externalConfig.getAbsolutePath());
+            System.out.println("Loading configuration from external file: " + externalConfig.getAbsolutePath());
+            
             if (externalConfig.exists()) {
-                System.out.println("Loading configuration from external file: " + externalConfig.getAbsolutePath());
                 JAXBContext context = JAXBContext.newInstance(DataSourceConfig.class);
                 Unmarshaller unmarshaller = context.createUnmarshaller();
                 DataSourceConfig config = (DataSourceConfig) unmarshaller.unmarshal(externalConfig);
@@ -65,43 +65,43 @@ public class DataSourceConfigLoader {
                 return config;
             } else {
                 System.out.println("External configuration file not found at: " + externalConfig.getAbsolutePath());
-            }
-            
-            // 获取配置文件资源 (从JAR内部)
-            Resource resource = new ClassPathResource("config/movie-data-config.xml");
-            System.out.println("Internal resource exists: " + resource.exists());
-            System.out.println("Internal resource description: " + resource.getDescription());
-            
-            // 检查输入流是否可用
-            InputStream inputStream = resource.getInputStream();
-            System.out.println("Input stream available: " + (inputStream != null && inputStream.available() > 0));
-            
-            // 创建JAXB上下文和解组器
-            JAXBContext context = JAXBContext.newInstance(DataSourceConfig.class);
-            Unmarshaller unmarshaller = context.createUnmarshaller();
-            
-            // 解析XML配置文件
-            DataSourceConfig config = (DataSourceConfig) unmarshaller.unmarshal(inputStream);
-            
-            // 输出加载结果用于调试
-            System.out.println("Successfully loaded internal configuration:");
-            System.out.println("Config object: " + config);
-            
-            if (config.getDatasources() != null) {
-                System.out.println("Datasources count: " + config.getDatasources().size());
-                for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
-                    System.out.println("  - " + datasource.getId() + " -> " + datasource.getClazz());
+                
+                // 获取配置文件资源 (从JAR内部)
+                Resource resource = new ClassPathResource("config/movie-data-config.xml");
+                System.out.println("Internal resource exists: " + resource.exists());
+                System.out.println("Internal resource description: " + resource.getDescription());
+                
+                // 检查输入流是否可用
+                InputStream inputStream = resource.getInputStream();
+                System.out.println("Input stream available: " + (inputStream != null && inputStream.available() > 0));
+                
+                // 创建JAXB上下文和解组器
+                JAXBContext context = JAXBContext.newInstance(DataSourceConfig.class);
+                Unmarshaller unmarshaller = context.createUnmarshaller();
+                
+                // 解析XML配置文件
+                DataSourceConfig config = (DataSourceConfig) unmarshaller.unmarshal(inputStream);
+                
+                // 输出加载结果用于调试
+                System.out.println("Successfully loaded internal configuration:");
+                System.out.println("Config object: " + config);
+                
+                if (config.getDatasources() != null) {
+                    System.out.println("Datasources count: " + config.getDatasources().size());
+                    for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
+                        System.out.println("  - " + datasource.getId() + " -> " + datasource.getClazz());
+                    }
                 }
-            }
-            
-            if (config.getUrlMappings() != null) {
-                System.out.println("URL mappings count: " + config.getUrlMappings().size());
-                for (DataSourceConfig.UrlMapping mapping : config.getUrlMappings()) {
-                    System.out.println("  - " + mapping.getBaseUrl() + " -> " + mapping.getDatasource());
+                
+                if (config.getUrlMappings() != null) {
+                    System.out.println("URL mappings count: " + config.getUrlMappings().size());
+                    for (DataSourceConfig.UrlMapping mapping : config.getUrlMappings()) {
+                        System.out.println("  - " + mapping.getBaseUrl() + " -> " + mapping.getDatasource());
+                    }
                 }
+                
+                return config;
             }
-            
-            return config;
         } catch (Exception e) {
             System.err.println("Failed to load configuration file:");
             e.printStackTrace();

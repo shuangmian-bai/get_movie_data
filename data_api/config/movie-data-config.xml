@@ -14,20 +14,14 @@
             <name>BFZY数据源</name>
             <description>从bfzy.tv网站获取电影数据</description>
         </datasource>
-        
-        <!-- 测试数据源 -->
-        <datasource id="test_demo" class="org.example.get_movie_data.service.MovieServiceManager$DefaultMovieService">
-            <name>测试数据源</name>
-            <description>用于测试的默认数据源</description>
-        </datasource>
     </datasources>
 
     <!-- URL映射配置部分 -->
     <urlMappings>
         <!-- URL到数据源的映射关系 -->
         <urlMapping baseUrl="https://www.yuny.tv" datasource="yuny"/>
-        <urlMapping baseUrl="https://bfzy.tv/" datasource="bfzy"/>
-        
+        <urlMapping baseUrl="https://bfzy.tv" datasource="bfzy"/>
+
         <!-- 通配符匹配，作为默认数据源 -->
         <urlMapping baseUrl="*" datasource="test_demo"/>
     </urlMappings>

@@ -87,6 +87,47 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			
+			<!-- Maven Resources Plugin -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-resources-plugin</artifactId>
+				<version>3.3.1</version>
+				<executions>
+					<execution>
+						<id>copy-config</id>
+						<phase>package</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.directory}/config</outputDirectory>
+							<resources>
+								<resource>
+									<directory>src/main/resources/config</directory>
+									<filtering>false</filtering>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+					<execution>
+						<id>copy-libs</id>
+						<phase>package</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.directory}/libs</outputDirectory>
+							<resources>
+								<resource>
+									<directory>libs</directory>
+									<filtering>false</filtering>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 		
 		<!-- 资源配置 -->
@@ -94,18 +135,6 @@
 			<!-- 主资源目录 -->
 			<resource>
 				<directory>src/main/resources</directory>
-			</resource>
-			
-			<!-- 配置文件目录 -->
-			<resource>
-				<directory>src/main/resources/config</directory>
-				<targetPath>config</targetPath>
-			</resource>
-			
-			<!-- 外部数据源JAR包目录 -->
-			<resource>
-				<directory>libs</directory>
-				<targetPath>libs</targetPath>
 			</resource>
 		</resources>
 	</build>

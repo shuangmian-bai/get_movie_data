@@ -28,7 +28,7 @@ public class MovieControllerTest {
     public void testSearchMoviesFromAllSources() throws Exception {
         // 测试搜索电影接口
         ResultActions result = mockMvc.perform(get("/api/movie/search/all")
-                .param("keyword", "test"))
+                .param("keyword", "蜘蛛侠"))
                 .andDo(print())
                 .andExpect(status().isOk());
         
