@@ -17,6 +17,13 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 /**
  * 电影数据控制器
  * 
@@ -29,6 +36,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/movie")
 @CrossOrigin(origins = "*", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
+@Tag(name = "电影数据接口", description = "提供电影搜索、剧集信息和播放地址获取等功能")
 public class MovieController {
     
     private static final Logger logger = Logger.getLogger(MovieController.class.getName());
@@ -63,7 +71,13 @@ public class MovieController {
      * @return 影视信息列表
      */
     @GetMapping("/search/all")
-    public List<Movie> searchMoviesFromAllSources(@RequestParam String keyword) {
+    @Operation(summary = "搜索所有数据源的电影", description = "根据关键词搜索所有数据源的电影信息")
+    @ApiResponse(responseCode = "200", description = "成功返回电影列表", 
+                 content = @Content(mediaType = "application/json", 
+                          schema = @Schema(implementation = Movie.class)))
+    public List<Movie> searchMoviesFromAllSources(
+            @Parameter(description = "搜索关键词", required = true) 
+            @RequestParam String keyword) {
         logger.info("MovieController.searchMoviesFromAllSources called with keyword: " + keyword);
         
         // 获取所有URL映射配置
@@ -198,9 +212,17 @@ public class MovieController {
      * @return 影视剧集列表
      */
     @GetMapping("/episodes")
-    public List<Movie.Episode> getEpisodes(@RequestParam String baseUrl, 
-                                          @RequestParam String playUrl,
-                                          @RequestParam(required = false) String datasource) {
+    @Operation(summary = "获取影视剧集列表", description = "根据播放地址获取影视的全部集数和标题以及播放地址")
+    @ApiResponse(responseCode = "200", description = "成功返回剧集列表", 
+                 content = @Content(mediaType = "application/json", 
+                          schema = @Schema(implementation = Movie.Episode.class)))
+    public List<Movie.Episode> getEpisodes(
+            @Parameter(description = "基础URL，用于确定使用哪个数据源", required = true) 
+            @RequestParam String baseUrl, 
+            @Parameter(description = "播放地址", required = true) 
+            @RequestParam String playUrl,
+            @Parameter(description = "数据源ID（可选），直接指定数据源") 
+            @RequestParam(required = false) String datasource) {
         logger.info("MovieController.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", datasource: " + datasource);
         MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
         return service.getEpisodes(baseUrl, playUrl);
@@ -215,9 +237,17 @@ public class MovieController {
      * @return 包含m3u8地址的响应
      */
     @GetMapping("/m3u8")
-    public MovieResponse getM3u8Url(@RequestParam String baseUrl, 
-                            @RequestParam String episodeUrl,
-                            @RequestParam(required = false) String datasource) {
+    @Operation(summary = "获取M3U8播放地址", description = "获取具体播放地址的m3u8")
+    @ApiResponse(responseCode = "200", description = "成功返回M3U8地址", 
+                 content = @Content(mediaType = "application/json", 
+                          schema = @Schema(implementation = MovieResponse.class)))
+    public MovieResponse getM3u8Url(
+            @Parameter(description = "基础URL，用于确定使用哪个数据源", required = true) 
+            @RequestParam String baseUrl, 
+            @Parameter(description = "具体播放地址", required = true) 
+            @RequestParam String episodeUrl,
+            @Parameter(description = "数据源ID（可选），直接指定数据源") 
+            @RequestParam(required = false) String datasource) {
         logger.info("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
         MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
         // 直接返回子项目处理后的结果，不做任何额外处理

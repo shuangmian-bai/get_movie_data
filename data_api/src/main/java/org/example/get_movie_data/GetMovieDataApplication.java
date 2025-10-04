@@ -5,6 +5,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import java.io.File;
 import java.io.InputStream;
@@ -16,18 +22,46 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.text.DecimalFormat;
+import java.util.Map;
 
 @SpringBootApplication
 @EnableScheduling
 public class GetMovieDataApplication {
 
     private static final DecimalFormat DF = new DecimalFormat("#.##");
+    
+    @Autowired
+    private RequestMappingHandlerMapping requestMappingHandlerMapping;
 
     public static void main(String[] args) {
         // 确保在应用启动前config目录和必要的配置文件存在
         ensureConfigDirectoryAndFilesExist();
         
         SpringApplication.run(GetMovieDataApplication.class, args);
+    }
+    
+    /**
+     * 应用启动完成后显示API接口信息
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void displayApiInfo() {
+        System.out.println("======= API 接口信息 =======");
+        Map<RequestMappingInfo, HandlerMethod> handlerMethods = requestMappingHandlerMapping.getHandlerMethods();
+        for (Map.Entry<RequestMappingInfo, HandlerMethod> entry : handlerMethods.entrySet()) {
+            RequestMappingInfo requestMappingInfo = entry.getKey();
+            HandlerMethod handlerMethod = entry.getValue();
+            
+            System.out.println("路径: " + requestMappingInfo.getPatternsCondition());
+            System.out.println("方法: " + requestMappingInfo.getMethodsCondition());
+            System.out.println("处理类: " + handlerMethod.getBeanType().getSimpleName());
+            System.out.println("处理方法: " + handlerMethod.getMethod().getName());
+            System.out.println("------------------------");
+        }
+        System.out.println("==========================");
+        
+        System.out.println("API文档地址:");
+        System.out.println("Swagger UI: http://localhost:8080/swagger-ui.html");
+        System.out.println("OpenAPI JSON: http://localhost:8080/v3/api-docs");
     }
     
     /**
