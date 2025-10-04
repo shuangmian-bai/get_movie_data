@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>MovieHub</title>
+    <title>双面影视</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,7 +13,7 @@
         <header class="navbar">
             <div class="navbar-content">
                 <div class="logo">
-                    <h1>MovieHub</h1>
+                    <h1>双面影视</h1>
                 </div>
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="搜索电影、电视剧..." />
@@ -29,9 +29,6 @@
         <main class="main-content">
             <!-- 电影列表区域 -->
             <section class="movies-section">
-                <div class="section-header">
-                    <h2 id="sectionTitle">热门影片</h2>
-                </div>
                 <div class="movies-grid" id="resultsList">
                     <div class="placeholder-message">
                         <p>请输入关键词搜索影片</p>
@@ -49,6 +46,11 @@
                 </div>
             </section>
         </main>
+        
+        <!-- 移动端菜单按钮 -->
+        <button class="mobile-toggle-btn" id="mobileToggleBtn">
+            <i class="fas fa-bars"></i>
+        </button>
         
         <!-- 免责声明 -->
         <footer class="disclaimer">
