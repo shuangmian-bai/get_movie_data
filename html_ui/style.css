@@ -68,6 +68,7 @@ body {
     padding: 5px 10px;
     width: 500px;
     max-width: 50%;
+    position: relative;
 }
 
 #searchInput {
@@ -306,93 +307,6 @@ body {
     border-radius: 8px;
 }
 
-/* 响应式设计 */
-@media screen and (max-width: 1200px) {
-    .search-box {
-        width: 300px;
-    }
-    
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    }
-}
-
-@media screen and (max-width: 992px) {
-    .navbar-content {
-        flex-direction: column;
-        gap: 15px;
-    }
-    
-    .search-box {
-        width: 100%;
-        max-width: 100%;
-    }
-    
-    .main-content {
-        flex-direction: column;
-    }
-    
-    .details-section {
-        border-left: none;
-        border-top: 1px solid #333;
-        min-width: 100%;
-    }
-    
-    #videoPlayer {
-        height: 300px;
-    }
-}
-
-@media screen and (max-width: 768px) {
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    }
-    
-    .detail-header {
-        flex-direction: column;
-    }
-    
-    .detail-poster {
-        max-width: 150px;
-        align-self: center;
-    }
-    
-    .detail-title {
-        font-size: 24px;
-        text-align: center;
-    }
-    
-    .episode-list {
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    }
-    
-    #videoPlayer {
-        height: 250px;
-    }
-}
-
-@media screen and (max-width: 576px) {
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    }
-    
-    .section-header h2 {
-        font-size: 20px;
-    }
-    
-    .detail-title {
-        font-size: 20px;
-    }
-    
-    .episode-list {
-        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    }
-    
-    #videoPlayer {
-        height: 200px;
-    }
-}
-
 /* 搜索覆盖层样式 */
 .search-overlay {
     position: absolute;
@@ -440,4 +354,274 @@ body {
 .disclaimer p {
     margin: 0;
     line-height: 1.4;
+}
+
+/* 宽屏优化 (1440px及以上) */
+@media screen and (min-width: 1440px) {
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 25px;
+    }
+    
+    .movie-card {
+        transition: all var(--transition-speed);
+    }
+    
+    .movie-card:hover {
+        transform: scale(1.08);
+    }
+    
+    .detail-title {
+        font-size: 36px;
+    }
+    
+    .detail-poster {
+        max-width: 250px;
+    }
+    
+    #videoPlayer {
+        height: 500px;
+    }
+    
+    .episode-list {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+}
+
+/* 中等屏幕 (768px - 1439px) */
+@media screen and (min-width: 768px) and (max-width: 1439px) {
+    .search-box {
+        width: 400px;
+        max-width: 40%;
+    }
+    
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 15px;
+    }
+    
+    .detail-title {
+        font-size: 28px;
+    }
+    
+    .detail-poster {
+        max-width: 180px;
+    }
+    
+    #videoPlayer {
+        height: 350px;
+    }
+    
+    .episode-list {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    }
+}
+
+/* 小屏幕平板 (768px - 992px) */
+@media screen and (min-width: 768px) and (max-width: 992px) {
+    .navbar-content {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .search-box {
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .details-section {
+        border-left: none;
+        border-top: 1px solid #333;
+        min-width: 100%;
+    }
+    
+    #videoPlayer {
+        height: 300px;
+    }
+    
+    .detail-header {
+        flex-direction: column;
+    }
+    
+    .detail-poster {
+        max-width: 150px;
+        align-self: center;
+    }
+    
+    .detail-title {
+        font-size: 24px;
+        text-align: center;
+    }
+}
+
+/* 手机横屏 (576px - 767px) */
+@media screen and (min-width: 576px) and (max-width: 767px) {
+    .navbar-content {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .search-box {
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .details-section {
+        border-left: none;
+        border-top: 1px solid #333;
+        min-width: 100%;
+    }
+    
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+    }
+    
+    .detail-header {
+        flex-direction: column;
+    }
+    
+    .detail-poster {
+        max-width: 150px;
+        align-self: center;
+    }
+    
+    .detail-title {
+        font-size: 24px;
+        text-align: center;
+    }
+    
+    .episode-list {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    }
+    
+    #videoPlayer {
+        height: 250px;
+    }
+}
+
+/* 手机竖屏 (575px及以下) */
+@media screen and (max-width: 575px) {
+    .navbar {
+        padding: 10px 3%;
+    }
+    
+    .logo h1 {
+        font-size: 24px;
+    }
+    
+    .navbar-content {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .search-box {
+        width: 100%;
+        max-width: 100%;
+        padding: 3px 8px;
+    }
+    
+    #searchInput {
+        padding: 6px;
+        font-size: 14px;
+    }
+    
+    .main-content {
+        flex-direction: column;
+        margin-top: 60px;
+    }
+    
+    .details-section {
+        border-left: none;
+        border-top: 1px solid #333;
+        min-width: 100%;
+        padding: 15px;
+    }
+    
+    .movies-section {
+        padding: 15px;
+    }
+    
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 10px;
+    }
+    
+    .movie-info {
+        padding: 8px;
+    }
+    
+    .movie-title {
+        font-size: 14px;
+    }
+    
+    .movie-meta {
+        font-size: 11px;
+    }
+    
+    .movie-source {
+        font-size: 10px;
+    }
+    
+    .section-header h2 {
+        font-size: 20px;
+        margin-bottom: 15px;
+    }
+    
+    .detail-header {
+        flex-direction: column;
+    }
+    
+    .detail-poster {
+        max-width: 120px;
+        align-self: center;
+    }
+    
+    .detail-title {
+        font-size: 20px;
+        text-align: center;
+    }
+    
+    .detail-meta {
+        font-size: 12px;
+        gap: 10px;
+    }
+    
+    .detail-description {
+        font-size: 14px;
+        margin: 10px 0;
+    }
+    
+    .episode-section h3,
+    .video-section h3 {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+    
+    .episode-list {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+        gap: 8px;
+    }
+    
+    .episode-btn {
+        padding: 8px 5px;
+        font-size: 12px;
+    }
+    
+    #videoPlayer {
+        height: 200px;
+    }
+    
+    .disclaimer {
+        padding: 10px 3%;
+        font-size: 10px;
+    }
 }

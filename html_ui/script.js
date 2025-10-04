@@ -24,6 +24,9 @@ function initializeApp() {
             navbar.classList.remove('scrolled');
         }
     });
+    
+    // 添加窗口大小变化监听器，优化响应式体验
+    window.addEventListener('resize', handleWindowResize);
 }
 
 // 设置事件监听器
@@ -41,6 +44,22 @@ function setupEventListeners() {
             }
         }
     });
+}
+
+// 处理窗口大小变化
+function handleWindowResize() {
+    // 可以在这里添加特定于窗口大小变化的逻辑
+    // 例如调整某些元素的大小或位置
+    const movieCards = document.querySelectorAll('.movie-card');
+    if (window.innerWidth <= 575) {
+        movieCards.forEach(card => {
+            card.style.transition = 'transform 0.2s';
+        });
+    } else {
+        movieCards.forEach(card => {
+            card.style.transition = 'transform 0.3s, box-shadow 0.3s';
+        });
+    }
 }
 
 // 加载数据源选项
