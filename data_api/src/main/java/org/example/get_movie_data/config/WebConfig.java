@@ -44,11 +44,12 @@ public class WebConfig implements WebMvcConfigurer {
      * @return FilterRegistrationBean<CorsFilter> 过滤器注册Bean
      */
     @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
     public FilterRegistrationBean<CorsFilter> corsFilter() {
         // 创建CorsConfiguration对象并进行配置
         CorsConfiguration config = new CorsConfiguration();
         
-        // 允许任何域名访问
+        // 允许任何域名访问，包括带端口号的地址
         config.addAllowedOriginPattern("*");
         // 允许任何请求头
         config.addAllowedHeader("*");
@@ -56,7 +57,7 @@ public class WebConfig implements WebMvcConfigurer {
         config.addAllowedMethod("*");
         // 暴露所有响应头
         config.addExposedHeader("*");
-        // 允许携带认证信息（cookies等）
+        // 不允许携带认证信息（cookies等），这样才能使用通配符
         config.setAllowCredentials(false);
         // 设置预检请求的有效期（秒）
         config.setMaxAge(3600L);
@@ -67,7 +68,7 @@ public class WebConfig implements WebMvcConfigurer {
 
         // 创建FilterRegistrationBean并设置优先级
         FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(new CorsFilter(source));
-        bean.setOrder(-1000); // 设置最高优先级
+        bean.setOrder(Ordered.HIGHEST_PRECEDENCE); // 设置最高优先级
         
         return bean;
     }

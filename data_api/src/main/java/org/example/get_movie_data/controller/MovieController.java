@@ -35,7 +35,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  */
 @RestController
 @RequestMapping("/api/movie")
-@CrossOrigin(origins = "*", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
 @Tag(name = "电影数据接口", description = "提供电影搜索、剧集信息和播放地址获取等功能")
 public class MovieController {
     
