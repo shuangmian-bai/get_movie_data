@@ -9,7 +9,6 @@
     --card-bg: #333333;
     --hover-bg: #444444;
     --transition-speed: 0.3s;
-    --shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -31,7 +30,6 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    position: relative;
 }
 
 /* 顶部导航栏 */
@@ -143,7 +141,6 @@ body {
     transition: transform var(--transition-speed), box-shadow var(--transition-speed);
     cursor: pointer;
     position: relative;
-    box-shadow: var(--shadow);
 }
 
 .movie-card:hover {
@@ -182,9 +179,6 @@ body {
     font-size: 11px;
     color: var(--accent-color);
     margin-top: 5px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .placeholder-message {
@@ -241,7 +235,7 @@ body {
 .detail-poster {
     max-width: 200px;
     border-radius: 8px;
-    box-shadow: var(--shadow);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
 .detail-info {
@@ -290,7 +284,6 @@ body {
     transition: background-color var(--transition-speed);
     text-align: center;
     font-size: 14px;
-    box-shadow: var(--shadow);
 }
 
 .episode-btn:hover {
@@ -313,65 +306,10 @@ body {
     border-radius: 8px;
 }
 
-/* 移动端切换按钮 */
-.mobile-toggle-btn {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background-color: var(--accent-color);
-    color: white;
-    border: none;
-    font-size: 20px;
-    cursor: pointer;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    z-index: 99;
-    display: none;
-}
-
-/* 免责声明 */
-.disclaimer {
-    background-color: #000;
-    color: #888;
-    text-align: center;
-    padding: 15px 4%;
-    font-size: 12px;
-    border-top: 1px solid #333;
-    margin-top: auto;
-}
-
-.disclaimer p {
-    margin: 0;
-    line-height: 1.4;
-}
-
-/* 按钮禁用状态样式 */
-#searchBtn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-/* 响应式设计 - 超大屏幕 */
-@media screen and (min-width: 1800px) {
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    }
-    
-    .detail-title {
-        font-size: 36px;
-    }
-    
-    #videoPlayer {
-        height: 500px;
-    }
-}
-
-/* 响应式设计 - 大屏幕 */
-@media screen and (max-width: 1400px) {
+/* 响应式设计 */
+@media screen and (max-width: 1200px) {
     .search-box {
-        width: 400px;
+        width: 300px;
     }
     
     .movies-grid {
@@ -379,22 +317,6 @@ body {
     }
 }
 
-/* 响应式设计 - 中等屏幕 */
-@media screen and (max-width: 1200px) {
-    .search-box {
-        width: 300px;
-    }
-    
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    }
-    
-    .detail-title {
-        font-size: 28px;
-    }
-}
-
-/* 响应式设计 - 小屏幕 */
 @media screen and (max-width: 992px) {
     .navbar-content {
         flex-direction: column;
@@ -410,16 +332,20 @@ body {
         flex-direction: column;
     }
     
-    .movies-section,
-    .details-section {
-        width: 100%;
-        max-height: 50vh;
-    }
-    
     .details-section {
         border-left: none;
         border-top: 1px solid #333;
         min-width: 100%;
+    }
+    
+    #videoPlayer {
+        height: 300px;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     }
     
     .detail-header {
@@ -436,264 +362,82 @@ body {
         text-align: center;
     }
     
-    .detail-meta {
-        justify-content: center;
-    }
-    
     .episode-list {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    }
-    
-    #videoPlayer {
-        height: 300px;
-    }
-    
-    .mobile-toggle-btn {
-        display: block;
-    }
-}
-
-/* 响应式设计 - 平板 */
-@media screen and (max-width: 768px) {
-    .navbar {
-        padding: 10px 2%;
-    }
-    
-    .logo h1 {
-        font-size: 24px;
-    }
-    
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 15px;
-    }
-    
-    .movie-card {
-        border-radius: 6px;
-    }
-    
-    .movie-info {
-        padding: 10px;
-    }
-    
-    .movie-title {
-        font-size: 14px;
-    }
-    
-    .movie-meta {
-        font-size: 12px;
-    }
-    
-    .detail-title {
-        font-size: 22px;
-    }
-    
-    .detail-meta {
-        font-size: 13px;
-        gap: 10px;
-    }
-    
-    .episode-list {
-        grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-        gap: 8px;
-    }
-    
-    .episode-btn {
-        padding: 8px;
-        font-size: 13px;
     }
     
     #videoPlayer {
         height: 250px;
     }
-    
-    .disclaimer {
-        font-size: 11px;
-        padding: 12px 2%;
-    }
 }
 
-/* 响应式设计 - 手机横屏 */
-@media screen and (max-width: 768px) and (orientation: landscape) {
-    .main-content {
-        flex-direction: row;
-    }
-    
-    .movies-section,
-    .details-section {
-        max-height: none;
-        height: calc(100vh - 120px);
-    }
-    
-    .details-section {
-        border-top: none;
-        border-left: 1px solid #333;
-    }
-    
-    .detail-header {
-        flex-direction: row;
-    }
-    
-    .detail-poster {
-        max-width: 120px;
-        align-self: flex-start;
-    }
-    
-    .detail-title {
-        text-align: left;
-    }
-    
-    .detail-meta {
-        justify-content: flex-start;
-    }
-}
-
-/* 响应式设计 - 手机 */
 @media screen and (max-width: 576px) {
-    .navbar {
-        padding: 8px 2%;
-    }
-    
-    .logo h1 {
-        font-size: 20px;
+    .movies-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     }
     
     .section-header h2 {
         font-size: 20px;
-        margin-bottom: 15px;
-    }
-    
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-        gap: 10px;
-    }
-    
-    .movie-card {
-        border-radius: 4px;
-    }
-    
-    .movie-info {
-        padding: 8px;
-    }
-    
-    .movie-title {
-        font-size: 13px;
-    }
-    
-    .movie-meta {
-        font-size: 11px;
-    }
-    
-    .movie-source {
-        font-size: 10px;
     }
     
     .detail-title {
         font-size: 20px;
     }
     
-    .detail-meta {
-        font-size: 12px;
-        gap: 8px;
-    }
-    
-    .detail-description {
-        font-size: 14px;
-        margin: 10px 0;
-    }
-    
-    .episode-section h3 {
-        font-size: 18px;
-        margin-bottom: 10px;
-    }
-    
     .episode-list {
         grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-        gap: 6px;
-    }
-    
-    .episode-btn {
-        padding: 6px;
-        font-size: 12px;
-    }
-    
-    .video-section h3 {
-        font-size: 18px;
-        margin-bottom: 10px;
     }
     
     #videoPlayer {
         height: 200px;
     }
-    
-    .disclaimer {
-        font-size: 10px;
-        padding: 10px 2%;
-    }
-    
-    .placeholder-message p {
-        font-size: 16px;
-    }
-    
-    .detail-placeholder i {
-        font-size: 48px;
-        margin-bottom: 15px;
-    }
-    
-    .detail-placeholder p {
-        font-size: 16px;
-    }
 }
 
-/* 响应式设计 - 超小屏幕 */
-@media screen and (max-width: 400px) {
-    .movies-grid {
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    }
-    
-    .movie-title {
-        font-size: 12px;
-    }
-    
-    .episode-list {
-        grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-    }
-    
-    #videoPlayer {
-        height: 180px;
-    }
+/* 搜索覆盖层样式 */
+.search-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    border-radius: 4px;
+    z-index: 10;
 }
 
-/* 触摸设备优化 */
-@media (hover: none) and (pointer: coarse) {
-    .movie-card:hover {
-        transform: none;
-        box-shadow: var(--shadow);
-    }
-    
-    .movie-card:active {
-        transform: scale(0.95);
-    }
-    
-    .episode-btn:hover {
-        background-color: var(--card-bg);
-    }
-    
-    .episode-btn:active {
-        background-color: var(--hover-bg);
-    }
-    
-    .search-box {
-        padding: 3px 8px;
-    }
-    
-    #searchInput {
-        padding: 6px;
-        font-size: 14px;
-    }
-    
-    #searchBtn {
-        padding: 3px;
-        font-size: 16px;
-    }
+.search-overlay.active {
+    display: flex;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 免责声明 */
+.disclaimer {
+    background-color: #000;
+    color: #888;
+    text-align: center;
+    padding: 15px 4%;
+    font-size: 12px;
+    border-top: 1px solid #333;
+    margin-top: auto;
+}
+
+.disclaimer p {
+    margin: 0;
+    line-height: 1.4;
 }

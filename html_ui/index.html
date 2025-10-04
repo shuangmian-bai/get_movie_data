@@ -18,6 +18,9 @@
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="搜索电影、电视剧..." />
                     <button id="searchBtn"><i class="fas fa-search"></i></button>
+                    <div id="searchOverlay" class="search-overlay">
+                        <div class="spinner"></div>
+                    </div>
                 </div>
                 <div class="user-actions">
                     <!-- 移除数据源选择 -->
@@ -29,6 +32,9 @@
         <main class="main-content">
             <!-- 电影列表区域 -->
             <section class="movies-section">
+                <div class="section-header">
+                    <h2 id="sectionTitle">热门影片</h2>
+                </div>
                 <div class="movies-grid" id="resultsList">
                     <div class="placeholder-message">
                         <p>请输入关键词搜索影片</p>
@@ -46,11 +52,6 @@
                 </div>
             </section>
         </main>
-        
-        <!-- 移动端菜单按钮 -->
-        <button class="mobile-toggle-btn" id="mobileToggleBtn">
-            <i class="fas fa-bars"></i>
-        </button>
         
         <!-- 免责声明 -->
         <footer class="disclaimer">

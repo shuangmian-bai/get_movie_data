@@ -1,7 +1,6 @@
 // 默认API基础地址
-let API_BASE = localStorage.getItem('apiBaseUrl') || "http://127.0.0.1:8080";
+let API_BASE = localStorage.getItem('apiBaseUrl') || "https://movie-api.shuangmian.top";
 let currentMovies = [];
-let isMovieListVisible = true;
 
 // DOM加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -25,15 +24,6 @@ function initializeApp() {
             navbar.classList.remove('scrolled');
         }
     });
-    
-    // 添加移动端切换按钮事件
-    const mobileToggleBtn = document.getElementById('mobileToggleBtn');
-    if (mobileToggleBtn) {
-        mobileToggleBtn.addEventListener('click', toggleMobileView);
-    }
-    
-    // 初始化视图
-    updateMobileView();
 }
 
 // 设置事件监听器
@@ -43,45 +33,14 @@ function setupEventListeners() {
     
     searchBtn.addEventListener("click", searchMovies);
     searchInput.addEventListener("keypress", e => {
-        if (e.key === "Enter") searchMovies();
-    });
-    
-    // 监听窗口大小变化
-    window.addEventListener('resize', updateMobileView);
-}
-
-// 更新移动端视图
-function updateMobileView() {
-    const moviesSection = document.querySelector('.movies-section');
-    const detailsSection = document.querySelector('.details-section');
-    const mobileToggleBtn = document.getElementById('mobileToggleBtn');
-    
-    if (window.innerWidth <= 992) {
-        if (isMovieListVisible) {
-            moviesSection.style.display = 'block';
-            detailsSection.style.display = 'none';
-        } else {
-            moviesSection.style.display = 'none';
-            detailsSection.style.display = 'block';
+        if (e.key === "Enter") {
+            // 检查是否正在搜索中
+            const searchOverlay = document.getElementById("searchOverlay");
+            if (!searchOverlay.classList.contains("active")) {
+                searchMovies();
+            }
         }
-        if (mobileToggleBtn) mobileToggleBtn.style.display = 'block';
-    } else {
-        moviesSection.style.display = 'block';
-        detailsSection.style.display = 'block';
-        if (mobileToggleBtn) mobileToggleBtn.style.display = 'none';
-    }
-}
-
-// 切换移动端视图
-function toggleMobileView() {
-    isMovieListVisible = !isMovieListVisible;
-    updateMobileView();
-    
-    const mobileToggleBtn = document.getElementById('mobileToggleBtn');
-    if (mobileToggleBtn) {
-        mobileToggleBtn.innerHTML = isMovieListVisible ? 
-            '<i class="fas fa-film"></i>' : '<i class="fas fa-list"></i>';
-    }
+    });
 }
 
 // 加载数据源选项
@@ -107,15 +66,17 @@ async function loadDataSourceOptions() {
 // 搜索电影
 async function searchMovies() {
     const keyword = document.getElementById("searchInput").value.trim();
-    const searchBtn = document.getElementById("searchBtn");
-    
-    // 禁用搜索按钮，防止连续点击
-    searchBtn.disabled = true;
-    const originalText = searchBtn.innerHTML;
-    searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     
     const sectionTitle = document.getElementById("sectionTitle");
     const resultsList = document.getElementById("resultsList");
+    const searchOverlay = document.getElementById("searchOverlay");
+    const searchInput = document.getElementById("searchInput");
+    const searchBtn = document.getElementById("searchBtn");
+    
+    // 显示覆盖层，禁用输入和按钮
+    searchOverlay.classList.add("active");
+    searchInput.disabled = true;
+    searchBtn.disabled = true;
     
     if (!keyword) {
         sectionTitle.textContent = "热门影片";
@@ -124,9 +85,10 @@ async function searchMovies() {
                 <p>请输入关键词搜索影片</p>
             </div>
         `;
-        // 恢复搜索按钮
+        // 隐藏覆盖层，启用输入和按钮
+        searchOverlay.classList.remove("active");
+        searchInput.disabled = false;
         searchBtn.disabled = false;
-        searchBtn.innerHTML = originalText;
         return;
     }
     
@@ -146,9 +108,10 @@ async function searchMovies() {
                     <p>未找到相关影片</p>
                 </div>
             `;
-            // 恢复搜索按钮
+            // 隐藏覆盖层，启用输入和按钮
+            searchOverlay.classList.remove("active");
+            searchInput.disabled = false;
             searchBtn.disabled = false;
-            searchBtn.innerHTML = originalText;
             return;
         }
         
@@ -160,9 +123,10 @@ async function searchMovies() {
             </div>
         `;
     } finally {
-        // 恢复搜索按钮
+        // 隐藏覆盖层，启用输入和按钮
+        searchOverlay.classList.remove("active");
+        searchInput.disabled = false;
         searchBtn.disabled = false;
-        searchBtn.innerHTML = originalText;
     }
 }
 
@@ -185,15 +149,7 @@ function renderMovies(movies) {
                 <div class="movie-source">来源: ${new URL(movie.baseUrl).hostname}</div>
             </div>
         `;
-        movieCard.addEventListener("click", () => {
-            loadMovieDetail(movie);
-            // 在移动端点击电影卡片后切换到详情视图
-            if (window.innerWidth <= 992) {
-                isMovieListVisible = false;
-                updateMobileView();
-                document.getElementById('mobileToggleBtn').innerHTML = '<i class="fas fa-list"></i>';
-            }
-        });
+        movieCard.addEventListener("click", () => loadMovieDetail(movie));
         resultsList.appendChild(movieCard);
     });
 }
