@@ -1,5 +1,5 @@
 // 默认API基础地址
-let API_BASE = localStorage.getItem('apiBaseUrl') || "https://movie-api.shuangmian.top";
+let API_BASE = localStorage.getItem('apiBaseUrl') || "https://127.0.0.1:8080";
 let currentMovies = [];
 
 // DOM加载完成后初始化
@@ -228,8 +228,10 @@ async function loadMovieDetail(movie) {
                         if (m3u8Url) {
                             // 使用 m3u8player.org 播放器
                             const playerContainer = document.getElementById("videoPlayerContainer");
+                            // 修复URL编码问题，使用encodeURI处理整个URL
+                            const encodedM3U8Url = encodeURI(m3u8Url);
                             playerContainer.innerHTML = `
-                                <iframe src="https://m3u8player.org/player.html?url=${encodeURIComponent(m3u8Url)}" 
+                                <iframe src="https://m3u8player.org/player.html?url=${encodeURIComponent(encodedM3U8Url)}" 
                                         width="100%" 
                                         height="500" 
                                         frameborder="0" 
