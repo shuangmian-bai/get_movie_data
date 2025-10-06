@@ -206,7 +206,7 @@ async function loadMovieDetail(movie) {
                 
                 <div class="video-section">
                     <h3>播放器</h3>
-                    <video id="videoPlayer" controls></video>
+                    <div id="videoPlayerContainer"></div>
                 </div>
             </div>
         `;
@@ -221,27 +221,26 @@ async function loadMovieDetail(movie) {
             btn.onclick = async () => {
                 try {
                     const m3u8Res = await fetch(`${API_BASE}/api/movie/m3u8?baseUrl=${encodeURIComponent(baseUrl)}&episodeUrl=${encodeURIComponent(ep.episodeUrl)}`);
-                    const m3u8Data = await m3u8Res.json();
-                    const m3u8Url = m3u8Data.movie;
-                    
-                    if (m3u8Url && m3u8Url.includes(".m3u8")) {
-                        if (Hls.isSupported()) {
-                            if (video.hls) {
-                                video.hls.destroy();
-                            }
-                            const hls = new Hls();
-                            hls.loadSource(m3u8Url);
-                            hls.attachMedia(video);
-                            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-                            video.hls = hls;
-                        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                            video.src = m3u8Url;
-                            video.addEventListener("loadedmetadata", () => video.play());
+                    if (m3u8Res.ok) {
+                        const m3u8Data = await m3u8Res.json();
+                        const m3u8Url = m3u8Data.movie;
+                        
+                        if (m3u8Url) {
+                            // 使用 m3u8player.org 播放器
+                            const playerContainer = document.getElementById("videoPlayerContainer");
+                            playerContainer.innerHTML = `
+                                <iframe src="https://m3u8player.org/player.html?url=${encodeURIComponent(m3u8Url)}" 
+                                        width="100%" 
+                                        height="500" 
+                                        frameborder="0" 
+                                        allowfullscreen>
+                                </iframe>
+                            `;
                         } else {
-                            alert("当前浏览器不支持M3U8播放");
+                            alert("未能获取有效的播放地址");
                         }
                     } else {
-                        alert("未能获取有效的播放地址");
+                        alert("获取播放地址失败");
                     }
                 } catch (err) {
                     alert("获取播放地址失败: " + err.message);
