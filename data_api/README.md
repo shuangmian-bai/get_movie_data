@@ -73,7 +73,15 @@ java -jar target/get_movie_data-0.0.1-SNAPSHOT.jar
 ### 搜索电影
 
 ```
-GET /api/movie/search/all?keyword={关键词}
+POST /api/movie/search/all
+Content-Type: application/json
+```
+
+请求体(JSON格式)：
+```json
+{
+  "keyword": "搜索关键词"
+}
 ```
 
 并发从所有配置的数据源搜索电影，返回电影列表。
@@ -81,7 +89,16 @@ GET /api/movie/search/all?keyword={关键词}
 ### 获取剧集列表
 
 ```
-GET /api/movie/episodes?baseUrl={基础URL}&playUrl={播放地址}
+POST /api/movie/episodes
+Content-Type: application/json
+```
+
+请求体(JSON格式)：
+```json
+{
+  "baseUrl": "基础URL",
+  "playUrl": "播放地址"
+}
 ```
 
 根据基础URL确定数据源，获取指定电影的所有剧集信息。
@@ -89,7 +106,16 @@ GET /api/movie/episodes?baseUrl={基础URL}&playUrl={播放地址}
 ### 获取M3U8播放地址
 
 ```
-GET /api/movie/m3u8?baseUrl={基础URL}&episodeUrl={剧集地址}
+POST /api/movie/m3u8
+Content-Type: application/json
+```
+
+请求体(JSON格式)：
+```json
+{
+  "baseUrl": "基础URL",
+  "episodeUrl": "剧集地址"
+}
 ```
 
 根据基础URL确定数据源，获取指定剧集的M3U8播放地址。

@@ -12,8 +12,11 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -23,12 +26,19 @@ public class MovieControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+    
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     public void testSearchMoviesFromAllSources() throws Exception {
         // 测试搜索电影接口
-        ResultActions result = mockMvc.perform(get("/api/movie/search/all")
-                .param("keyword", "蜘蛛侠"))
+        MovieRequest request = new MovieRequest();
+        request.setKeyword("蜘蛛侠");
+        String json = objectMapper.writeValueAsString(request);
+        
+        ResultActions result = mockMvc.perform(post("/api/movie/search/all")
+                .contentType(APPLICATION_JSON)
+                .content(json))
                 .andDo(print())
                 .andExpect(status().isOk());
         
@@ -42,9 +52,14 @@ public class MovieControllerTest {
     @Test
     public void testGetEpisodes() throws Exception {
         // 测试获取剧集信息接口
-        ResultActions result = mockMvc.perform(get("/api/movie/episodes")
-                .param("baseUrl", "http://example.com")
-                .param("playUrl", "http://example.com/play/123"))
+        MovieRequest request = new MovieRequest();
+        request.setBaseUrl("http://example.com");
+        request.setPlayUrl("http://example.com/play/123");
+        String json = objectMapper.writeValueAsString(request);
+        
+        ResultActions result = mockMvc.perform(post("/api/movie/episodes")
+                .contentType(APPLICATION_JSON)
+                .content(json))
                 .andDo(print())
                 .andExpect(status().isOk());
         
@@ -58,9 +73,14 @@ public class MovieControllerTest {
     @Test
     public void testGetM3u8Url() throws Exception {
         // 测试获取m3u8地址接口
-        ResultActions result = mockMvc.perform(get("/api/movie/m3u8")
-                .param("baseUrl", "http://example.com")
-                .param("episodeUrl", "http://example.com/episode/123"))
+        MovieRequest request = new MovieRequest();
+        request.setBaseUrl("http://example.com");
+        request.setEpisodeUrl("http://example.com/episode/123");
+        String json = objectMapper.writeValueAsString(request);
+        
+        ResultActions result = mockMvc.perform(post("/api/movie/m3u8")
+                .contentType(APPLICATION_JSON)
+                .content(json))
                 .andDo(print())
                 .andExpect(status().isOk());
         

@@ -8,6 +8,7 @@ import org.example.get_movie_data.service.ConfigManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -66,17 +67,18 @@ public class MovieController {
      * 根据搜索关键词获取影视信息（完整信息，包含剧集）
      * 此接口为对外统一接口，会并发向所有配置的数据源发送HTTP请求并整合结果
      * 
-     * @param keyword 搜索关键词
+     * @param request 搜索请求参数
      * @return 影视信息列表
      */
-    @GetMapping("/search/all")
+    @PostMapping("/search/all")
     @Operation(summary = "搜索所有数据源的电影", description = "根据关键词搜索所有数据源的电影信息")
     @ApiResponse(responseCode = "200", description = "成功返回电影列表", 
                  content = @Content(mediaType = "application/json", 
                           schema = @Schema(implementation = Movie.class)))
     public List<Movie> searchMoviesFromAllSources(
-            @Parameter(description = "搜索关键词", required = true) 
-            @RequestParam String keyword) {
+            @Parameter(description = "搜索请求参数", required = true) 
+            @RequestBody MovieRequest request) {
+        String keyword = request.getKeyword();
         logger.info("MovieController.searchMoviesFromAllSources called with keyword: " + keyword);
         
         // 获取所有URL映射配置
@@ -205,23 +207,20 @@ public class MovieController {
     /**
      * 根据播放地址获取影视的全部集数和标题以及播放地址
      * 
-     * @param baseUrl 基础URL，用于确定使用哪个数据源
-     * @param playUrl 播放地址
-     * @param datasource 数据源ID（可选），直接指定数据源
+     * @param request 播放请求参数
      * @return 影视剧集列表
      */
-    @GetMapping("/episodes")
+    @PostMapping("/episodes")
     @Operation(summary = "获取影视剧集列表", description = "根据播放地址获取影视的全部集数和标题以及播放地址")
     @ApiResponse(responseCode = "200", description = "成功返回剧集列表", 
                  content = @Content(mediaType = "application/json", 
                           schema = @Schema(implementation = Movie.Episode.class)))
     public List<Movie.Episode> getEpisodes(
-            @Parameter(description = "基础URL，用于确定使用哪个数据源", required = true) 
-            @RequestParam String baseUrl, 
-            @Parameter(description = "播放地址", required = true) 
-            @RequestParam String playUrl,
-            @Parameter(description = "数据源ID（可选），直接指定数据源") 
-            @RequestParam(required = false) String datasource) {
+            @Parameter(description = "播放请求参数", required = true) 
+            @RequestBody MovieRequest request) {
+        String baseUrl = request.getBaseUrl();
+        String playUrl = request.getPlayUrl();
+        String datasource = request.getDatasource();
         logger.info("MovieController.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", datasource: " + datasource);
         MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
         return service.getEpisodes(baseUrl, playUrl);
@@ -230,23 +229,20 @@ public class MovieController {
     /**
      * 获取具体播放地址的m3u8
      * 
-     * @param baseUrl 基础URL，用于确定使用哪个数据源
-     * @param episodeUrl 具体播放地址
-     * @param datasource 数据源ID（可选），直接指定数据源
+     * @param request M3U8请求参数
      * @return 包含m3u8地址的响应
      */
-    @GetMapping("/m3u8")
+    @PostMapping("/m3u8")
     @Operation(summary = "获取M3U8播放地址", description = "获取具体播放地址的m3u8")
     @ApiResponse(responseCode = "200", description = "成功返回M3U8地址", 
                  content = @Content(mediaType = "application/json", 
                           schema = @Schema(implementation = MovieResponse.class)))
     public MovieResponse getM3u8Url(
-            @Parameter(description = "基础URL，用于确定使用哪个数据源", required = true) 
-            @RequestParam String baseUrl, 
-            @Parameter(description = "具体播放地址", required = true) 
-            @RequestParam String episodeUrl,
-            @Parameter(description = "数据源ID（可选），直接指定数据源") 
-            @RequestParam(required = false) String datasource) {
+            @Parameter(description = "M3U8请求参数", required = true) 
+            @RequestBody MovieRequest request) {
+        String baseUrl = request.getBaseUrl();
+        String episodeUrl = request.getEpisodeUrl();
+        String datasource = request.getDatasource();
         logger.info("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
         MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
         // 直接返回子项目处理后的结果，不做任何额外处理
