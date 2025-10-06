@@ -1,6 +1,8 @@
 // 默认API基础地址
-let API_BASE = localStorage.getItem('apiBaseUrl') || "http://127.0.0.1:8080";
+let API_BASE = localStorage.getItem('apiBaseUrl') || "https://***";
 let currentMovies = [];
+// 默认错误图片地址
+const DEFAULT_ERROR_IMAGE = 'https://***/erro.png';
 
 // DOM加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -60,6 +62,19 @@ function handleWindowResize() {
             card.style.transition = 'transform 0.3s, box-shadow 0.3s';
         });
     }
+}
+
+// 图片加载错误处理函数
+function handleImageError(event) {
+    event.target.src = DEFAULT_ERROR_IMAGE;
+    // 防止无限循环，如果错误图片也加载失败
+    event.target.onerror = null;
+}
+
+// 安全获取图片URL的函数
+function getSafeImageUrl(url) {
+    // 如果URL为空或无效，则返回默认错误图片
+    return url && typeof url === 'string' && url.trim() !== '' ? url : DEFAULT_ERROR_IMAGE;
 }
 
 // 加载数据源选项
@@ -166,8 +181,9 @@ function renderMovies(movies) {
     movies.forEach((movie, index) => {
         const movieCard = document.createElement("div");
         movieCard.className = "movie-card";
+        const posterUrl = getSafeImageUrl(movie.poster);
         movieCard.innerHTML = `
-            <img class="movie-poster" src="${movie.poster || 'https://via.placeholder.com/200x300/333333/CCCCCC?text=No+Image'}" alt="${movie.name}" />
+            <img class="movie-poster" src="${posterUrl}" alt="${movie.name}" onerror="handleImageError(event)" />
             <div class="movie-info">
                 <div class="movie-title">${movie.name}</div>
                 <div class="movie-meta">
@@ -207,10 +223,11 @@ async function loadMovieDetail(movie) {
         const episodes = await res.json();
         
         // 渲染详情
+        const posterUrl = getSafeImageUrl(movie.poster);
         movieDetail.innerHTML = `
             <div class="movie-detail-content">
                 <div class="detail-header">
-                    <img class="detail-poster" src="${movie.poster || 'https://via.placeholder.com/200x300/333333/CCCCCC?text=No+Image'}" alt="${movie.name}" />
+                    <img class="detail-poster" src="${posterUrl}" alt="${movie.name}" onerror="handleImageError(event)" />
                     <div class="detail-info">
                         <h2 class="detail-title">${movie.name}</h2>
                         <div class="detail-meta">
