@@ -1,5 +1,5 @@
 // 默认API基础地址
-let API_BASE = localStorage.getItem('apiBaseUrl') || "https://127.0.0.1:8080";
+let API_BASE = localStorage.getItem('apiBaseUrl') || "http://127.0.0.1:8080";
 let currentMovies = [];
 
 // DOM加载完成后初始化
@@ -114,10 +114,19 @@ async function searchMovies() {
     sectionTitle.textContent = `搜索结果: ${keyword}`;
     
     try {
-        // 直接搜索所有数据源
-        const url = `${API_BASE}/api/movie/search/all?keyword=${encodeURIComponent(keyword)}`;
+        // 使用POST请求发送JSON数据
+        const res = await fetch(`${API_BASE}/api/movie/search/all`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ keyword: keyword })
+        });
         
-        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const movies = await res.json();
         currentMovies = movies;
         
@@ -179,8 +188,22 @@ async function loadMovieDetail(movie) {
     const movieDetail = document.getElementById("movieDetail");
     
     try {
-        // 获取剧集列表
-        const res = await fetch(`${API_BASE}/api/movie/episodes?baseUrl=${encodeURIComponent(baseUrl)}&playUrl=${encodeURIComponent(playUrl)}`);
+        // 使用POST请求获取剧集列表
+        const res = await fetch(`${API_BASE}/api/movie/episodes`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                baseUrl: baseUrl,
+                playUrl: playUrl
+            })
+        });
+        
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const episodes = await res.json();
         
         // 渲染详情
@@ -220,7 +243,18 @@ async function loadMovieDetail(movie) {
             btn.textContent = ep.title;
             btn.onclick = async () => {
                 try {
-                    const m3u8Res = await fetch(`${API_BASE}/api/movie/m3u8?baseUrl=${encodeURIComponent(baseUrl)}&episodeUrl=${encodeURIComponent(ep.episodeUrl)}`);
+                    // 使用POST请求获取M3U8播放地址
+                    const m3u8Res = await fetch(`${API_BASE}/api/movie/m3u8`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            baseUrl: baseUrl,
+                            episodeUrl: ep.episodeUrl
+                        })
+                    });
+                    
                     if (m3u8Res.ok) {
                         const m3u8Data = await m3u8Res.json();
                         const m3u8Url = m3u8Data.movie;
