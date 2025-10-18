@@ -17,7 +17,7 @@ public class SwaggerConfig {
                         .version("1.0")
                         .description("提供电影搜索、剧集信息和播放地址获取等功能的API接口")
                         .contact(new Contact()
-                                .name("开发团队")
-                                .email("dev@example.com")));
+                                .name("双面")
+                                .url("https://github.com/shuangmian-bai/get_movie_data")));
     }
 }
