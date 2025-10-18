@@ -36,7 +36,7 @@ public class ApiInfoDisplay {
         System.out.println("==========================");
         
         System.out.println("API文档地址:");
-        System.out.println("Swagger UI: http://localhost:8080/swagger-ui.html");
-        System.out.println("OpenAPI JSON: http://localhost:8080/v3/api-docs");
+        System.out.println("Swagger UI: /swagger-ui.html");
+        System.out.println("OpenAPI JSON: /v3/api-docs");
     }
 }
