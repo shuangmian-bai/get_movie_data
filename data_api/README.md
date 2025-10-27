@@ -31,13 +31,15 @@
 
 ```mermaid
 graph TD
-    A[客户端] --> B(API网关)
+    A[客户端] --> B[API网关]
     B --> C{MovieController}
     C --> D[MovieServiceManager]
     D --> E[ConfigManager]
     D --> F[ExternalServiceFactory]
     D --> G[CacheManager]
     F --> H[外部数据源插件]
+    E --> I[DataSourceConfigLoader]
+    I --> J[XML配置文件]
 ```
 
 ## 快速开始
@@ -161,9 +163,10 @@ Content-Type: application/json
 
 项目包含以下现成的数据源插件：
 
-- [云云TV](yuny/README.md) - 从云云TV网站获取电影数据
-- [BFZY](bfzy/README.md) - 从bfzy.tv网站获取电影数据
-- [茶杯狐](chabeigu/README.md) - 从茶杯狐网站获取电影数据
+- 云云TV - 从云云TV网站获取电影数据
+- 暴风影音 - 从bfzy.tv网站获取电影数据
+- 茶杯狐 - 从茶杯狐网站获取电影数据
+- 内部数据源 - 直接在主项目中定义的数据源示例
 
 ## 常见问题
 
@@ -181,5 +184,8 @@ A: 检查配置文件格式是否正确，确认配置文件位于正确的目�
 
 ### Q: 如何查看API文档？
 
-A: 应用启动后，访问 `http://localhost:8080/swagger-ui.html` 查看Swagger API文档。
+A: 应用启动后，访问 `http://Host:Port/swagger-ui/index.html` 查看Swagger API文档。
 
+### Q: 谁负责维护这个项目？
+
+A: 该项目由[双面](https://github.com/shuangmian-bai/get_movie_data)维护。
