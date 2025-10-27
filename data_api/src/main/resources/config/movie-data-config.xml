@@ -5,7 +5,7 @@
             <name>云云TV数据源</name>
             <description>从云云TV网站获取电影数据</description>
         </datasource>
-        <datasource class="org.example.get_movie_data.service.InternalMovieService" id="internal">
+        <datasource class="org.example.get_movie_data.datasource.InternalMovieService" id="internal">
             <name>内部数据源</name>
             <description>直接在主项目中定义的数据源示例</description>
         </datasource>

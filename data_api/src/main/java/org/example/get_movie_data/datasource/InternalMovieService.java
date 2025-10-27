@@ -1,14 +1,11 @@
-package org.example.get_movie_data.service;
+package org.example.get_movie_data.datasource;
 
 import org.example.get_movie_data.annotation.DataSource;
 import org.example.get_movie_data.model.Movie;
-import org.example.get_movie_data.util.HttpClientUtil;
-import org.example.get_movie_data.util.HtmlParserUtil;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
-import java.util.logging.Level;
 
 /**
  * 内部数据源服务实现
@@ -50,7 +47,7 @@ public class InternalMovieService {
             movie.setPoster(baseUrl + "/poster/" + i + ".jpg");
             movies.add(movie);
         }
-        
+
         logger.info("Returning " + movies.size() + " movies");
         return movies;
     }
