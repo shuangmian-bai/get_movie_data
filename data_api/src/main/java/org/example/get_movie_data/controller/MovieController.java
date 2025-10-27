@@ -17,6 +17,7 @@ import java.util.concurrent.*;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -100,11 +101,18 @@ public class MovieController {
             // 存储所有Future结果
             List<Future<List<Movie>>> futures = new ArrayList<>();
             
+            // 用于记录已完成的任务数
+            AtomicInteger completedTasks = new AtomicInteger(0);
+            final int totalTasks = (int) urlMappings.stream()
+                    .filter(mapping -> !"*".equals(mapping.getBaseUrl()))
+                    .count();
+            
             // 向每个URL映射提交任务
             for (int i = 0; i < urlMappings.size(); i++) {
                 DataSourceConfig.UrlMapping urlMapping = urlMappings.get(i);
                 // 跳过通配符匹配
                 if ("*".equals(urlMapping.getBaseUrl())) {
+                    //totalTasks--; // 减少总任务数
                     continue;
                 }
                 

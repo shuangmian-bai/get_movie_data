@@ -2,10 +2,8 @@ package org.example.get_movie_data.service;
 
 import org.example.get_movie_data.model.Movie;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,7 +12,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -22,6 +19,7 @@ import java.util.stream.Collectors;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 缓存管理器
@@ -54,6 +52,10 @@ public class CacheManager {
     
     // 定时清理服务
     private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
+    
+    // 用于记录缓存统计信息
+    private final AtomicInteger cacheHits = new AtomicInteger(0);
+    private final AtomicInteger cacheMisses = new AtomicInteger(0);
     
     public CacheManager() {
         // 启动定时清理任务
@@ -95,6 +97,15 @@ public class CacheManager {
         
         // 记录清理后的内存信息
         logMemoryUsage("after cleanup");
+        
+        // 记录缓存统计信息
+        int hits = cacheHits.get();
+        int misses = cacheMisses.get();
+        int total = hits + misses;
+        double hitRate = total > 0 ? (double) hits / total * 100 : 0;
+        
+        logger.info("Cache statistics - Hits: " + hits + ", Misses: " + misses + 
+                   ", Hit Rate: " + String.format("%.2f", hitRate) + "%");
     }
     
     /**
@@ -190,6 +201,7 @@ public class CacheManager {
         // 先检查内存缓存
         CacheEntry memoryEntry = memoryCache.get(cacheKey);
         if (memoryEntry != null && !memoryEntry.isExpired()) {
+            cacheHits.incrementAndGet();
             logger.info("Found search results in memory cache for key: " + cacheKey);
             logger.info("Cache will expire at: " + memoryEntry.getExpireTimeString());
             return (List<Movie>) memoryEntry.getData();
@@ -206,6 +218,7 @@ public class CacheManager {
                 
                 // 检查是否过期
                 if (!cacheFileContent.isExpired()) {
+                    cacheHits.incrementAndGet();
                     List<Movie> movies = cacheFileContent.getData();
                     
                     // 更新内存缓存
@@ -236,6 +249,7 @@ public class CacheManager {
             logger.info("No subset cache found");
         }
         
+        cacheMisses.incrementAndGet();
         return null;
     }
     
@@ -405,6 +419,7 @@ public class CacheManager {
         // 先检查内存缓存
         CacheEntry memoryEntry = memoryCache.get(cacheKey);
         if (memoryEntry != null && !memoryEntry.isExpired()) {
+            cacheHits.incrementAndGet();
             logger.info("Found episodes in memory cache for key: " + cacheKey);
             logger.info("Cache will expire at: " + memoryEntry.getExpireTimeString());
             return (List<Movie.Episode>) memoryEntry.getData();
@@ -420,6 +435,7 @@ public class CacheManager {
                 
                 // 检查是否过期
                 if (!cacheFileContent.isExpired()) {
+                    cacheHits.incrementAndGet();
                     List<Movie.Episode> episodes = cacheFileContent.getData();
                     
                     // 更新内存缓存
@@ -436,6 +452,7 @@ public class CacheManager {
             logger.log(Level.WARNING, "Error reading episodes from cache", e);
         }
         
+        cacheMisses.incrementAndGet();
         return null;
     }
     
@@ -483,6 +500,7 @@ public class CacheManager {
         // 先检查内存缓存
         CacheEntry memoryEntry = memoryCache.get(cacheKey);
         if (memoryEntry != null && !memoryEntry.isExpired()) {
+            cacheHits.incrementAndGet();
             logger.info("Found M3U8 URL in memory cache for key: " + cacheKey);
             logger.info("Cache will expire at: " + memoryEntry.getExpireTimeString());
             return (String) memoryEntry.getData();
@@ -498,6 +516,7 @@ public class CacheManager {
                 
                 // 检查是否过期
                 if (!cacheFileContent.isExpired()) {
+                    cacheHits.incrementAndGet();
                     String m3u8Url = cacheFileContent.getData();
                     
                     // 更新内存缓存
@@ -514,6 +533,7 @@ public class CacheManager {
             logger.log(Level.WARNING, "Error reading M3U8 URL from cache", e);
         }
         
+        cacheMisses.incrementAndGet();
         return null;
     }
     

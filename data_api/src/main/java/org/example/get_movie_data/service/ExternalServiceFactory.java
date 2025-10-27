@@ -1,7 +1,10 @@
 package org.example.get_movie_data.service;
 
+import org.example.get_movie_data.annotation.DataSource;
 import org.example.get_movie_data.model.Movie;
+import org.example.get_movie_data.util.AnnotationScanner;
 import java.io.File;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -11,6 +14,11 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.jar.JarFile;
+import java.util.jar.JarEntry;
+import java.util.Enumeration;
+import java.io.IOException;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 外部服务工厂类
@@ -25,10 +33,13 @@ public class ExternalServiceFactory {
     private static final Logger logger = Logger.getLogger(ExternalServiceFactory.class.getName());
     
     // 类加载器缓存，避免重复创建
-    private final Map<String, URLClassLoader> classLoaderCache = new HashMap<>();
+    private final Map<String, URLClassLoader> classLoaderCache = new ConcurrentHashMap<>();
     
     // 缓存管理器
     private final CacheManager cacheManager;
+    
+    // 主项目包名前缀
+    private static final String MAIN_PROJECT_PACKAGE = "org.example.get_movie_data";
     
     public ExternalServiceFactory(CacheManager cacheManager) {
         this.cacheManager = cacheManager;
@@ -44,6 +55,161 @@ public class ExternalServiceFactory {
     public MovieService createMovieService(String datasourceId, String className) {
         logger.info("Creating movie service for datasourceId: " + datasourceId + ", className: " + className);
 
+        try {
+            // 尝试直接从主项目类加载器加载类
+            Class<?> clazz = null;
+            try {
+                clazz = Class.forName(className);
+                logger.info("Successfully loaded class from main project: " + clazz.getName());
+            } catch (ClassNotFoundException e) {
+                // 如果在主项目中找不到，则尝试从外部JAR加载
+                logger.info("Class not found in main project, trying to load from external JAR");
+                clazz = loadClassFromExternalJars(datasourceId, className);
+            }
+            
+            if (clazz == null) {
+                logger.warning("Class not found: " + className);
+                return null;
+            }
+
+            // 检查类是否实现了ExternalMovieService接口
+            if (ExternalMovieService.class.isAssignableFrom(clazz)) {
+                logger.info("Class implements ExternalMovieService, creating adapter");
+                Object instance = clazz.getDeclaredConstructor().newInstance();
+                MovieService service = new ExternalMovieServiceAdapter((ExternalMovieService) instance);
+                // 添加缓存装饰器
+                return new CachedMovieService(service, cacheManager);
+            }
+
+            // 检查类是否实现了MovieService接口
+            if (MovieService.class.isAssignableFrom(clazz)) {
+                logger.info("Class implements MovieService, creating direct instance");
+                MovieService service = (MovieService) clazz.getDeclaredConstructor().newInstance();
+                // 添加缓存装饰器
+                return new CachedMovieService(service, cacheManager);
+            }
+
+            // 如果类没有实现任何接口，创建一个通用适配器
+            logger.info("Class does not implement required interface, creating generic adapter");
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+            MovieService service = new GenericExternalServiceAdapter(instance, clazz.getClassLoader());
+            // 添加缓存装饰器
+            return new CachedMovieService(service, cacheManager);
+        } catch (ClassNotFoundException e) {
+            // 仅记录日志，不打印完整堆栈跟踪，避免误导
+            logger.log(Level.INFO, "Class not found: " + className + " for datasource: " + datasourceId + 
+                       ". This is normal for optional data sources.", e);
+            return null;
+        } catch (Exception e) {
+            // 仅记录日志，不打印完整堆栈跟踪，避免误导
+            logger.log(Level.WARNING, "Error creating movie service for datasource: " + datasourceId + 
+                       ", class: " + className + ". Using default service instead.", e);
+            return null;
+        }
+    }
+    
+    /**
+     * 从外部JAR文件加载类
+     */
+    private Class<?> loadClassFromExternalJars(String datasourceId, String className) throws Exception {
+        // 创建URLClassLoader来加载libs目录下的jar文件
+        File libDir = new File("libs");
+        logger.info("Lib directory exists: " + libDir.exists());
+
+        if (!libDir.exists()) {
+            logger.warning("Lib directory does not exist");
+            return null;
+        }
+
+        File[] jarFiles = libDir.listFiles((dir, name) -> name.endsWith(".jar"));
+        logger.info("Found jar files: " + (jarFiles != null ? jarFiles.length : 0));
+
+        if (jarFiles == null || jarFiles.length == 0) {
+            logger.warning("No jar files found in lib directory");
+            return null;
+        }
+
+        // 创建新的类加载器用于加载插件
+        URL[] jarUrls = new URL[jarFiles.length];
+        for (int i = 0; i < jarFiles.length; i++) {
+            jarUrls[i] = jarFiles[i].toURI().toURL();
+            logger.info("Adding JAR to classpath: " + jarUrls[i]);
+        }
+
+        // 检查缓存中是否已有类加载器
+        URLClassLoader classLoader = classLoaderCache.get(datasourceId);
+        if (classLoader == null) {
+            classLoader = new URLClassLoader(jarUrls, Thread.currentThread().getContextClassLoader());
+            classLoaderCache.put(datasourceId, classLoader);
+            logger.info("Created new classloader for datasource: " + datasourceId);
+        } else {
+            logger.info("Using cached classloader for datasource: " + datasourceId);
+        }
+
+        // 尝试加载类
+        return classLoader.loadClass(className);
+    }
+    
+    /**
+     * 根据数据源ID查找并创建对应的电影服务实例
+     * 通过扫描JAR文件和主项目中的注解来发现服务实现
+     * 
+     * @param datasourceId 数据源ID
+     * @return 对应的电影服务实例
+     */
+    public MovieService createMovieServiceByAnnotation(String datasourceId) {
+        logger.info("Creating movie service by annotation for datasourceId: " + datasourceId);
+        
+        try {
+            // 首先尝试在主项目中查找带有@DataSource注解的类
+            MovieService mainProjectService = findAnnotatedClassInMainProject(datasourceId);
+            if (mainProjectService != null) {
+                logger.info("Found annotated class in main project for datasourceId: " + datasourceId);
+                return mainProjectService;
+            }
+            
+            // 如果在主项目中没找到，则在外部JAR中查找
+            MovieService externalService = findAnnotatedClassInExternalJars(datasourceId);
+            if (externalService != null) {
+                logger.info("Found annotated class in external JAR for datasourceId: " + datasourceId);
+                return externalService;
+            }
+            
+            logger.warning("No annotated class found for datasourceId: " + datasourceId);
+            return null;
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Error creating movie service by annotation for datasource: " + datasourceId, e);
+            return null;
+        }
+    }
+    
+    /**
+     * 在主项目中查找指定数据源ID的注解类
+     * 
+     * @param datasourceId 数据源ID
+     * @return 电影服务实例，如果未找到则返回null
+     */
+    private MovieService findAnnotatedClassInMainProject(String datasourceId) {
+        try {
+            // 使用AnnotationScanner扫描主项目中的注解类
+            String className = AnnotationScanner.findAnnotatedClassInMainProject(datasourceId);
+            if (className != null) {
+                logger.info("Found annotated class in main project: " + className);
+                return createMovieService(datasourceId, className);
+            }
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Error finding annotated class in main project for datasource: " + datasourceId, e);
+        }
+        return null;
+    }
+    
+    /**
+     * 在外部JAR文件中查找指定数据源ID的注解类
+     * 
+     * @param datasourceId 数据源ID
+     * @return 电影服务实例，如果未找到则返回null
+     */
+    private MovieService findAnnotatedClassInExternalJars(String datasourceId) {
         try {
             // 创建URLClassLoader来加载libs目录下的jar文件
             File libDir = new File("libs");
@@ -79,44 +245,56 @@ public class ExternalServiceFactory {
                 logger.info("Using cached classloader for datasource: " + datasourceId);
             }
 
-            // 尝试加载类
-            Class<?> clazz = classLoader.loadClass(className);
-            logger.info("Successfully loaded class: " + clazz.getName());
-
-            // 检查类是否实现了ExternalMovieService接口
-            if (ExternalMovieService.class.isAssignableFrom(clazz)) {
-                logger.info("Class implements ExternalMovieService, creating adapter");
-                Object instance = clazz.getDeclaredConstructor().newInstance();
-                MovieService service = new ExternalMovieServiceAdapter((ExternalMovieService) instance);
-                // 添加缓存装饰器
-                return new CachedMovieService(service, cacheManager);
+            // 扫描JAR文件查找带有@DataSource注解的类
+            for (File jarFile : jarFiles) {
+                String className = findAnnotatedClassInJar(jarFile, datasourceId);
+                if (className != null) {
+                    logger.info("Found annotated class: " + className + " in JAR: " + jarFile.getName());
+                    return createMovieService(datasourceId, className);
+                }
             }
-
-            // 检查类是否实现了MovieService接口
-            if (MovieService.class.isAssignableFrom(clazz)) {
-                logger.info("Class implements MovieService, creating direct instance");
-                MovieService service = (MovieService) clazz.getDeclaredConstructor().newInstance();
-                // 添加缓存装饰器
-                return new CachedMovieService(service, cacheManager);
-            }
-
-            // 如果类没有实现任何接口，创建一个通用适配器
-            logger.info("Class does not implement required interface, creating generic adapter");
-            Object instance = clazz.getDeclaredConstructor().newInstance();
-            MovieService service = new GenericExternalServiceAdapter(instance, classLoader);
-            // 添加缓存装饰器
-            return new CachedMovieService(service, cacheManager);
-        } catch (ClassNotFoundException e) {
-            // 仅记录日志，不打印完整堆栈跟踪，避免误导
-            logger.log(Level.INFO, "Class not found: " + className + " for datasource: " + datasourceId + 
-                       ". This is normal for optional data sources.", e);
-            return null;
         } catch (Exception e) {
-            // 仅记录日志，不打印完整堆栈跟踪，避免误导
-            logger.log(Level.WARNING, "Error creating movie service for datasource: " + datasourceId + 
-                       ", class: " + className + ". Using default service instead.", e);
-            return null;
+            logger.log(Level.WARNING, "Error finding annotated class in external JARs for datasource: " + datasourceId, e);
         }
+        return null;
+    }
+    
+    /**
+     * 在JAR文件中查找指定数据源ID的注解类
+     * 
+     * @param jarFile JAR文件
+     * @param datasourceId 数据源ID
+     * @return 类名，如果未找到则返回null
+     */
+    private String findAnnotatedClassInJar(File jarFile, String datasourceId) {
+        try (JarFile jar = new JarFile(jarFile)) {
+            Enumeration<JarEntry> entries = jar.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
+                if (entry.getName().endsWith(".class")) {
+                    String className = entry.getName()
+                            .replace('/', '.')
+                            .replace('\\', '.')
+                            .replace(".class", "");
+                    
+                    try {
+                        Class<?> clazz = Class.forName(className, false, 
+                                new URLClassLoader(new URL[]{jarFile.toURI().toURL()}));
+                        
+                        DataSource dataSourceAnnotation = clazz.getAnnotation(DataSource.class);
+                        if (dataSourceAnnotation != null && datasourceId.equals(dataSourceAnnotation.id())) {
+                            return className;
+                        }
+                    } catch (Exception e) {
+                        // 忽略无法加载的类
+                        logger.log(Level.FINE, "Could not load class: " + className, e);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            logger.log(Level.WARNING, "Error reading JAR file: " + jarFile.getName(), e);
+        }
+        return null;
     }
     
     /**

@@ -1,5 +1,6 @@
 package org.example.get_movie_data;
 
+import org.example.get_movie_data.config.AutoConfigGenerator;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.core.io.ClassPathResource;
@@ -19,16 +20,21 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.text.DecimalFormat;
+import java.util.concurrent.atomic.AtomicLong;
 
 @SpringBootApplication
 @EnableScheduling
 public class GetMovieDataApplication {
 
     private static final DecimalFormat DF = new DecimalFormat("#.##");
+    private static final AtomicLong startTime = new AtomicLong(System.currentTimeMillis());
 
     public static void main(String[] args) {
         // 确保在应用启动前config目录和必要的配置文件存在
         ensureConfigDirectoryAndFilesExist();
+        
+        // 生成自动配置
+        AutoConfigGenerator.generateConfig();
         
         SpringApplication.run(GetMovieDataApplication.class, args);
     }
@@ -76,8 +82,15 @@ public class GetMovieDataApplication {
             int peakThreadCount = threadBean.getPeakThreadCount();
             long totalStartedThreadCount = threadBean.getTotalStartedThreadCount();
             
+            // 计算运行时间
+            long uptime = System.currentTimeMillis() - startTime.get();
+            long hours = uptime / (1000 * 60 * 60);
+            long minutes = (uptime % (1000 * 60 * 60)) / (1000 * 60);
+            long seconds = (uptime % (1000 * 60)) / 1000;
+            
             // 打印系统资源使用情况
             System.out.println("======= 系统资源使用情况 =======");
+            System.out.println("运行时间: " + hours + "小时 " + minutes + "分钟 " + seconds + "秒");
             System.out.println("堆内存使用: " + heapUsed + "MB / " + heapMax + "MB (" + DF.format(heapUsagePercent) + "%)");
             System.out.println("堆内存已提交: " + heapCommitted + "MB");
             System.out.println("非堆内存使用: " + nonHeapUsed + "MB");
@@ -119,6 +132,15 @@ public class GetMovieDataApplication {
                 System.out.println("Libs directory " + (created ? "created" : "already exists") + ": " + libsDir.getAbsolutePath());
             } else {
                 System.out.println("Libs directory already exists: " + libsDir.getAbsolutePath());
+            }
+            
+            // 创建cache目录
+            File cacheDir = Paths.get("cache").toFile();
+            if (!cacheDir.exists()) {
+                boolean created = cacheDir.mkdirs();
+                System.out.println("Cache directory " + (created ? "created" : "already exists") + ": " + cacheDir.getAbsolutePath());
+            } else {
+                System.out.println("Cache directory already exists: " + cacheDir.getAbsolutePath());
             }
         } catch (Exception e) {
             System.err.println("Failed to create config directory or copy config file: " + e.getMessage());

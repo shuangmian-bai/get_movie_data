@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 电影服务管理器
@@ -30,7 +31,7 @@ public class MovieServiceManager {
     private ConfigManager configManager;
     
     // 服务实例缓存
-    private final Map<String, MovieService> serviceCache = new HashMap<>();
+    private final Map<String, MovieService> serviceCache = new ConcurrentHashMap<>();
     
     // 缓存管理器
     private CacheManager cacheManager;
@@ -165,6 +166,12 @@ public class MovieServiceManager {
         DataSourceConfig dataSourceConfig = configManager.getConfig();
         if (dataSourceConfig.getDatasources() == null) {
             logger.warning("No datasources configured");
+            // 尝试通过注解方式创建服务
+            MovieService service = externalServiceFactory.createMovieServiceByAnnotation(datasourceId);
+            if (service != null) {
+                logger.info("Created service by annotation for datasourceId: " + datasourceId);
+                return service;
+            }
             return null;
         }
         
@@ -177,16 +184,25 @@ public class MovieServiceManager {
             }
         }
         
-        if (datasourceConfigEntry == null) {
-            logger.warning("Datasource configuration not found for id: " + datasourceId);
-            return null;
+        // 如果找到配置，使用配置方式创建服务
+        if (datasourceConfigEntry != null) {
+            String className = datasourceConfigEntry.getClazz();
+            logger.info("Found class name: " + className);
+            
+            // 使用外部服务工厂创建服务实例
+            return externalServiceFactory.createMovieService(datasourceId, className);
         }
         
-        String className = datasourceConfigEntry.getClazz();
-        logger.info("Found class name: " + className);
+        // 否则尝试通过注解方式创建服务
+        logger.info("Datasource configuration not found for id: " + datasourceId + ", trying annotation-based creation");
+        MovieService service = externalServiceFactory.createMovieServiceByAnnotation(datasourceId);
+        if (service != null) {
+            logger.info("Created service by annotation for datasourceId: " + datasourceId);
+            return service;
+        }
         
-        // 使用外部服务工厂创建服务实例
-        return externalServiceFactory.createMovieService(datasourceId, className);
+        logger.warning("Failed to create service for datasourceId: " + datasourceId);
+        return null;
     }
     
     /**

@@ -78,6 +78,27 @@
 			<version>2.15.2</version>
 		</dependency>
 		
+		<!-- OkHttp HTTP client -->
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>okhttp</artifactId>
+			<version>4.10.0</version>
+		</dependency>
+		
+		<!-- Jsoup HTML parser -->
+		<dependency>
+			<groupId>org.jsoup</groupId>
+			<artifactId>jsoup</artifactId>
+			<version>1.15.3</version>
+		</dependency>
+		
+		<!-- Reflections for annotation scanning -->
+		<dependency>
+			<groupId>org.reflections</groupId>
+			<artifactId>reflections</artifactId>
+			<version>0.10.2</version>
+		</dependency>
+		
 		<!-- Swagger UI for API documentation -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
@@ -89,6 +110,34 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		
+		<!-- JUnit Jupiter for testing -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		
+		<!-- Hamcrest for testing assertions -->
+		<dependency>
+			<groupId>org.hamcrest</groupId>
+			<artifactId>hamcrest</artifactId>
+			<scope>test</scope>
+		</dependency>
+		
+		<!-- Google Gson for JSON parsing -->
+		<dependency>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+			<version>2.10.1</version>
+		</dependency>
+	
+		<!-- Apache Commons Text for string manipulation -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-text</artifactId>
+			<version>1.10.0</version>
 		</dependency>
 	</dependencies>
 
@@ -141,7 +190,48 @@
 					</execution>
 				</executions>
 			</plugin>
-		</plugins>
+			
+			<!-- Maven Assembly Plugin for packaging DataSource classes -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<version>3.3.0</version>
+				<configuration>
+					<descriptorSourceDirectory>src/assembly</descriptorSourceDirectory>
+				</configuration>
+				<executions>
+					<execution>
+						<id>package-data-sources</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+            
+            <!-- Maven Exec Plugin for running DataSourcePackager -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>package-data-sources</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>org.example.get_movie_data.build.ImprovedDataSourcePackager</mainClass>
+                            <arguments>
+                                <argument>package</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
 		
 		<!-- 资源配置 -->
 		<resources>
