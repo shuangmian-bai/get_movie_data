@@ -23,6 +23,8 @@ import java.util.logging.Level;
  */
 public class ImprovedDataSourcePackager {
     
+    private static Set<Class<?>> packagedClasses = new HashSet<>();
+    
     private static final Logger logger = Logger.getLogger(ImprovedDataSourcePackager.class.getName());
     
     private static final String MAIN_PROJECT_PACKAGE = "org.example.get_movie_data";
@@ -32,14 +34,54 @@ public class ImprovedDataSourcePackager {
     public static void main(String[] args) {
         if (args.length > 0 && "package".equals(args[0])) {
             packageDataSources();
+            // 删除主classes目录中已打包的DataSource类
+            removePackagedClasses();
         } else {
             System.out.println("Usage: ImprovedDataSourcePackager package");
         }
     }
     
     /**
+     * 删除主classes目录中已打包的DataSource类
+     */
+    private static void removePackagedClasses() {
+        try {
+            for (Class<?> clazz : packagedClasses) {
+                String classPath = clazz.getName().replace('.', '/') + ".class";
+                Path classFile = Paths.get(CLASSES_DIR, classPath);
+                if (Files.exists(classFile)) {
+                    Files.delete(classFile);
+                    logger.info("已从主classes目录删除文件: " + classPath);
+                }
+                
+                // 删除内部类文件
+                String classFileName = clazz.getSimpleName() + "$";
+                String classPathPrefix = clazz.getPackageName().replace('.', '/');
+                Path classesDir = Paths.get(CLASSES_DIR, classPathPrefix);
+                
+                if (Files.exists(classesDir) && Files.isDirectory(classesDir)) {
+                    Files.walk(classesDir)
+                        .filter(path -> path.getFileName().toString().startsWith(classFileName))
+                        .filter(path -> path.toString().endsWith(".class"))
+                        .forEach(path -> {
+                            try {
+                                Files.delete(path);
+                                logger.info("已从主classes目录删除内部类文件: " + path);
+                            } catch (IOException e) {
+                                logger.log(Level.WARNING, "删除内部类文件时出错: " + path, e);
+                            }
+                        });
+                }
+            }
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "删除已打包的类文件时出错", e);
+        }
+    }
+    
+    /**
      * 打包数据源类
      */
+    
     public static void packageDataSources() {
         try {
             // 确保libs目录存在
@@ -47,6 +89,7 @@ public class ImprovedDataSourcePackager {
             
             // 查找所有带@DataSource注解的类
             Set<Class<?>> dataSourceClasses = findDataSourceAnnotatedClasses();
+            packagedClasses = dataSourceClasses;
             
             // 为每个数据源类创建独立的JAR文件
             for (Class<?> clazz : dataSourceClasses) {
