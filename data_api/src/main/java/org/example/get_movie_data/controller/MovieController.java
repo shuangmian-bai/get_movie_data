@@ -44,9 +44,6 @@ public class MovieController {
     
     // 限制最大并发数，避免网络资源紧张
     private static final int MAX_CONCURRENT_REQUESTS = 3;
-    
-    // 请求间隔（毫秒），避免过于频繁的请求
-    private static final int REQUEST_INTERVAL_MS = 500;
 
     @Autowired
     private MovieServiceManager movieServiceManager;
@@ -91,43 +88,23 @@ public class MovieController {
             return new ArrayList<>();
         }
         
-        // 使用信号量限制最大并发数
-        Semaphore semaphore = new Semaphore(MAX_CONCURRENT_REQUESTS);
-        
         // 创建线程池，限制并发线程数
         ExecutorService executor = Executors.newFixedThreadPool(MAX_CONCURRENT_REQUESTS);
         
         try {
-            // 存储所有Future结果
-            List<Future<List<Movie>>> futures = new ArrayList<>();
-            
-            // 用于记录已完成的任务数
-            AtomicInteger completedTasks = new AtomicInteger(0);
-            final int totalTasks = (int) urlMappings.stream()
-                    .filter(mapping -> !"*".equals(mapping.getBaseUrl()))
-                    .count();
+            // 存储所有CompletableFuture结果
+            List<CompletableFuture<List<Movie>>> futures = new ArrayList<>();
             
             // 向每个URL映射提交任务
             for (int i = 0; i < urlMappings.size(); i++) {
                 DataSourceConfig.UrlMapping urlMapping = urlMappings.get(i);
                 // 跳过通配符匹配
                 if ("*".equals(urlMapping.getBaseUrl())) {
-                    //totalTasks--; // 减少总任务数
                     continue;
                 }
                 
-                // 在提交任务前增加延迟，避免同时发起大量请求
-                final int index = i; // 保存循环索引用于日志
-                Future<List<Movie>> future = executor.submit(() -> {
+                CompletableFuture<List<Movie>> future = CompletableFuture.supplyAsync(() -> {
                     try {
-                        // 获取信号量许可
-                        semaphore.acquire();
-                        
-                        // 添加请求间隔，避免过于频繁的请求
-                        if (index > 0) {
-                            Thread.sleep(REQUEST_INTERVAL_MS);
-                        }
-                        
                         logger.info("Searching movies from URL: " + urlMapping.getBaseUrl());
                         // 直接调用内部方法而不是通过HTTP请求
                         MovieService service = movieServiceManager.getMovieServiceByBaseUrl(urlMapping.getBaseUrl());
@@ -144,26 +121,38 @@ public class MovieController {
                     } catch (Exception e) {
                         logger.log(Level.WARNING, "Error searching movies from URL " + urlMapping.getBaseUrl(), e);
                         return new ArrayList<>();
-                    } finally {
-                        // 释放信号量许可
-                        semaphore.release();
                     }
-                });
+                }, executor);
                 futures.add(future);
             }
             
-            // 收集所有结果
+            // 等待所有任务完成并收集结果
             List<Movie> allMovies = new ArrayList<>();
-            for (Future<List<Movie>> future : futures) {
-                try {
-                    List<Movie> movies = future.get(30, TimeUnit.SECONDS); // 30秒超时
-                    allMovies.addAll(movies);
-                } catch (TimeoutException e) {
-                    logger.log(Level.WARNING, "Timeout getting result from future", e);
-                    future.cancel(true); // 取消任务
-                } catch (Exception e) {
-                    logger.log(Level.WARNING, "Error getting result from future", e);
+            CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                futures.toArray(new CompletableFuture[0])
+            );
+            
+            try {
+                // 等待所有任务完成，最多等待30秒
+                allFutures.get(30, TimeUnit.SECONDS);
+                
+                // 收集所有结果
+                for (CompletableFuture<List<Movie>> future : futures) {
+                    allMovies.addAll(future.getNow(new ArrayList<>()));
                 }
+            } catch (TimeoutException e) {
+                logger.log(Level.WARNING, "Timeout waiting for all futures to complete", e);
+                // 取消所有未完成的任务
+                futures.forEach(f -> f.cancel(true));
+            } catch (InterruptedException e) {
+                logger.log(Level.WARNING, "Interrupted while waiting for futures to complete", e);
+                Thread.currentThread().interrupt();
+                // 取消所有未完成的任务
+                futures.forEach(f -> f.cancel(true));
+            } catch (ExecutionException e) {
+                logger.log(Level.WARNING, "Error while executing futures", e);
+                // 取消所有未完成的任务
+                futures.forEach(f -> f.cancel(true));
             }
             
             // 集中输出从各数据源获取到的数据信息

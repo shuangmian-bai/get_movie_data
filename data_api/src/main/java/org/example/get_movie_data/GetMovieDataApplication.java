@@ -6,9 +6,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-import org.springframework.context.annotation.Bean;
 
 import java.io.File;
 import java.io.InputStream;
@@ -41,25 +38,6 @@ public class GetMovieDataApplication {
         }
         
         SpringApplication.run(GetMovieDataApplication.class, args);
-    }
-    
-    /**
-     * 配置全局CORS支持
-     */
-    @Bean
-    public WebMvcConfigurer corsConfigurer() {
-        return new WebMvcConfigurer() {
-            @Override
-            public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/**")
-                    .allowedOriginPatterns("*")
-                    .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                    .allowedHeaders("*")
-                    .exposedHeaders("*")
-                    .allowCredentials(false)
-                    .maxAge(3600);
-            }
-        };
     }
     
     /**

@@ -13,6 +13,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
@@ -264,7 +265,7 @@ public class CacheManager {
         logger.info("getSubsetFromExistingCache called with baseUrl: " + baseUrl + ", keyword: " + keyword);
         
         // 遍历内存缓存查找可能的父级缓存
-        for (ConcurrentHashMap.Entry<String, CacheEntry> entry : memoryCache.entrySet()) {
+        for (Map.Entry<String, CacheEntry> entry : memoryCache.entrySet()) {
             String key = entry.getKey();
             CacheEntry cacheEntry = entry.getValue();
             logger.info("Checking memory cache entry: " + key);
