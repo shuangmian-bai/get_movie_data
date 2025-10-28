@@ -11,6 +11,8 @@ import javax.xml.bind.Unmarshaller;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Paths;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 数据源配置加载器
@@ -40,29 +42,12 @@ public class DataSourceConfigLoader {
             File externalConfig = Paths.get("config", "movie-data-config.xml").toFile();
             System.out.println("Loading configuration from external file: " + externalConfig.getAbsolutePath());
             
+            DataSourceConfig config;
             if (externalConfig.exists()) {
                 JAXBContext context = JAXBContext.newInstance(DataSourceConfig.class);
                 Unmarshaller unmarshaller = context.createUnmarshaller();
-                DataSourceConfig config = (DataSourceConfig) unmarshaller.unmarshal(externalConfig);
+                config = (DataSourceConfig) unmarshaller.unmarshal(externalConfig);
                 System.out.println("Successfully loaded external configuration");
-                
-                // 输出加载结果用于调试
-                System.out.println("External configuration loaded:");
-                if (config.getDatasources() != null) {
-                    System.out.println("Datasources count: " + config.getDatasources().size());
-                    for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
-                        System.out.println("  - " + datasource.getId() + " -> " + datasource.getClazz());
-                    }
-                }
-                
-                if (config.getUrlMappings() != null) {
-                    System.out.println("URL mappings count: " + config.getUrlMappings().size());
-                    for (DataSourceConfig.UrlMapping mapping : config.getUrlMappings()) {
-                        System.out.println("  - " + mapping.getBaseUrl() + " -> " + mapping.getDatasource());
-                    }
-                }
-                
-                return config;
             } else {
                 System.out.println("External configuration file not found at: " + externalConfig.getAbsolutePath());
                 
@@ -80,32 +65,67 @@ public class DataSourceConfigLoader {
                 Unmarshaller unmarshaller = context.createUnmarshaller();
                 
                 // 解析XML配置文件
-                DataSourceConfig config = (DataSourceConfig) unmarshaller.unmarshal(inputStream);
+                config = (DataSourceConfig) unmarshaller.unmarshal(inputStream);
                 
-                // 输出加载结果用于调试
                 System.out.println("Successfully loaded internal configuration:");
                 System.out.println("Config object: " + config);
-                
-                if (config.getDatasources() != null) {
-                    System.out.println("Datasources count: " + config.getDatasources().size());
-                    for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
-                        System.out.println("  - " + datasource.getId() + " -> " + datasource.getClazz());
-                    }
-                }
-                
-                if (config.getUrlMappings() != null) {
-                    System.out.println("URL mappings count: " + config.getUrlMappings().size());
-                    for (DataSourceConfig.UrlMapping mapping : config.getUrlMappings()) {
-                        System.out.println("  - " + mapping.getBaseUrl() + " -> " + mapping.getDatasource());
-                    }
-                }
-                
-                return config;
             }
+            
+            // 对配置进行去重处理
+            removeDuplicates(config);
+            
+            // 输出加载结果用于调试
+            System.out.println("Configuration loaded:");
+            if (config.getDatasources() != null) {
+                System.out.println("Datasources count: " + config.getDatasources().size());
+                for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
+                    System.out.println("  - " + datasource.getId() + " -> " + datasource.getClazz());
+                }
+            }
+            
+            if (config.getUrlMappings() != null) {
+                System.out.println("URL mappings count: " + config.getUrlMappings().size());
+                for (DataSourceConfig.UrlMapping mapping : config.getUrlMappings()) {
+                    System.out.println("  - " + mapping.getBaseUrl() + " -> " + mapping.getDatasource());
+                }
+            }
+            
+            return config;
         } catch (Exception e) {
             System.err.println("Failed to load configuration file:");
             e.printStackTrace();
             return new DataSourceConfig(); // 返回空配置而不是null
+        }
+    }
+    
+    /**
+     * 移除配置中的重复项
+     * 
+     * @param config 配置对象
+     */
+    private void removeDuplicates(DataSourceConfig config) {
+        if (config.getDatasources() != null) {
+            // 基于ID去重数据源
+            Map<String, DataSourceConfig.Datasource> uniqueDatasources = new LinkedHashMap<>();
+            for (DataSourceConfig.Datasource datasource : config.getDatasources()) {
+                // 如果ID已经存在，保留第一个出现的
+                if (!uniqueDatasources.containsKey(datasource.getId())) {
+                    uniqueDatasources.put(datasource.getId(), datasource);
+                }
+            }
+            config.setDatasources(new ArrayList<>(uniqueDatasources.values()));
+        }
+        
+        if (config.getUrlMappings() != null) {
+            // 基于baseUrl去重URL映射
+            Map<String, DataSourceConfig.UrlMapping> uniqueUrlMappings = new LinkedHashMap<>();
+            for (DataSourceConfig.UrlMapping urlMapping : config.getUrlMappings()) {
+                // 如果baseUrl已经存在，保留第一个出现的
+                if (!uniqueUrlMappings.containsKey(urlMapping.getBaseUrl())) {
+                    uniqueUrlMappings.put(urlMapping.getBaseUrl(), urlMapping);
+                }
+            }
+            config.setUrlMappings(new ArrayList<>(uniqueUrlMappings.values()));
         }
     }
 }

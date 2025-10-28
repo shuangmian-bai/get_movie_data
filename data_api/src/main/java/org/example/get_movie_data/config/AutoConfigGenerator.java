@@ -14,7 +14,9 @@ import javax.xml.transform.stream.StreamResult;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarFile;
 import java.util.jar.JarEntry;
@@ -64,8 +66,35 @@ public class AutoConfigGenerator {
             rootElement.appendChild(urlMappingsElement);
             
             // 扫描主项目和JAR文件查找数据源
-            scanMainProjectForDataSources(datasourcesElement, urlMappingsElement, doc);
-            scanJarsForDataSources(datasourcesElement, urlMappingsElement, doc);
+            Map<String, DataSourceInfo> uniqueDataSources = new LinkedHashMap<>();
+            scanMainProjectForDataSources(uniqueDataSources);
+            scanJarsForDataSources(uniqueDataSources);
+            
+            // 将去重后的数据源添加到XML文档中
+            for (DataSourceInfo dataSourceInfo : uniqueDataSources.values()) {
+                // 创建datasource元素
+                Element datasourceElement = doc.createElement("datasource");
+                datasourceElement.setAttribute("id", dataSourceInfo.id);
+                datasourceElement.setAttribute("class", dataSourceInfo.className);
+                
+                Element nameElement = doc.createElement("name");
+                nameElement.setTextContent(dataSourceInfo.name);
+                datasourceElement.appendChild(nameElement);
+                
+                Element descriptionElement = doc.createElement("description");
+                descriptionElement.setTextContent(dataSourceInfo.description);
+                datasourceElement.appendChild(descriptionElement);
+                
+                datasourcesElement.appendChild(datasourceElement);
+                
+                // 如果有baseUrl，创建urlMapping元素
+                if (!dataSourceInfo.baseUrl.isEmpty()) {
+                    Element urlMappingElement = doc.createElement("urlMapping");
+                    urlMappingElement.setAttribute("baseUrl", dataSourceInfo.baseUrl);
+                    urlMappingElement.setAttribute("datasource", dataSourceInfo.id);
+                    urlMappingsElement.appendChild(urlMappingElement);
+                }
+            }
             
             // 添加通配符匹配作为默认数据源
             Element urlMappingElement = doc.createElement("urlMapping");
@@ -85,51 +114,37 @@ public class AutoConfigGenerator {
     /**
      * 扫描主项目查找数据源注解
      */
-    private static void scanMainProjectForDataSources(Element datasourcesElement, Element urlMappingsElement, Document doc) {
+    private static void scanMainProjectForDataSources(Map<String, DataSourceInfo> uniqueDataSources) {
         try {
             // 使用AnnotationScanner查找主项目中的注解类
             Set<Class<?>> annotatedClasses = AnnotationScanner.findAllAnnotatedClasses();
-            
-            // 用于跟踪已处理的数据源ID，避免重复
-            Set<String> processedIds = new HashSet<>();
             
             for (Class<?> clazz : annotatedClasses) {
                 DataSource dataSourceAnnotation = clazz.getAnnotation(DataSource.class);
                 
                 if (dataSourceAnnotation != null) {
                     String datasourceId = dataSourceAnnotation.id();
+                    String className = clazz.getName();
                     
-                    // 检查是否已处理过此ID
-                    if (processedIds.contains(datasourceId)) {
-                        logger.info("Skipping duplicate datasource: " + datasourceId);
+                    // 检查是否已处理过此ID或类名
+                    if (uniqueDataSources.containsKey(datasourceId)) {
+                        logger.info("Skipping duplicate datasource ID: " + datasourceId);
                         continue;
                     }
                     
-                    processedIds.add(datasourceId);
-                    logger.info("Found DataSource annotation in class: " + clazz.getName());
-                    
-                    // 创建datasource元素
-                    Element datasourceElement = doc.createElement("datasource");
-                    datasourceElement.setAttribute("id", datasourceId);
-                    datasourceElement.setAttribute("class", clazz.getName());
-                    
-                    Element nameElement = doc.createElement("name");
-                    nameElement.setTextContent(dataSourceAnnotation.name());
-                    datasourceElement.appendChild(nameElement);
-                    
-                    Element descriptionElement = doc.createElement("description");
-                    descriptionElement.setTextContent(dataSourceAnnotation.description());
-                    datasourceElement.appendChild(descriptionElement);
-                    
-                    datasourcesElement.appendChild(datasourceElement);
-                    
-                    // 如果有baseUrl，创建urlMapping元素
-                    if (!dataSourceAnnotation.baseUrl().isEmpty()) {
-                        Element urlMappingElement = doc.createElement("urlMapping");
-                        urlMappingElement.setAttribute("baseUrl", dataSourceAnnotation.baseUrl());
-                        urlMappingElement.setAttribute("datasource", datasourceId);
-                        urlMappingsElement.appendChild(urlMappingElement);
+                    if (containsClass(uniqueDataSources, className)) {
+                        logger.info("Skipping duplicate datasource class: " + className);
+                        continue;
                     }
+                    
+                    uniqueDataSources.put(datasourceId, new DataSourceInfo(
+                        datasourceId,
+                        className,
+                        dataSourceAnnotation.name(),
+                        dataSourceAnnotation.description(),
+                        dataSourceAnnotation.baseUrl()
+                    ));
+                    logger.info("Found DataSource annotation in class: " + clazz.getName());
                 }
             }
         } catch (Exception e) {
@@ -140,7 +155,7 @@ public class AutoConfigGenerator {
     /**
      * 扫描JAR文件查找数据源注解
      */
-    private static void scanJarsForDataSources(Element datasourcesElement, Element urlMappingsElement, Document doc) {
+    private static void scanJarsForDataSources(Map<String, DataSourceInfo> uniqueDataSources) {
         File libDir = new File(LIBS_DIR);
         if (!libDir.exists()) {
             logger.warning("Lib directory does not exist: " + LIBS_DIR);
@@ -153,18 +168,15 @@ public class AutoConfigGenerator {
             return;
         }
         
-        // 用于跟踪已处理的数据源ID，避免重复
-        Set<String> processedIds = new HashSet<>();
-        
         for (File jarFile : jarFiles) {
-            scanJarForDataSources(jarFile, datasourcesElement, urlMappingsElement, doc, processedIds);
+            scanJarForDataSources(jarFile, uniqueDataSources);
         }
     }
     
     /**
      * 扫描单个JAR文件查找数据源注解
      */
-    private static void scanJarForDataSources(File jarFile, Element datasourcesElement, Element urlMappingsElement, Document doc, Set<String> processedIds) {
+    private static void scanJarForDataSources(File jarFile, Map<String, DataSourceInfo> uniqueDataSources) {
         try (JarFile jar = new JarFile(jarFile)) {
             URLClassLoader classLoader = new URLClassLoader(new URL[]{jarFile.toURI().toURL()});
             
@@ -184,37 +196,25 @@ public class AutoConfigGenerator {
                         if (dataSourceAnnotation != null) {
                             String datasourceId = dataSourceAnnotation.id();
                             
-                            // 检查是否已处理过此ID
-                            if (processedIds.contains(datasourceId)) {
-                                logger.info("Skipping duplicate datasource from JAR: " + datasourceId);
+                            // 检查是否已处理过此ID或类名
+                            if (uniqueDataSources.containsKey(datasourceId)) {
+                                logger.info("Skipping duplicate datasource ID from JAR: " + datasourceId);
                                 continue;
                             }
                             
-                            processedIds.add(datasourceId);
-                            logger.info("Found DataSource annotation in class: " + className);
-                            
-                            // 创建datasource元素
-                            Element datasourceElement = doc.createElement("datasource");
-                            datasourceElement.setAttribute("id", datasourceId);
-                            datasourceElement.setAttribute("class", className);
-                            
-                            Element nameElement = doc.createElement("name");
-                            nameElement.setTextContent(dataSourceAnnotation.name());
-                            datasourceElement.appendChild(nameElement);
-                            
-                            Element descriptionElement = doc.createElement("description");
-                            descriptionElement.setTextContent(dataSourceAnnotation.description());
-                            datasourceElement.appendChild(descriptionElement);
-                            
-                            datasourcesElement.appendChild(datasourceElement);
-                            
-                            // 如果有baseUrl，创建urlMapping元素
-                            if (!dataSourceAnnotation.baseUrl().isEmpty()) {
-                                Element urlMappingElement = doc.createElement("urlMapping");
-                                urlMappingElement.setAttribute("baseUrl", dataSourceAnnotation.baseUrl());
-                                urlMappingElement.setAttribute("datasource", datasourceId);
-                                urlMappingsElement.appendChild(urlMappingElement);
+                            if (containsClass(uniqueDataSources, className)) {
+                                logger.info("Skipping duplicate datasource class from JAR: " + className);
+                                continue;
                             }
+                            
+                            uniqueDataSources.put(datasourceId, new DataSourceInfo(
+                                datasourceId,
+                                className,
+                                dataSourceAnnotation.name(),
+                                dataSourceAnnotation.description(),
+                                dataSourceAnnotation.baseUrl()
+                            ));
+                            logger.info("Found DataSource annotation in class: " + className);
                         }
                     } catch (Exception e) {
                         logger.log(Level.FINE, "Could not load class: " + className, e);
@@ -224,6 +224,18 @@ public class AutoConfigGenerator {
         } catch (IOException e) {
             logger.log(Level.WARNING, "Error reading JAR file: " + jarFile.getName(), e);
         }
+    }
+    
+    /**
+     * 检查是否已包含指定类名的数据源
+     */
+    private static boolean containsClass(Map<String, DataSourceInfo> uniqueDataSources, String className) {
+        for (DataSourceInfo info : uniqueDataSources.values()) {
+            if (info.className.equals(className)) {
+                return true;
+            }
+        }
+        return false;
     }
     
     /**
@@ -239,5 +251,31 @@ public class AutoConfigGenerator {
         
         transformer.transform(source, result);
         logger.info("Config file written to: " + CONFIG_FILE);
+    }
+    
+    /**
+     * 数据源信息内部类
+     */
+    private static class DataSourceInfo {
+        final String id;
+        final String className;
+        final String name;
+        final String description;
+        final String baseUrl;
+        
+        DataSourceInfo(String id, String className, String name, String description, String baseUrl) {
+            this.id = id;
+            this.className = className;
+            this.name = name;
+            this.description = description;
+            this.baseUrl = baseUrl;
+        }
+    }
+    
+    /**
+     * 主方法，用于测试自动配置生成
+     */
+    public static void main(String[] args) {
+        generateConfig();
     }
 }
