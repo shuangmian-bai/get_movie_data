@@ -14,10 +14,11 @@ import javax.xml.transform.stream.StreamResult;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.jar.JarFile;
 import java.util.jar.JarEntry;
 import java.util.Enumeration;
-import java.util.Set;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.io.IOException;
@@ -36,7 +37,7 @@ public class AutoConfigGenerator {
     private static final Logger logger = Logger.getLogger(AutoConfigGenerator.class.getName());
     
     private static final String LIBS_DIR = "libs";
-    private static final String CONFIG_FILE = "src/main/resources/config/movie-data-config.xml";
+    private static final String CONFIG_FILE = "config/movie-data-config.xml";
     
     /**
      * 生成自动配置文件
@@ -69,7 +70,7 @@ public class AutoConfigGenerator {
             // 添加通配符匹配作为默认数据源
             Element urlMappingElement = doc.createElement("urlMapping");
             urlMappingElement.setAttribute("baseUrl", "*");
-            urlMappingElement.setAttribute("datasource", "default");
+            urlMappingElement.setAttribute("datasource", "internal");
             urlMappingsElement.appendChild(urlMappingElement);
             
             // 写入文件
@@ -89,15 +90,27 @@ public class AutoConfigGenerator {
             // 使用AnnotationScanner查找主项目中的注解类
             Set<Class<?>> annotatedClasses = AnnotationScanner.findAllAnnotatedClasses();
             
+            // 用于跟踪已处理的数据源ID，避免重复
+            Set<String> processedIds = new HashSet<>();
+            
             for (Class<?> clazz : annotatedClasses) {
                 DataSource dataSourceAnnotation = clazz.getAnnotation(DataSource.class);
                 
                 if (dataSourceAnnotation != null) {
+                    String datasourceId = dataSourceAnnotation.id();
+                    
+                    // 检查是否已处理过此ID
+                    if (processedIds.contains(datasourceId)) {
+                        logger.info("Skipping duplicate datasource: " + datasourceId);
+                        continue;
+                    }
+                    
+                    processedIds.add(datasourceId);
                     logger.info("Found DataSource annotation in class: " + clazz.getName());
                     
                     // 创建datasource元素
                     Element datasourceElement = doc.createElement("datasource");
-                    datasourceElement.setAttribute("id", dataSourceAnnotation.id());
+                    datasourceElement.setAttribute("id", datasourceId);
                     datasourceElement.setAttribute("class", clazz.getName());
                     
                     Element nameElement = doc.createElement("name");
@@ -114,7 +127,7 @@ public class AutoConfigGenerator {
                     if (!dataSourceAnnotation.baseUrl().isEmpty()) {
                         Element urlMappingElement = doc.createElement("urlMapping");
                         urlMappingElement.setAttribute("baseUrl", dataSourceAnnotation.baseUrl());
-                        urlMappingElement.setAttribute("datasource", dataSourceAnnotation.id());
+                        urlMappingElement.setAttribute("datasource", datasourceId);
                         urlMappingsElement.appendChild(urlMappingElement);
                     }
                 }
@@ -140,15 +153,18 @@ public class AutoConfigGenerator {
             return;
         }
         
+        // 用于跟踪已处理的数据源ID，避免重复
+        Set<String> processedIds = new HashSet<>();
+        
         for (File jarFile : jarFiles) {
-            scanJarForDataSources(jarFile, datasourcesElement, urlMappingsElement, doc);
+            scanJarForDataSources(jarFile, datasourcesElement, urlMappingsElement, doc, processedIds);
         }
     }
     
     /**
      * 扫描单个JAR文件查找数据源注解
      */
-    private static void scanJarForDataSources(File jarFile, Element datasourcesElement, Element urlMappingsElement, Document doc) {
+    private static void scanJarForDataSources(File jarFile, Element datasourcesElement, Element urlMappingsElement, Document doc, Set<String> processedIds) {
         try (JarFile jar = new JarFile(jarFile)) {
             URLClassLoader classLoader = new URLClassLoader(new URL[]{jarFile.toURI().toURL()});
             
@@ -166,11 +182,20 @@ public class AutoConfigGenerator {
                         DataSource dataSourceAnnotation = clazz.getAnnotation(DataSource.class);
                         
                         if (dataSourceAnnotation != null) {
+                            String datasourceId = dataSourceAnnotation.id();
+                            
+                            // 检查是否已处理过此ID
+                            if (processedIds.contains(datasourceId)) {
+                                logger.info("Skipping duplicate datasource from JAR: " + datasourceId);
+                                continue;
+                            }
+                            
+                            processedIds.add(datasourceId);
                             logger.info("Found DataSource annotation in class: " + className);
                             
                             // 创建datasource元素
                             Element datasourceElement = doc.createElement("datasource");
-                            datasourceElement.setAttribute("id", dataSourceAnnotation.id());
+                            datasourceElement.setAttribute("id", datasourceId);
                             datasourceElement.setAttribute("class", className);
                             
                             Element nameElement = doc.createElement("name");
@@ -187,7 +212,7 @@ public class AutoConfigGenerator {
                             if (!dataSourceAnnotation.baseUrl().isEmpty()) {
                                 Element urlMappingElement = doc.createElement("urlMapping");
                                 urlMappingElement.setAttribute("baseUrl", dataSourceAnnotation.baseUrl());
-                                urlMappingElement.setAttribute("datasource", dataSourceAnnotation.id());
+                                urlMappingElement.setAttribute("datasource", datasourceId);
                                 urlMappingsElement.appendChild(urlMappingElement);
                             }
                         }

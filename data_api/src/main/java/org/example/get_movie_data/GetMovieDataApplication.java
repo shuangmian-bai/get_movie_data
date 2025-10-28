@@ -33,8 +33,12 @@ public class GetMovieDataApplication {
         // 确保在应用启动前config目录和必要的配置文件存在
         ensureConfigDirectoryAndFilesExist();
         
-        // 生成自动配置
-        AutoConfigGenerator.generateConfig();
+        // 只有在配置文件不存在时才生成自动配置
+        File configFile = Paths.get("config", "movie-data-config.xml").toFile();
+        if (!configFile.exists()) {
+            // 生成自动配置
+            AutoConfigGenerator.generateConfig();
+        }
         
         SpringApplication.run(GetMovieDataApplication.class, args);
     }
