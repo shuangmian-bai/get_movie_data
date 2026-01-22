@@ -1,5 +1,4 @@
-packageorg.example.get_movie_data.config;
-
+package org.example.get_movie_data.config;
 import org.example.get_movie_data.service.DataSourceConfig;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
