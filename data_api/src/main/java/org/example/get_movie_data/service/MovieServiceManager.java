@@ -1,24 +1,23 @@
 package org.example.get_movie_data.service;
 
 import org.example.get_movie_data.model.Movie;
+import org.example.get_movie_data.util.AnnotationScanner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.logging.Logger;
-import java.util.logging.Level;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 电影服务管理器
  * 
- * 负责管理所有数据源服务实例，包括内部默认服务和外部加载的服务。
- * 整合了原来DataSourceManager和MovieServiceImpl的功能，减少耦合。
+ * 使用注解扫描方式自动注册数据源服务
  * 
  * @author get_movie_data team
  * @version 1.0.0
@@ -27,17 +26,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MovieServiceManager {
     private static final Logger logger = Logger.getLogger(MovieServiceManager.class.getName());
     
-    @Autowired
-    private ConfigManager configManager;
-    
     // 服务实例缓存
     private final Map<String, MovieService> serviceCache = new ConcurrentHashMap<>();
     
+    // URL到数据源ID的映射
+    private final Map<String, String> urlToDatasourceMap = new ConcurrentHashMap<>();
+    
     // 缓存管理器
     private CacheManager cacheManager;
-    
-    // 外部服务工厂
-    private ExternalServiceFactory externalServiceFactory;
     
     @PostConstruct
     public void init() {
@@ -46,13 +42,48 @@ public class MovieServiceManager {
         // 初始化缓存管理器
         cacheManager = new CacheManager();
         
-        // 初始化外部服务工厂
-        externalServiceFactory = new ExternalServiceFactory(cacheManager);
+        // 扫描并注册所有带@DataSource注解的服务
+        registerAnnotatedServices();
         
-        // 添加默认服务
-        serviceCache.put("default", new CachedMovieService(new DefaultMovieService(), cacheManager));
-        
-        logger.info("MovieServiceManager initialized with default service");
+        logger.info("MovieServiceManager initialized with " + serviceCache.size() + " services");
+    }
+    
+    /**
+     * 扫描并注册所有带@DataSource注解的服务
+     */
+    private void registerAnnotatedServices() {
+        try {
+            // 扫描org.example.get_movie_data.datasource包下的所有带@DataSource注解的类
+            Set<Class<?>> classes = AnnotationScanner.scanAnnotatedClasses("org.example.get_movie_data.datasource");
+            
+            for (Class<?> clazz : classes) {
+                if (MovieService.class.isAssignableFrom(clazz) && clazz != MovieService.class) {
+                    org.example.get_movie_data.annotation.DataSource annotation = 
+                        clazz.getAnnotation(org.example.get_movie_data.annotation.DataSource.class);
+                    
+                    if (annotation != null) {
+                        try {
+                            MovieService service = (MovieService) clazz.getDeclaredConstructor().newInstance();
+                            serviceCache.put(annotation.id(), new CachedMovieService(service, cacheManager));
+                            
+                            // 如果有baseUrl，则建立URL到数据源ID的映射
+                            if (!annotation.baseUrl().isEmpty()) {
+                                urlToDatasourceMap.put(annotation.baseUrl(), annotation.id());
+                            }
+                            
+                            logger.info("Registered service: " + annotation.id() + " -> " + clazz.getSimpleName());
+                        } catch (Exception e) {
+                            logger.warning("Failed to instantiate service class: " + clazz.getName() + ", Error: " + e.getMessage());
+                        }
+                    }
+                }
+            }
+            
+            // 添加默认服务
+            serviceCache.put("default", new CachedMovieService(new DefaultMovieService(), cacheManager));
+        } catch (Exception e) {
+            logger.severe("Error registering annotated services: " + e.getMessage());
+        }
     }
     
     /**
@@ -61,11 +92,6 @@ public class MovieServiceManager {
     @PreDestroy
     public void destroy() {
         logger.info("Destroying MovieServiceManager...");
-        
-        // 清理外部服务工厂资源
-        if (externalServiceFactory != null) {
-            externalServiceFactory.shutdown();
-        }
         
         // 清理缓存管理器资源
         if (cacheManager != null) {
@@ -87,122 +113,71 @@ public class MovieServiceManager {
     public MovieService getMovieServiceByBaseUrl(String baseUrl) {
         logger.info("Getting movie service for baseUrl: " + baseUrl);
         
-        // 查找匹配的数据源ID
-        String datasourceId = findDatasourceIdByBaseUrl(baseUrl);
-        logger.info("Found datasourceId: " + datasourceId);
-        
-        if (datasourceId == null) {
-            logger.info("No matching datasource found, returning default service");
-            return serviceCache.get("default");
-        }
-        
-        // 检查是否是默认数据源
-        if ("default".equals(datasourceId)) {
-            logger.info("Using default service");
-            return serviceCache.get("default");
-        }
-        
-        // 检查缓存
-        if (serviceCache.containsKey(datasourceId)) {
-            logger.info("Found service in cache for datasourceId: " + datasourceId);
-            return serviceCache.get(datasourceId);
-        }
-        
-        // 创建新的服务实例
-        MovieService service = createMovieService(datasourceId);
-        if (service != null) {
-            serviceCache.put(datasourceId, service);
-            logger.info("Created and cached service for datasourceId: " + datasourceId);
-        } else {
-            logger.info("Failed to create service for datasourceId: " + datasourceId + ", using default");
-            service = serviceCache.get("default");
-        }
-        
-        return service;
-    }
-
-    /**
-     * 根据基础URL查找匹配的数据源ID
-     * 
-     * @param baseUrl 基础URL
-     * @return 匹配的数据源ID，如果没有匹配则返回null
-     */
-    private String findDatasourceIdByBaseUrl(String baseUrl) {
-        logger.info("Finding datasource for baseUrl: " + baseUrl);
-        
-        DataSourceConfig dataSourceConfig = configManager.getConfig();
-        if (dataSourceConfig.getUrlMappings() != null) {
-            // 先查找精确匹配
-            for (DataSourceConfig.UrlMapping mapping : dataSourceConfig.getUrlMappings()) {
-                logger.info("Checking mapping: " + mapping.getBaseUrl() + " -> " + mapping.getDatasource());
-                if (baseUrl.equals(mapping.getBaseUrl())) {
-                    logger.info("Found exact match: " + mapping.getDatasource());
-                    return mapping.getDatasource();
-                }
-            }
-            
-            // 再查找通配符匹配
-            for (DataSourceConfig.UrlMapping mapping : dataSourceConfig.getUrlMappings()) {
-                if ("*".equals(mapping.getBaseUrl())) {
-                    logger.info("Found wildcard match: " + mapping.getDatasource());
-                    return mapping.getDatasource();
-                }
-            }
-        }
-        
-        logger.info("No matching datasource found");
-        return null;
+        // 根据URL确定数据源ID
+        String datasourceId = mapBaseUrlToDatasourceId(baseUrl);
+        return getMovieServiceById(datasourceId);
     }
     
     /**
-     * 根据数据源ID创建电影服务实例
+     * 根据数据源ID获取对应的电影服务实例
      * 
      * @param datasourceId 数据源ID
-     * @return 电影服务实例
+     * @return 对应的电影服务实例
      */
-    private MovieService createMovieService(String datasourceId) {
-        logger.info("Creating movie service for datasourceId: " + datasourceId);
+    public MovieService getMovieServiceById(String datasourceId) {
+        logger.info("Getting movie service for datasourceId: " + datasourceId);
         
-        DataSourceConfig dataSourceConfig = configManager.getConfig();
-        if (dataSourceConfig.getDatasources() == null) {
-            logger.warning("No datasources configured");
-            // 尝试通过注解方式创建服务
-            MovieService service = externalServiceFactory.createMovieServiceByAnnotation(datasourceId);
-            if (service != null) {
-                logger.info("Created service by annotation for datasourceId: " + datasourceId);
-                return service;
-            }
-            return null;
-        }
-        
-        // 查找对应的数据源配置
-        DataSourceConfig.Datasource datasourceConfigEntry = null;
-        for (DataSourceConfig.Datasource ds : dataSourceConfig.getDatasources()) {
-            if (datasourceId.equals(ds.getId())) {
-                datasourceConfigEntry = ds;
-                break;
-            }
-        }
-        
-        // 如果找到配置，使用配置方式创建服务
-        if (datasourceConfigEntry != null) {
-            String className = datasourceConfigEntry.getClazz();
-            logger.info("Found class name: " + className);
-            
-            // 使用外部服务工厂创建服务实例
-            return externalServiceFactory.createMovieService(datasourceId, className);
-        }
-        
-        // 否则尝试通过注解方式创建服务
-        logger.info("Datasource configuration not found for id: " + datasourceId + ", trying annotation-based creation");
-        MovieService service = externalServiceFactory.createMovieServiceByAnnotation(datasourceId);
+        MovieService service = serviceCache.get(datasourceId);
         if (service != null) {
-            logger.info("Created service by annotation for datasourceId: " + datasourceId);
+            logger.info("Found service in cache for datasourceId: " + datasourceId);
             return service;
         }
         
-        logger.warning("Failed to create service for datasourceId: " + datasourceId);
-        return null;
+        // 如果没有找到，返回默认服务
+        logger.info("Service not found for datasourceId: " + datasourceId + ", using default");
+        return serviceCache.get("default");
+    }
+    
+    /**
+     * 根据基础URL映射到数据源ID
+     * 
+     * @param baseUrl 基础URL
+     * @return 数据源ID
+     */
+    private String mapBaseUrlToDatasourceId(String baseUrl) {
+        // 首先尝试精确匹配
+        for (Map.Entry<String, String> entry : urlToDatasourceMap.entrySet()) {
+            if (baseUrl.contains(entry.getKey()) || baseUrl.equals(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        
+        // 如果没有精确匹配，尝试模糊匹配
+        for (Map.Entry<String, String> entry : urlToDatasourceMap.entrySet()) {
+            if (baseUrl.contains(extractDomain(entry.getKey()))) {
+                return entry.getValue();
+            }
+        }
+        
+        // 默认使用default数据源
+        return "default";
+    }
+    
+    /**
+     * 提取域名部分
+     */
+    private String extractDomain(String url) {
+        try {
+            // 简单提取域名部分，例如从 https://www.example.com/path 提取 example.com
+            String domain = url.replaceAll("^https?://", "").split("/")[0];
+            // 移除www前缀
+            if (domain.startsWith("www.")) {
+                domain = domain.substring(4);
+            }
+            return domain;
+        } catch (Exception e) {
+            return url;
+        }
     }
     
     /**
@@ -217,7 +192,7 @@ public class MovieServiceManager {
             
             // 针对特定URL返回固定数据
             if ("https://127.0.0.1/test".equals(baseUrl)) {
-                List<Movie> movies = new ArrayList<>();
+                List<Movie> movies = new java.util.ArrayList<>();
                 
                 for (int i = 1; i <= 3; i++) {
                     Movie movie = new Movie();
@@ -235,7 +210,7 @@ public class MovieServiceManager {
             
             // 这里应该实现获取电影的逻辑
             // 暂时返回示例数据
-            List<Movie> movies = new ArrayList<>();
+            List<Movie> movies = new java.util.ArrayList<>();
             
             for (int i = 1; i <= 5; i++) {
                 Movie movie = new Movie();
@@ -257,7 +232,7 @@ public class MovieServiceManager {
             
             // 针对特定URL返回固定数据
             if ("https://127.0.0.1/test".equals(baseUrl)) {
-                List<Movie.Episode> episodes = new ArrayList<>();
+                List<Movie.Episode> episodes = new java.util.ArrayList<>();
                 
                 for (int i = 1; i <= 5; i++) {
                     Movie.Episode episode = new Movie.Episode();
@@ -272,7 +247,7 @@ public class MovieServiceManager {
             
             // 这里应该实现获取集数的逻辑
             // 暂时返回示例数据
-            List<Movie.Episode> episodes = new ArrayList<>();
+            List<Movie.Episode> episodes = new java.util.ArrayList<>();
             
             for (int i = 1; i <= 10; i++) {
                 Movie.Episode episode = new Movie.Episode();

@@ -1,67 +1,96 @@
 package org.example.get_movie_data.util;
 
 import org.example.get_movie_data.annotation.DataSource;
-import org.reflections.Reflections;
-import org.reflections.scanners.Scanners;
+import org.example.get_movie_data.service.MovieService;
 
-import java.util.Set;
+import java.io.File;
+import java.net.URL;
+import java.util.Enumeration;
 import java.util.HashSet;
-import java.util.logging.Logger;
-import java.util.logging.Level;
+import java.util.Set;
 
 /**
- * 注解扫描器
+ * 注解扫描工具类
  * 
- * 用于扫描主项目中的@DataSource注解类
+ * 扫描指定包下带有@DataSource注解的类
  */
 public class AnnotationScanner {
     
-    private static final Logger logger = Logger.getLogger(AnnotationScanner.class.getName());
-    
-    private static final String MAIN_PROJECT_PACKAGE = "org.example.get_movie_data";
-    
     /**
-     * 扫描主项目中带有@DataSource注解的类
+     * 扫描指定包下所有带@DataSource注解的MovieService实现类
      * 
-     * @param datasourceId 数据源ID
-     * @return 带有指定数据源ID的@DataSource注解的类名，如果未找到则返回null
+     * @param packageName 包名
+     * @return 带有@DataSource注解的类集合
      */
-    public static String findAnnotatedClassInMainProject(String datasourceId) {
+    public static Set<Class<?>> scanAnnotatedClasses(String packageName) {
+        Set<Class<?>> annotatedClasses = new HashSet<>();
+        
         try {
-            // 获取所有带@DataSource注解的类
-            Set<Class<?>> annotatedClasses = findAllAnnotatedClasses();
+            // 获取包路径
+            String packagePath = packageName.replace('.', '/');
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            Enumeration<URL> resources = classLoader.getResources(packagePath);
             
-            // 检查每个类是否有匹配的注解
-            for (Class<?> clazz : annotatedClasses) {
-                DataSource dataSourceAnnotation = clazz.getAnnotation(DataSource.class);
-                if (dataSourceAnnotation != null && datasourceId.equals(dataSourceAnnotation.id())) {
-                    return clazz.getName();
+            while (resources.hasMoreElements()) {
+                URL resource = resources.nextElement();
+                File packageDir = new File(resource.getFile());
+                
+                if (packageDir.exists() && packageDir.isDirectory()) {
+                    File[] classFiles = packageDir.listFiles((dir, name) -> name.endsWith(".class"));
+                    
+                    if (classFiles != null) {
+                        for (File classFile : classFiles) {
+                            String className = packageName + "." + 
+                                classFile.getName().substring(0, classFile.getName().length() - 6); // 移除.class后缀
+                            
+                            try {
+                                Class<?> clazz = Class.forName(className);
+                                
+                                // 检查是否是MovieService的实现类且带有@DataSource注解
+                                if (MovieService.class.isAssignableFrom(clazz) && 
+                                    clazz.isAnnotationPresent(DataSource.class) &&
+                                    clazz != MovieService.class) {
+                                    annotatedClasses.add(clazz);
+                                }
+                            } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                                // 忽略无法加载的类
+                            }
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
-            logger.log(Level.WARNING, "Error scanning main project for annotated classes", e);
+            e.printStackTrace();
         }
         
-        return null;
+        return annotatedClasses;
     }
     
     /**
-     * 查找所有带@DataSource注解的类
+     * 扫描主项目中的注解类
      * 
-     * @return 带@DataSource注解的类集合
+     * @return 带有@DataSource注解的类集合
      */
     public static Set<Class<?>> findAllAnnotatedClasses() {
-        Set<Class<?>> classes = new HashSet<>();
+        return scanAnnotatedClasses("org.example.get_movie_data.datasource");
+    }
+    
+    /**
+     * 根据数据源ID查找带注解的类
+     * 
+     * @param datasourceId 数据源ID
+     * @return 类名，如果未找到则返回null
+     */
+    public static String findAnnotatedClassInMainProject(String datasourceId) {
+        Set<Class<?>> annotatedClasses = findAllAnnotatedClasses();
         
-        try {
-            // 使用Reflections库扫描指定包中的注解
-            Reflections reflections = new Reflections(MAIN_PROJECT_PACKAGE, Scanners.TypesAnnotated);
-            classes = reflections.getTypesAnnotatedWith(DataSource.class);
-            logger.info("Found " + classes.size() + " DataSource annotated classes");
-        } catch (Exception e) {
-            logger.log(Level.WARNING, "Error finding all annotated classes", e);
+        for (Class<?> clazz : annotatedClasses) {
+            DataSource annotation = clazz.getAnnotation(DataSource.class);
+            if (annotation != null && datasourceId.equals(annotation.id())) {
+                return clazz.getName();
+            }
         }
         
-        return classes;
+        return null;
     }
 }

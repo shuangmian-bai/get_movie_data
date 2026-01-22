@@ -1,38 +1,28 @@
 package org.example.get_movie_data.service;
 
-import org.example.get_movie_data.config.DataSourceConfigLoader;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import javax.annotation.PostConstruct;
+import org.springframework.stereotype.Component;
 
 /**
- * 配置管理服务
+ * 配置管理器
  * 
- * 负责管理应用程序的配置信息，包括数据源配置和URL映射配置。
+ * 由于现在使用注解方式管理数据源，此管理器简化为基本实现
  * 
  * @author get_movie_data team
  * @version 1.0.0
  */
-@Service
+@Component
 public class ConfigManager {
-
+    
     @Autowired
     private DataSourceConfig dataSourceConfig;
-
-    private DataSourceConfig config;
-
-    @PostConstruct
-    public void init() {
-        this.config = dataSourceConfig;
-    }
-
+    
     /**
      * 获取数据源配置
      * 
-     * @return 数据源配置
+     * @return 数据源配置对象
      */
     public DataSourceConfig getConfig() {
-        return config;
+        return dataSourceConfig;
     }
 }

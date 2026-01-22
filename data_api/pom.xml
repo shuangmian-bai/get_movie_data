@@ -15,7 +15,7 @@
 	<artifactId>get_movie_data</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>get_movie_data</name>
-	<description>可扩展的电影数据获取服务，支持通过外部JAR插件扩展数据源</description>
+	<description>可扩展的电影数据获取服务，支持通过注解扩展数据源</description>
 	
 	<properties>
 		<java.version>17</java.version>
@@ -90,13 +90,6 @@
 			<groupId>org.jsoup</groupId>
 			<artifactId>jsoup</artifactId>
 			<version>1.15.3</version>
-		</dependency>
-		
-		<!-- Reflections for annotation scanning -->
-		<dependency>
-			<groupId>org.reflections</groupId>
-			<artifactId>reflections</artifactId>
-			<version>0.10.2</version>
 		</dependency>
 		
 		<!-- Swagger UI for API documentation -->
@@ -174,65 +167,8 @@
 							</resources>
 						</configuration>
 					</execution>
-					<execution>
-						<id>copy-libs</id>
-						<phase>package</phase>
-						<goals>
-							<goal>copy-resources</goal>
-						</goals>
-						<configuration>
-							<outputDirectory>${project.build.directory}/libs</outputDirectory>
-							<resources>
-								<resource>
-									<directory>libs</directory>
-									<filtering>false</filtering>
-								</resource>
-							</resources>
-						</configuration>
-					</execution>
 				</executions>
 			</plugin>
-			
-			<!-- Maven Assembly Plugin for packaging DataSource classes -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<version>3.3.0</version>
-				<configuration>
-					<descriptorSourceDirectory>src/assembly</descriptorSourceDirectory>
-				</configuration>
-				<executions>
-					<execution>
-						<id>package-data-sources</id>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-            
-            <!-- Maven Exec Plugin for running DataSourcePackager -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.0.0</version>
-                <executions>
-                    <execution>
-                        <id>package-data-sources</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>java</goal>
-                        </goals>
-                        <configuration>
-                            <mainClass>org.example.get_movie_data.build.ImprovedDataSourcePackager</mainClass>
-                            <arguments>
-                                <argument>package</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
 		
 		<!-- 资源配置 -->

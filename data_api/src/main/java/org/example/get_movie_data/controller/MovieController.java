@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.logging.Logger;
-import java.util.logging.Level;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -30,7 +29,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  * 电影数据控制器
  * 
  * 提供RESTful API接口用于获取电影相关信息，包括搜索电影、获取剧集和获取M3U8播放地址。
- * 支持通过URL参数动态选择不同的数据源。
  * 
  * @author get_movie_data team
  * @version 1.0.0
@@ -106,7 +104,7 @@ public class MovieController {
                 CompletableFuture<List<Movie>> future = CompletableFuture.supplyAsync(() -> {
                     try {
                         logger.info("Searching movies from URL: " + urlMapping.getBaseUrl());
-                        // 直接调用内部方法而不是通过HTTP请求
+                        // 直接调用内部方法
                         MovieService service = movieServiceManager.getMovieServiceByBaseUrl(urlMapping.getBaseUrl());
                         List<Movie> movies = service.searchMovies(urlMapping.getBaseUrl(), keyword);
                         
@@ -119,7 +117,7 @@ public class MovieController {
                         }
                         return new ArrayList<>();
                     } catch (Exception e) {
-                        logger.log(Level.WARNING, "Error searching movies from URL " + urlMapping.getBaseUrl(), e);
+                        logger.warning("Error searching movies from URL " + urlMapping.getBaseUrl() + ": " + e.getMessage());
                         return new ArrayList<>();
                     }
                 }, executor);
@@ -141,23 +139,23 @@ public class MovieController {
                     allMovies.addAll(future.getNow(new ArrayList<>()));
                 }
             } catch (TimeoutException e) {
-                logger.log(Level.WARNING, "Timeout waiting for all futures to complete", e);
+                logger.warning("Timeout waiting for all futures to complete: " + e.getMessage());
                 // 取消所有未完成的任务
                 futures.forEach(f -> f.cancel(true));
             } catch (InterruptedException e) {
-                logger.log(Level.WARNING, "Interrupted while waiting for futures to complete", e);
+                logger.warning("Interrupted while waiting for futures to complete: " + e.getMessage());
                 Thread.currentThread().interrupt();
                 // 取消所有未完成的任务
                 futures.forEach(f -> f.cancel(true));
-            } catch (ExecutionException e) {
-                logger.log(Level.WARNING, "Error while executing futures", e);
+            } catch (Exception e) {
+                logger.warning("Error while executing futures: " + e.getMessage());
                 // 取消所有未完成的任务
                 futures.forEach(f -> f.cancel(true));
             }
             
             // 集中输出从各数据源获取到的数据信息
             logger.info("Total movies found from all sources: " + allMovies.size());
-            if (logger.isLoggable(Level.INFO)) {
+            if (logger.isLoggable(java.util.logging.Level.INFO)) {
                 StringBuilder logBuilder = new StringBuilder();
                 logBuilder.append("Detailed data source information:\n");
                 
@@ -219,8 +217,18 @@ public class MovieController {
         String playUrl = request.getPlayUrl();
         String datasource = request.getDatasource();
         logger.info("MovieController.getEpisodes called with baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", datasource: " + datasource);
-        MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
-        return service.getEpisodes(baseUrl, playUrl);
+        
+        try {
+            MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
+            if (service == null) {
+                logger.warning("No service found for baseUrl: " + baseUrl);
+                return new ArrayList<>();
+            }
+            return service.getEpisodes(baseUrl, playUrl);
+        } catch (Exception e) {
+            logger.warning("Error getting episodes for baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", error: " + e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     /**
@@ -241,12 +249,26 @@ public class MovieController {
         String episodeUrl = request.getEpisodeUrl();
         String datasource = request.getDatasource();
         logger.info("MovieController.getM3u8Url called with baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", datasource: " + datasource);
-        MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
-        // 直接返回子项目处理后的结果，不做任何额外处理
-        String m3u8Url = service.getM3u8Url(baseUrl, episodeUrl);
         
-        MovieResponse response = new MovieResponse();
-        response.setMovie(m3u8Url);
-        return response;
+        try {
+            MovieService service = movieServiceManager.getMovieServiceByBaseUrl(baseUrl);
+            if (service == null) {
+                logger.warning("No service found for baseUrl: " + baseUrl);
+                MovieResponse response = new MovieResponse();
+                response.setMovie("");
+                return response;
+            }
+            // 直接返回子项目处理后的结果
+            String m3u8Url = service.getM3u8Url(baseUrl, episodeUrl);
+            
+            MovieResponse response = new MovieResponse();
+            response.setMovie(m3u8Url);
+            return response;
+        } catch (Exception e) {
+            logger.warning("Error getting m3u8 for baseUrl: " + baseUrl + ", episodeUrl: " + episodeUrl + ", error: " + e.getMessage());
+            MovieResponse response = new MovieResponse();
+            response.setMovie("");
+            return response;
+        }
     }
 }

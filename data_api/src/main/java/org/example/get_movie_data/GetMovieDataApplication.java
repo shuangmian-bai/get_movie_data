@@ -1,21 +1,15 @@
 package org.example.get_movie_data;
 
-import org.example.get_movie_data.config.AutoConfigGenerator;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import java.io.File;
-import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.ThreadMXBean;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.text.DecimalFormat;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -27,15 +21,8 @@ public class GetMovieDataApplication {
     private static final AtomicLong startTime = new AtomicLong(System.currentTimeMillis());
 
     public static void main(String[] args) {
-        // 确保在应用启动前config目录和必要的配置文件存在
-        ensureConfigDirectoryAndFilesExist();
-        
-        // 只有在配置文件不存在时才生成自动配置
-        File configFile = Paths.get("config", "movie-data-config.xml").toFile();
-        if (!configFile.exists()) {
-            // 生成自动配置
-            AutoConfigGenerator.generateConfig();
-        }
+        // 确保必要的目录存在
+        ensureDirectoriesExist();
         
         SpringApplication.run(GetMovieDataApplication.class, args);
     }
@@ -85,37 +72,10 @@ public class GetMovieDataApplication {
     }
     
     /**
-     * 确保config目录和配置文件存在
+     * 确保必要的目录存在
      */
-    private static void ensureConfigDirectoryAndFilesExist() {
+    private static void ensureDirectoriesExist() {
         try {
-            // 创建config目录
-            File configDir = Paths.get("config").toFile();
-            if (!configDir.exists()) {
-                boolean created = configDir.mkdirs();
-                System.out.println("Config directory " + (created ? "created" : "already exists") + ": " + configDir.getAbsolutePath());
-            } else {
-                System.out.println("Config directory already exists: " + configDir.getAbsolutePath());
-            }
-            
-            // 检查配置文件是否存在，如果不存在则从JAR内部复制
-            File configFile = Paths.get("config", "movie-data-config.xml").toFile();
-            if (!configFile.exists()) {
-                System.out.println("Config file not found, copying from internal resources...");
-                copyInternalConfigFile(configFile);
-            } else {
-                System.out.println("Config file already exists: " + configFile.getAbsolutePath());
-            }
-            
-            // 创建libs目录
-            File libsDir = Paths.get("libs").toFile();
-            if (!libsDir.exists()) {
-                boolean created = libsDir.mkdirs();
-                System.out.println("Libs directory " + (created ? "created" : "already exists") + ": " + libsDir.getAbsolutePath());
-            } else {
-                System.out.println("Libs directory already exists: " + libsDir.getAbsolutePath());
-            }
-            
             // 创建cache目录
             File cacheDir = Paths.get("cache").toFile();
             if (!cacheDir.exists()) {
@@ -125,33 +85,7 @@ public class GetMovieDataApplication {
                 System.out.println("Cache directory already exists: " + cacheDir.getAbsolutePath());
             }
         } catch (Exception e) {
-            System.err.println("Failed to create config directory or copy config file: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-    
-    /**
-     * 从JAR内部复制配置文件到外部目录
-     * 
-     * @param targetFile 目标文件
-     */
-    private static void copyInternalConfigFile(File targetFile) {
-        try {
-            ClassPathResource resource = new ClassPathResource("config/movie-data-config.xml");
-            if (resource.exists()) {
-                try (InputStream inputStream = resource.getInputStream()) {
-                    Files.copy(
-                        inputStream,
-                        targetFile.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING
-                    );
-                    System.out.println("Successfully copied internal config file to: " + targetFile.getAbsolutePath());
-                }
-            } else {
-                System.out.println("Internal config file not found in JAR");
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to copy internal config file: " + e.getMessage());
+            System.err.println("Failed to create directories: " + e.getMessage());
             e.printStackTrace();
         }
     }

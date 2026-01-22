@@ -1,6 +1,6 @@
 # 电影数据获取服务
 
-这是一个可扩展的电影数据获取服务，支持通过外部JAR插件扩展数据源。该服务提供统一的RESTful API接口，能够从多个不同的电影网站获取电影信息、剧集列表和播放地址。
+这是一个可扩展的电影数据获取服务，支持通过注解扩展数据源。该服务提供统一的RESTful API接口，能够从多个不同的电影网站获取电影信息、剧集列表和播放地址。
 
 ## 目录
 
@@ -11,9 +11,6 @@
   - [构建项目](#构建项目)
   - [运行应用](#运行应用)
 - [API接口说明](#api接口说明)
-- [配置说明](#配置说明)
-  - [数据源配置](#数据源配置)
-  - [URL映射配置](#url映射配置)
 - [扩展开发](#扩展开发)
   - [创建自定义数据源](#创建自定义数据源)
   - [现有数据源插件](#现有数据源插件)
@@ -22,10 +19,9 @@
 ## 功能特性
 
 - **统一API接口**: 提供RESTful API接口，统一访问不同数据源的电影数据
-- **插件化架构**: 支持通过外部JAR插件扩展数据源，易于添加新的电影网站支持
+- **注解驱动架构**: 支持通过@DataSource注解扩展数据源，易于添加新的电影网站支持
 - **并发处理**: 支持并发从多个数据源获取数据，提高查询效率
 - **缓存机制**: 内置缓存功能，减少重复请求，提高响应速度
-- **灵活配置**: 通过XML配置文件管理数据源和URL映射关系
 
 ## 系统架构
 
@@ -34,12 +30,9 @@ graph TD
     A[客户端] --> B[API网关]
     B --> C{MovieController}
     C --> D[MovieServiceManager]
-    D --> E[ConfigManager]
-    D --> F[ExternalServiceFactory]
-    D --> G[CacheManager]
-    F --> H[外部数据源插件]
-    E --> I[DataSourceConfigLoader]
-    I --> J[XML配置文件]
+    D --> E[CacheManager]
+    D --> F[AnnotationScanner]
+    F --> G[带@DataSource注解的类]
 ```
 
 ## 快速开始
@@ -60,7 +53,6 @@ graph TD
 执行该命令将在 `target` 目录下生成以下内容：
 - `get_movie_data-0.0.1-SNAPSHOT.jar` - 主程序jar文件
 - `config/` - 配置文件目录
-- `libs/` - 外部数据源插件目录
 
 ### 运行应用
 
@@ -122,42 +114,27 @@ Content-Type: application/json
 
 根据基础URL确定数据源，获取指定剧集的M3U8播放地址。
 
-## 配置说明
-
-配置文件位于 `config/movie-data-config.xml`，包含数据源配置和URL映射配置两部分。
-
-### 数据源配置
-
-在 `<datasources>` 标签下配置数据源信息：
-
-```xml
-<datasource id="数据源ID" class="完整类名">
-    <name>数据源名称</name>
-    <description>数据源描述</description>
-</datasource>
-```
-
-### URL映射配置
-
-在 `<urlMappings>` 标签下配置URL到数据源的映射关系：
-
-```xml
-<urlMapping baseUrl="数据源基础URL" datasource="数据源ID"/>
-
-<!-- 通配符匹配，作为默认数据源 -->
-<urlMapping baseUrl="*" datasource="默认数据源ID"/>
-```
-
 ## 扩展开发
 
 ### 创建自定义数据源
 
-1. 参考 [custom-datasource](custom-datasource/) 项目作为模板
-2. 实现 [ExternalMovieService](src/main/java/org/example/get_movie_data/service/ExternalMovieService.java) 接口
-3. 使用Maven打包成JAR文件
-4. 将JAR文件放入 `libs/` 目录
-5. 在配置文件中添加相应的数据源配置
-6. 重启应用程序使配置生效
+1. 实现 [MovieService](src/main/java/org/example/get_movie_data/service/MovieService.java) 接口
+2. 使用 [@DataSource](src/main/java/org/example/get_movie_data/annotation/DataSource.java) 注解标记类
+3. 将类放在 `org.example.get_movie_data.datasource` 包下
+4. 系统会自动扫描并注册该数据源
+
+示例：
+```java
+@DataSource(
+    id = "mydatasource",
+    name = "我的数据源",
+    description = "描述信息",
+    baseUrl = "https://my-site.com"
+)
+public class MyMovieService implements MovieService {
+    // 实现接口方法
+}
+```
 
 ### 现有数据源插件
 
@@ -170,17 +147,9 @@ Content-Type: application/json
 
 ## 常见问题
 
-### Q: 如何修改配置文件？
-
-A: 配置文件位于应用目录下的 `config/movie-data-config.xml`，可以直接编辑该文件并重启应用。
-
 ### Q: 如何添加自定义数据源？
 
-A: 开发符合规范的JAR包，放到 `libs/` 目录下，并在配置文件中添加相应配置项。
-
-### Q: 配置未生效怎么办？
-
-A: 检查配置文件格式是否正确，确认配置文件位于正确的目录位置，然后重启应用程序。
+A: 实现MovieService接口，使用@DataSource注解标记类，放在org.example.get_movie_data.datasource包下，系统会自动扫描并注册。
 
 ### Q: 如何查看API文档？
 
