@@ -1,6 +1,8 @@
 package org.example.get_movie_data.datasource;
 
 import org.example.get_movie_data.annotation.DataSource;
+import org.example.get_movie_data.service.MovieService;
+import org.example.get_movie_data.model.Movie;
 import org.example.get_movie_data.util.HttpClientUtil;
 import org.example.get_movie_data.util.HtmlParserUtil;
 import org.jsoup.nodes.Document;
@@ -38,7 +40,7 @@ import java.util.regex.Pattern;
     baseUrl = "https://bfzy.tv",
     version = "1.0.0"
 )
-public class BfzyMovieService {
+public class BfzyMovieService implements MovieService {
     
     // 线程池大小控制变量
     private static final int THREAD_POOL_SIZE = 10;
@@ -77,6 +79,7 @@ public class BfzyMovieService {
      * @param keyword 搜索关键词
      * @return 电影列表
      */
+    @Override
     public List<Movie> searchMovies(String baseUrl, String keyword) {
         //http://search.bfzyapi.com/json-api/?dname=baofeng&key={keyword}&count=20
         String url = "http://search.bfzyapi.com/" + "json-api/?dname=baofeng&key=" + keyword + "&count=20";
@@ -230,6 +233,7 @@ public class BfzyMovieService {
      * @param playUrl 播放地址
      * @return 剧集列表
      */
+    @Override
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
         //playUrl按照#分割
         String[] playUrls = playUrl.split("#");
@@ -259,8 +263,17 @@ public class BfzyMovieService {
      * @param episodeUrl 剧集播放地址
      * @return M3U8播放地址
      */
+    @Override
     public String getM3u8Url(String baseUrl, String episodeUrl) {
         // 直接返回episodeUrl，不进行额外编码处理
         return episodeUrl;
+    }
+
+    @Override
+    public MovieService getMovieServiceByDatasource(String datasourceId) {
+        if ("bfzy".equals(datasourceId)) {
+            return this;
+        }
+        return null;
     }
 }

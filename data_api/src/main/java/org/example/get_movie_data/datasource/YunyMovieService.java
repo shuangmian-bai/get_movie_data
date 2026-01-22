@@ -1,6 +1,8 @@
 package org.example.get_movie_data.datasource;
 
 import org.example.get_movie_data.annotation.DataSource;
+import org.example.get_movie_data.service.MovieService;
+import org.example.get_movie_data.model.Movie;
 import org.example.get_movie_data.util.HttpClientUtil;
 import org.example.get_movie_data.util.HtmlParserUtil;
 import org.jsoup.nodes.Document;
@@ -36,7 +38,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
     baseUrl = "https://www.yuny.tv",
     version = "1.0.0"
 )
-public class YunyMovieService {
+public class YunyMovieService implements MovieService {
     
     // 控制最大线程数量的变量
     private static final int MAX_THREAD_COUNT = 5;
@@ -47,6 +49,7 @@ public class YunyMovieService {
      * @param keyword 搜索关键词
      * @return 影视信息列表
      */
+    @Override
     public List<Movie> searchMovies(String baseUrl, String keyword) {
         try {
             // 对关键词进行URL编码
@@ -254,6 +257,7 @@ public class YunyMovieService {
      * @param playUrl 播放地址
      * @return 影视剧集列表
      */
+    @Override
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
         try {
             //发送HTTP GET请求获取网页内容
@@ -293,6 +297,7 @@ public class YunyMovieService {
      * @param episodeUrl 具体播放地址
      * @return m3u8地址
      */
+    @Override
     public String getM3u8Url(String baseUrl, String episodeUrl) {
         try {
             //发送HTTP GET请求获取网页内容
@@ -319,5 +324,13 @@ public class YunyMovieService {
             e.printStackTrace();
             return "";
         }
+    }
+
+    @Override
+    public MovieService getMovieServiceByDatasource(String datasourceId) {
+        if ("yuny".equals(datasourceId)) {
+            return this;
+        }
+        return null;
     }
 }

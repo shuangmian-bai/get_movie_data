@@ -4,10 +4,15 @@ import org.example.get_movie_data.annotation.DataSource;
 import org.example.get_movie_data.service.MovieService;
 
 import java.io.File;
+import java.io.IOException;
+import java.net.JarURLConnection;
 import java.net.URL;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.zip.ZipEntry;
 
 /**
  * 注解扫描工具类
@@ -26,22 +31,60 @@ public class AnnotationScanner {
         Set<Class<?>> annotatedClasses = new HashSet<>();
         
         try {
-            // 获取包路径
             String packagePath = packageName.replace('.', '/');
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             Enumeration<URL> resources = classLoader.getResources(packagePath);
             
             while (resources.hasMoreElements()) {
                 URL resource = resources.nextElement();
-                File packageDir = new File(resource.getFile());
+                String protocol = resource.getProtocol();
                 
-                if (packageDir.exists() && packageDir.isDirectory()) {
-                    File[] classFiles = packageDir.listFiles((dir, name) -> name.endsWith(".class"));
+                if ("file".equals(protocol)) {
+                    // 在文件系统中
+                    File packageDir = new File(resource.getFile());
                     
-                    if (classFiles != null) {
-                        for (File classFile : classFiles) {
-                            String className = packageName + "." + 
-                                classFile.getName().substring(0, classFile.getName().length() - 6); // 移除.class后缀
+                    if (packageDir.exists() && packageDir.isDirectory()) {
+                        File[] classFiles = packageDir.listFiles((dir, name) -> name.endsWith(".class"));
+                        
+                        if (classFiles != null) {
+                            for (File classFile : classFiles) {
+                                String className = packageName + "." + 
+                                    classFile.getName().substring(0, classFile.getName().length() - 6); // 移除.class后缀
+                                
+                                try {
+                                    Class<?> clazz = Class.forName(className);
+                                    
+                                    // 检查是否是MovieService的实现类且带有@DataSource注解
+                                    if (MovieService.class.isAssignableFrom(clazz) && 
+                                        clazz.isAnnotationPresent(DataSource.class) &&
+                                        clazz != MovieService.class) {
+                                        System.out.println("Found annotated class: " + clazz.getName());
+                                        annotatedClasses.add(clazz);
+                                    } else {
+                                        // 检查是否是带@DataSource注解的类，但未实现MovieService接口
+                                        if (clazz.isAnnotationPresent(DataSource.class)) {
+                                            System.out.println("Found @DataSource annotated class that doesn't implement MovieService: " + clazz.getName());
+                                            System.out.println("Is assignable from MovieService: " + MovieService.class.isAssignableFrom(clazz));
+                                        }
+                                    }
+                                } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                                    // 忽略无法加载的类
+                                }
+                            }
+                        }
+                    }
+                } else if ("jar".equals(protocol)) {
+                    // 在JAR文件中
+                    JarURLConnection jarConnection = (JarURLConnection) resource.openConnection();
+                    JarFile jarFile = jarConnection.getJarFile();
+                    
+                    Enumeration<JarEntry> entries = jarFile.entries();
+                    while (entries.hasMoreElements()) {
+                        JarEntry entry = entries.nextElement();
+                        String entryName = entry.getName();
+                        
+                        if (entryName.startsWith(packagePath) && entryName.endsWith(".class")) {
+                            String className = entryName.substring(0, entryName.length() - 6).replace('/', '.');
                             
                             try {
                                 Class<?> clazz = Class.forName(className);
@@ -50,7 +93,14 @@ public class AnnotationScanner {
                                 if (MovieService.class.isAssignableFrom(clazz) && 
                                     clazz.isAnnotationPresent(DataSource.class) &&
                                     clazz != MovieService.class) {
+                                    System.out.println("Found annotated class in JAR: " + clazz.getName());
                                     annotatedClasses.add(clazz);
+                                } else {
+                                    // 检查是否是带@DataSource注解的类，但未实现MovieService接口
+                                    if (clazz.isAnnotationPresent(DataSource.class)) {
+                                        System.out.println("Found @DataSource annotated class in JAR that doesn't implement MovieService: " + clazz.getName());
+                                        System.out.println("Is assignable from MovieService: " + MovieService.class.isAssignableFrom(clazz));
+                                    }
                                 }
                             } catch (ClassNotFoundException | NoClassDefFoundError e) {
                                 // 忽略无法加载的类
@@ -59,7 +109,8 @@ public class AnnotationScanner {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            System.out.println("Error scanning classes: " + e.getMessage());
             e.printStackTrace();
         }
         

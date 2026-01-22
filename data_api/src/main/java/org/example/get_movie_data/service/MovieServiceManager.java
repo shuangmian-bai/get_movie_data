@@ -5,6 +5,8 @@ import org.example.get_movie_data.util.AnnotationScanner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
@@ -56,8 +58,11 @@ public class MovieServiceManager {
             // 扫描org.example.get_movie_data.datasource包下的所有带@DataSource注解的类
             Set<Class<?>> classes = AnnotationScanner.scanAnnotatedClasses("org.example.get_movie_data.datasource");
             
+            System.out.println("Found " + classes.size() + " annotated classes");
             for (Class<?> clazz : classes) {
+                System.out.println("Processing class: " + clazz.getName());
                 if (MovieService.class.isAssignableFrom(clazz) && clazz != MovieService.class) {
+                    System.out.println("Class " + clazz.getName() + " is assignable from MovieService");
                     org.example.get_movie_data.annotation.DataSource annotation = 
                         clazz.getAnnotation(org.example.get_movie_data.annotation.DataSource.class);
                     
@@ -72,10 +77,15 @@ public class MovieServiceManager {
                             }
                             
                             logger.info("Registered service: " + annotation.id() + " -> " + clazz.getSimpleName());
+                            System.out.println("Registered service: " + annotation.id() + " -> " + clazz.getSimpleName());
                         } catch (Exception e) {
+                            System.out.println("Failed to instantiate service class: " + clazz.getName() + ", Error: " + e.getMessage());
+                            e.printStackTrace();
                             logger.warning("Failed to instantiate service class: " + clazz.getName() + ", Error: " + e.getMessage());
                         }
                     }
+                } else {
+                    System.out.println("Class " + clazz.getName() + " is NOT assignable from MovieService");
                 }
             }
             
@@ -279,5 +289,39 @@ public class MovieServiceManager {
             // 默认实现不支持通过数据源ID获取服务
             return this;
         }
+    }
+    
+    /**
+     * 获取所有已注册的服务ID列表
+     * 
+     * @return 已注册的服务ID列表
+     */
+    public List<String> getAllRegisteredServiceIds() {
+        return new ArrayList<>(serviceCache.keySet());
+    }
+    
+    /**
+     * 根据数据源ID获取基础URL
+     * 
+     * @param datasourceId 数据源ID
+     * @return 基础URL，如果未找到则返回null
+     */
+    public String getBaseUrlByDatasourceId(String datasourceId) {
+        // 遍历URL到数据源ID的映射，查找匹配的数据源ID
+        for (Map.Entry<String, String> entry : urlToDatasourceMap.entrySet()) {
+            if (datasourceId.equals(entry.getValue())) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * 获取所有可用的基础URL
+     * 
+     * @return 基础URL列表
+     */
+    public List<String> getAllBaseUrls() {
+        return new ArrayList<>(urlToDatasourceMap.keySet());
     }
 }

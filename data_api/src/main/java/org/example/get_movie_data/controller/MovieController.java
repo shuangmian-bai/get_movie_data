@@ -81,9 +81,139 @@ public class MovieController {
         DataSourceConfig config = configManager.getConfig();
         List<DataSourceConfig.UrlMapping> urlMappings = config.getUrlMappings();
         
+        // 如果没有配置URL映射，尝试使用已注册的所有数据源服务
         if (urlMappings == null || urlMappings.isEmpty()) {
-            logger.warning("No url mappings configured");
-            return new ArrayList<>();
+            logger.info("No url mappings configured, using all registered services");
+            
+            // 获取所有已注册的服务ID
+            List<String> registeredServices = movieServiceManager.getAllRegisteredServiceIds();
+            List<MovieService> servicesToTry = new ArrayList<>();
+            List<String> baseUrlsToTry = new ArrayList<>();
+            
+            for (String serviceId : registeredServices) {
+                if (!"default".equals(serviceId)) { // 排除默认服务
+                    MovieService service = movieServiceManager.getMovieServiceById(serviceId);
+                    if (service != null) {
+                        // 根据服务类型确定基础URL
+                        String baseUrl = getBaseUrlForService(service, serviceId);
+                        if (baseUrl != null) {
+                            servicesToTry.add(service);
+                            baseUrlsToTry.add(baseUrl);
+                        }
+                    }
+                }
+            }
+            
+            if (!servicesToTry.isEmpty()) {
+                logger.info("Using " + servicesToTry.size() + " dynamically discovered services");
+                
+                // 直接使用获取到的服务进行搜索，绕过URL映射
+                List<Movie> allMovies = new ArrayList<>();
+                ExecutorService executor = Executors.newFixedThreadPool(Math.min(servicesToTry.size(), MAX_CONCURRENT_REQUESTS));
+                
+                try {
+                    List<CompletableFuture<List<Movie>>> futures = new ArrayList<>();
+                    
+                    for (int i = 0; i < servicesToTry.size(); i++) {
+                        MovieService service = servicesToTry.get(i);
+                        String baseUrl = baseUrlsToTry.get(i);
+                        
+                        CompletableFuture<List<Movie>> future = CompletableFuture.supplyAsync(() -> {
+                            try {
+                                logger.info("Searching movies from service: " + service.getClass().getSimpleName() + " with baseUrl: " + baseUrl);
+                                List<Movie> movies = service.searchMovies(baseUrl, keyword);
+                                
+                                // 为每个电影对象设置baseUrl字段
+                                if (movies != null) {
+                                    for (Movie movie : movies) {
+                                        movie.setBaseUrl(baseUrl);
+                                    }
+                                    return movies;
+                                }
+                                return new ArrayList<>();
+                            } catch (Exception e) {
+                                logger.warning("Error searching movies from service " + service.getClass().getSimpleName() + ", error: " + e.getMessage());
+                                return new ArrayList<>();
+                            }
+                        }, executor);
+                        futures.add(future);
+                    }
+                    
+                    // 等待所有任务完成并收集结果
+                    CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                        futures.toArray(new CompletableFuture[0])
+                    );
+                    
+                    try {
+                        // 等待所有任务完成，最多等待30秒
+                        allFutures.get(30, TimeUnit.SECONDS);
+                        
+                        // 收集所有结果
+                        for (CompletableFuture<List<Movie>> future : futures) {
+                            allMovies.addAll(future.getNow(new ArrayList<>()));
+                        }
+                    } catch (TimeoutException e) {
+                        logger.warning("Timeout waiting for all futures to complete: " + e.getMessage());
+                        // 取消所有未完成的任务
+                        futures.forEach(f -> f.cancel(true));
+                    } catch (InterruptedException e) {
+                        logger.warning("Interrupted while waiting for futures to complete: " + e.getMessage());
+                        Thread.currentThread().interrupt();
+                        // 取消所有未完成的任务
+                        futures.forEach(f -> f.cancel(true));
+                    } catch (Exception e) {
+                        logger.warning("Error while executing futures: " + e.getMessage());
+                        // 取消所有未完成的任务
+                        futures.forEach(f -> f.cancel(true));
+                    }
+                    
+                    // 集中输出从各数据源获取到的数据信息
+                    logger.info("Total movies found from all sources: " + allMovies.size());
+                    if (logger.isLoggable(java.util.logging.Level.INFO)) {
+                        StringBuilder logBuilder = new StringBuilder();
+                        logBuilder.append("Detailed data source information:\n");
+                        
+                        // 按数据源分组统计
+                        Map<String, Long> sourceCountMap = allMovies.stream()
+                            .collect(Collectors.groupingBy(Movie::getBaseUrl, Collectors.counting()));
+                        
+                        for (Map.Entry<String, Long> entry : sourceCountMap.entrySet()) {
+                            logBuilder.append("  DataSource: ").append(entry.getKey())
+                                .append(", Movie Count: ").append(entry.getValue()).append("\n");
+                        }
+                        
+                        // 输出部分电影信息
+                        logBuilder.append("Sample movies:\n");
+                        int count = 0;
+                        for (Movie movie : allMovies) {
+                            if (count++ >= 5) break; // 只显示前5个
+                            logBuilder.append("  Name: ").append(movie.getName())
+                                .append(", BaseUrl: ").append(movie.getBaseUrl()).append("\n");
+                        }
+                        
+                        if (allMovies.size() > 5) {
+                            logBuilder.append("  ... and ").append(allMovies.size() - 5).append(" more movies\n");
+                        }
+                        
+                        logger.info(logBuilder.toString());
+                    }
+                    return allMovies;
+                } finally {
+                    // 关闭线程池
+                    executor.shutdown();
+                    try {
+                        if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                            executor.shutdownNow();
+                        }
+                    } catch (InterruptedException e) {
+                        executor.shutdownNow();
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            } else {
+                logger.warning("No url mappings configured and no registered services found");
+                return new ArrayList<>();
+            }
         }
         
         // 创建线程池，限制并发线程数
@@ -228,6 +358,22 @@ public class MovieController {
         } catch (Exception e) {
             logger.warning("Error getting episodes for baseUrl: " + baseUrl + ", playUrl: " + playUrl + ", error: " + e.getMessage());
             return new ArrayList<>();
+        }
+    }
+    
+    // 辅助方法：根据服务实例获取基础URL
+    private String getBaseUrlForService(MovieService service, String serviceId) {
+        if (service instanceof org.example.get_movie_data.datasource.BfzyMovieService) {
+            return "https://bfzy.tv";
+        } else if (service instanceof org.example.get_movie_data.datasource.ChabeiguMovieService) {
+            return "https://www.chabeigu.com";
+        } else if (service instanceof org.example.get_movie_data.datasource.YunyMovieService) {
+            return "https://www.yuny.tv";
+        } else if (service instanceof org.example.get_movie_data.datasource.ExampleMovieService) {
+            return "https://example.com";
+        } else {
+            // 对于未知服务，尝试使用服务ID构建URL
+            return "https://" + serviceId + ".com";
         }
     }
 

@@ -1,6 +1,8 @@
 package org.example.get_movie_data.datasource;
 
 import org.example.get_movie_data.annotation.DataSource;
+import org.example.get_movie_data.service.MovieService;
+import org.example.get_movie_data.model.Movie;
 import org.example.get_movie_data.util.HttpClientUtil;
 import org.example.get_movie_data.util.HtmlParserUtil;
 import org.jsoup.nodes.Document;
@@ -34,7 +36,7 @@ import java.util.regex.Pattern;
     baseUrl = "https://www.chabeigu.com",
     version = "1.0.0"
 )
-public class ChabeiguMovieService {
+public class ChabeiguMovieService implements MovieService {
     
     // 线程池大小控制变量
     private static final int THREAD_POOL_SIZE = 10;
@@ -46,6 +48,7 @@ public class ChabeiguMovieService {
      * @param keyword 搜索关键词
      * @return 电影列表
      */
+    @Override
     public List<Movie> searchMovies(String baseUrl, String keyword) {
         //搜索接口https://www.chabeigu.com/index.php/vod/search.html?wd={keyword}
         //构建搜索url
@@ -201,6 +204,7 @@ public class ChabeiguMovieService {
      * @param playUrl 播放地址
      * @return 剧集列表
      */
+    @Override
     public List<Movie.Episode> getEpisodes(String baseUrl, String playUrl) {
         String html = HttpClientUtil.sendGetRequest(playUrl);
         if (html == null || html.isEmpty()) {
@@ -245,6 +249,7 @@ public class ChabeiguMovieService {
      * @param episodeUrl 剧集播放地址
      * @return M3U8播放地址
      */
+    @Override
     public String getM3u8Url(String baseUrl, String episodeUrl) {
         String html = HttpClientUtil.sendGetRequest(episodeUrl);
         if (html == null || html.isEmpty()) {
@@ -260,5 +265,13 @@ public class ChabeiguMovieService {
         }
 
         return m3u8Url;
+    }
+
+    @Override
+    public MovieService getMovieServiceByDatasource(String datasourceId) {
+        if ("chabeigu".equals(datasourceId)) {
+            return this;
+        }
+        return null;
     }
 }
