@@ -5,6 +5,7 @@ import org.example.get_movie_data.service.MovieService;
 import org.example.get_movie_data.service.MovieServiceManager;
 import org.example.get_movie_data.service.DataSourceConfig;
 import org.example.get_movie_data.service.ConfigManager;
+import org.example.get_movie_data.annotation.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -363,18 +364,19 @@ public class MovieController {
     
     // 辅助方法：根据服务实例获取基础URL
     private String getBaseUrlForService(MovieService service, String serviceId) {
-        if (service instanceof org.example.get_movie_data.datasource.BfzyMovieService) {
-            return "https://bfzy.tv";
-        } else if (service instanceof org.example.get_movie_data.datasource.ChabeiguMovieService) {
-            return "https://www.chabeigu.com";
-        } else if (service instanceof org.example.get_movie_data.datasource.YunyMovieService) {
-            return "https://www.yuny.tv";
-        } else if (service instanceof org.example.get_movie_data.datasource.ExampleMovieService) {
-            return "https://example.com";
-        } else {
-            // 对于未知服务，尝试使用服务ID构建URL
-            return "https://" + serviceId + ".com";
+        // 使用反射获取服务类上的@DataSource注解
+        Class<?> serviceClass = service.getClass();
+        DataSource dataSourceAnnotation = serviceClass.getAnnotation(DataSource.class);
+        
+        if (dataSourceAnnotation != null) {
+            String baseUrl = dataSourceAnnotation.baseUrl();
+            if (baseUrl != null && !baseUrl.isEmpty()) {
+                return baseUrl;
+            }
         }
+        
+        // 如果注解不存在或baseUrl为空，则尝试使用服务ID构建URL
+        return "https://" + serviceId + ".com";
     }
 
     /**
