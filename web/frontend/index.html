@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 不发送 Referer，避免第三方海报/资源被防盗链拦截 -->
+  <meta name="referrer" content="no-referrer">
+  <title>影视数据源服务</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      max-width: 900px; margin: 0 auto; padding: 24px 16px; line-height: 1.5;
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sources { color: #888; font-size: 13px; margin-bottom: 18px; }
+    .search { display: flex; gap: 8px; margin-bottom: 20px; }
+    input[type=text], input.url {
+      flex: 1; padding: 10px 12px; font-size: 15px;
+      border: 1px solid #ccc; border-radius: 6px; background: transparent; color: inherit;
+    }
+    button { cursor: pointer; }
+    button.search-btn {
+      padding: 10px 20px; font-size: 15px; border: none; border-radius: 6px;
+      background: #2563eb; color: #fff;
+    }
+    button.search-btn:hover { background: #1d4ed8; }
+
+    .card {
+      display: flex; gap: 12px; align-items: flex-start;
+      border: 1px solid rgba(128,128,128,.25); border-radius: 8px;
+      padding: 10px; margin-bottom: 12px; cursor: pointer;
+      transition: background .15s;
+    }
+    .card:hover { background: rgba(128,128,128,.08); }
+    .cover { width: 84px; height: 112px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #ddd; }
+    .cover.placeholder, .cover-lg.placeholder {
+      display: flex; align-items: center; justify-content: center; color: #999; font-size: 12px;
+    }
+    .card .info { flex: 1; min-width: 0; }
+    .card h3 { margin: 0 0 6px; font-size: 16px; }
+    .meta { color: #888; font-size: 13px; font-weight: normal; }
+    .desc { font-size: 14px; color: #666; margin-top: 6px; }
+    .empty { color: #999; padding: 20px 0; }
+
+    .back {
+      margin-bottom: 14px; padding: 8px 14px; font-size: 14px;
+      border: 1px solid #ccc; border-radius: 6px; background: transparent; color: inherit;
+    }
+    .detail-head { display: flex; gap: 16px; margin-bottom: 20px; }
+    .cover-lg { width: 150px; height: 200px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #ddd; }
+    .detail-info { flex: 1; min-width: 0; }
+    .detail-info h2 { margin: 0 0 8px; font-size: 20px; }
+    .detail-info .meta { margin-bottom: 10px; }
+
+    .eps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .ep {
+      padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px;
+      background: transparent; color: inherit; min-width: 56px; text-align: center;
+    }
+    .ep:hover { background: rgba(37,99,235,.12); border-color: #2563eb; }
+
+    .play { margin-top: 20px; padding: 14px; border: 1px solid rgba(128,128,128,.25); border-radius: 8px; }
+    .play .meta { margin-bottom: 8px; }
+    .play .row { display: flex; gap: 8px; }
+    .open {
+      padding: 10px 18px; font-size: 14px; border: none; border-radius: 6px;
+      background: #16a34a; color: #fff; text-decoration: none; white-space: nowrap;
+    }
+    .open:hover { background: #15803d; }
+  </style>
+</head>
+<body>
+  <h1>影视数据源服务</h1>
+  <div class="sources" id="sources">数据源加载中…</div>
+
+  <div class="search">
+    <input id="key" type="text" placeholder="输入影视关键词，如：仙逆" />
+    <button class="search-btn" onclick="doSearch()">搜索</button>
+  </div>
+
+  <!-- 搜索结果视图 -->
+  <div id="search-view">
+    <div id="results"></div>
+  </div>
+
+  <!-- 详情视图（含选集 + 播放地址） -->
+  <div id="detail-view" hidden>
+    <button class="back" onclick="backToSearch()">← 返回搜索</button>
+    <div id="detail"></div>
+    <div id="play-result"></div>
+  </div>
+
+  <script>
+    let searchResults = [];
+    let currentInfo = null;
+
+    // HTML 转义，防止动态文本破坏结构 / XSS
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    // 封面：有 URL 显示图片（加载失败自动隐藏），否则占位
+    function coverHtml(cover, cls, tip) {
+      return cover
+        ? `<img class="${cls}" src="${esc(cover)}" alt="" onerror="this.style.display='none'">`
+        : `<div class="${cls} placeholder">${tip}</div>`;
+    }
+
+    // 数据源列表
+    fetch('/api/sources')
+      .then(r => r.json())
+      .then(list => {
+        const names = list.map(s => s.source_name).join('、') || '（无）';
+        document.getElementById('sources').textContent = '数据源：' + names;
+      })
+      .catch(() => document.getElementById('sources').textContent = '数据源加载失败');
+
+    // 搜索
+    async function doSearch() {
+      const key = document.getElementById('key').value.trim();
+      if (!key) return;
+      const box = document.getElementById('results');
+      box.innerHTML = '搜索中…';
+      try {
+        const resp = await fetch('/api/search?key=' + encodeURIComponent(key));
+        const list = await resp.json();
+        if (!resp.ok) { box.innerHTML = '<div class="empty">请求失败：' + resp.status + '</div>'; return; }
+        if (!list.length) { box.innerHTML = '<div class="empty">无结果</div>'; return; }
+        searchResults = list;
+        box.innerHTML = list.map((item, i) => `
+          <div class="card" onclick="showDetail(${i})">
+            ${coverHtml(item.cover, 'cover', '无图')}
+            <div class="info">
+              <h3>${esc(item.name)} <span class="meta">${esc(item.type)}${item.year ? ' · ' + esc(item.year) : ''}</span></h3>
+              <div class="desc">${esc(item.desc)}</div>
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        box.innerHTML = '<div class="empty">搜索失败：' + esc(e) + '</div>';
+      }
+    }
+
+    // 点击结果 -> 详情 + 选集
+    async function showDetail(i) {
+      const item = searchResults[i];
+      if (!item) return;
+      document.getElementById('search-view').hidden = true;
+      document.getElementById('detail-view').hidden = false;
+      document.getElementById('play-result').innerHTML = '';
+      const detail = document.getElementById('detail');
+      detail.innerHTML = '加载详情中…';
+      try {
+        const resp = await fetch('/api/info?base_url=' + encodeURIComponent(item.base_url) + '&link=' + encodeURIComponent(item.link));
+        const info = await resp.json();
+        if (!resp.ok) { detail.innerHTML = '<div class="empty">详情加载失败：' + resp.status + '</div>'; return; }
+        currentInfo = info;
+        detail.innerHTML = renderDetail(info);
+      } catch (e) {
+        detail.innerHTML = '<div class="empty">详情加载失败：' + esc(e) + '</div>';
+      }
+    }
+
+    function renderDetail(info) {
+      const eps = info.episodes || [];
+      const epBtns = eps.length
+        ? '<div class="eps">' + eps.map(ep => `<button class="ep" onclick="playEpisode(${ep.index})">${esc(ep.name)}</button>`).join('') + '</div>'
+        : '<div class="empty">暂无分集</div>';
+      return `
+        <div class="detail-head">
+          ${coverHtml(info.cover, 'cover-lg', '无图')}
+          <div class="detail-info">
+            <h2>${esc(info.name)}</h2>
+            <div class="meta">${esc(info.type)}${info.year ? ' · ' + esc(info.year) : ''}</div>
+            <div class="desc">${esc(info.desc)}</div>
+          </div>
+        </div>
+        <h3>选集（${eps.length}）</h3>
+        ${epBtns}`;
+    }
+
+    // 点击选集 -> 播放地址
+    async function playEpisode(epIndex) {
+      if (!currentInfo) return;
+      const box = document.getElementById('play-result');
+      box.innerHTML = '获取播放地址中…';
+      try {
+        const resp = await fetch('/api/play?base_url=' + encodeURIComponent(currentInfo.base_url) + '&link=' + encodeURIComponent(currentInfo.link) + '&episode_index=' + epIndex);
+        const play = await resp.json();
+        if (!resp.ok) { box.innerHTML = '<div class="empty">播放地址获取失败：' + resp.status + '</div>'; return; }
+        box.innerHTML = `
+          <div class="play">
+            <div class="meta">类型：${esc(play.type)}${play.headers && play.headers.Referer ? ' · 需要 Referer 请求头' : ''}</div>
+            <div class="row">
+              <input class="url" readonly value="${esc(play.url)}" onclick="this.select()">
+              <a class="open" href="${esc(play.url)}" target="_blank" rel="noopener">打开</a>
+            </div>
+          </div>`;
+      } catch (e) {
+        box.innerHTML = '<div class="empty">播放地址获取失败：' + esc(e) + '</div>';
+      }
+    }
+
+    // 返回搜索
+    function backToSearch() {
+      document.getElementById('detail-view').hidden = true;
+      document.getElementById('search-view').hidden = false;
+      currentInfo = null;
+    }
+
+    // 回车触发搜索
+    document.getElementById('key').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doSearch();
+    });
+  </script>
+</body>
+</html>

@@ -20,10 +20,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 一个 FastAPI Web 应用，对外暴露**插件化多源影视数据源模块**（`media_source/`）。每个已接入站点（目前仅樱花动漫 / yhdm.one）都是独立 Python 包，实现三段链路：关键词搜索 → 详情获取 → 分集播放地址（m3u8/mp4）。
 
-- `main.py` — FastAPI 入口（Web 服务，经 `frontend_loader/` 提供静态文件）。
-- `media_source/` — 可复用的插件框架 + 站点插件。
-- `frontend_loader/` + `view/` — 中间件，从 `view/` 提供 `.html/.css/.js`。
-- `requirements.txt` — 仅固定 `media_source` 运行依赖。
+- `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 前端加载中间件。
+- `web/` — Web 服务模块（属应用层：REST API sources/search/info/play + `frontend/` 前端资源）。
+- `media_source/` — 可复用的插件框架 + 站点插件 + 文件缓存。
+- `frontend_loader/` — 前端静态资源加载引擎（默认从 `web/frontend/` 提供文件）。
+- `requirements.txt` — 运行依赖（`media_source` 数据源 + FastAPI Web 服务）。
 
 ## 常用命令
 
@@ -31,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 安装 media_source 运行依赖
 pip install -r requirements.txt
 
-# 启动 Web 服务（uvicorn，热重载；从 view/ 提供静态文件）
+# 启动 Web 服务（uvicorn，热重载；前端由 frontend_loader 从 web/frontend/ 提供）
 python main.py
 
 # 运行全部测试
@@ -45,7 +46,7 @@ python -m unittest media_source.tests.test_mapping.TestMapData -v
 python -m media_source.examples.demo_full_flow
 ```
 
-Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` 解析到 pyenv 的 3.13 解释器，所需依赖均已安装。注意 `requirements.txt` 不含 `fastapi`/`uvicorn` —— `main.py` 需要它们，当前环境已装但未固定版本。
+Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` 解析到 pyenv 的 3.13 解释器，所需依赖均已安装（`fastapi`/`uvicorn` 已纳入 `requirements.txt`）。
 
 ## 架构
 
