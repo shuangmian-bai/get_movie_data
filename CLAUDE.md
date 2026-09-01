@@ -56,7 +56,7 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 - **字段映射引擎**（`mapping.py`）：模板语法 `"name": "{title} | default:'未知影片'"`。白名单过滤（丢弃所有模板未声明的原始字段）、解析 `{占位符}`、回退到 `default:` 值（经 `ast.literal_eval` 解析），否则交给 Pydantic 模型默认值兜底。
 - **`PluginManager`**（`plugin_manager.py`）在导入时通过 `pkgutil` 扫描 `media_source.plugins/*`，跳过 `template` 目录。全局单例 `plugin_manager` 在模块导入时创建并扫描（`from media_source import plugin_manager`）。关键方法：`get_supported_sources()`、`get_plugin_instance(base_url)`、异步 `batch_search(key, base_urls=[], max_concurrency=None)`（信号量限流 + 单插件异常隔离）。
 - **数据模型**（Pydantic V2，`models.py`，`coerce_numbers_to_str=True`）：`SourceMeta`、`SearchItem`（name/link/type/year/cover/desc + 注入的 `base_url`）、`EpisodeItem`（name/index/link）、`MediaInfo`（…+ `episodes`）、`PlaySource`（url/type/headers）。
-- **横切能力**：`config.py`（环境变量可覆盖的 `MAX_PLUGIN_CONCURRENCY`、`HTTP_TIMEOUT`、`HTTP_USER_AGENT`）、`exceptions.py`（全部继承 `MediaSourceError`）、`utils/http.py`（`AsyncHttpClient` + `fetch_text`/`fetch_json` 便捷函数，网络异常转为 `SourceRequestError`）、`utils/helpers.py`（`normalize_url`、`clean_text`、`strip_html`、`clean_dict`）。
+- **横切能力**：`config.py`（环境变量可覆盖的 `MAX_PLUGIN_CONCURRENCY`、`HTTP_TIMEOUT`、`HTTP_USER_AGENT`、缓存目录 `CACHE_DIR` 与三级 TTL）、`cache.py`（`FileCache` 文件缓存 + 全局单例 `file_cache`，按 base_url 分区、TTL 过期、并发穿透防护，只存 JSON 可序列化数据）、`exceptions.py`（全部继承 `MediaSourceError`）、`utils/http.py`（`AsyncHttpClient` + `fetch_text`/`fetch_json` 便捷函数，网络异常转为 `SourceRequestError`）、`utils/helpers.py`（`normalize_url`、`clean_text`、`strip_html`、`clean_dict`）。
 
 ### 新增站点插件
 

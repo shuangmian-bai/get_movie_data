@@ -4,6 +4,7 @@
 """
 from media_source import config
 from media_source.base import MediaSourcePlugin
+from media_source.cache import FileCache, file_cache
 from media_source.exceptions import (
     MediaSourceError,
     PlayUrlNotFoundError,
@@ -24,6 +25,8 @@ from media_source.plugin_manager import PluginManager, plugin_manager
 __all__ = [
     "config",
     "MediaSourcePlugin",
+    "FileCache",
+    "file_cache",
     "MediaSourceError",
     "PluginNotFoundError",
     "SourceRequestError",
