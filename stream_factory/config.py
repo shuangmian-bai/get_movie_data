@@ -112,3 +112,13 @@ OCR_BLOCKWORDS: str = os.getenv(
 
 # OCR 并发数（tesseract 较重，默认低并发）
 OCR_CONCURRENCY: int = int(os.getenv("STREAM_FACTORY_OCR_CONCURRENCY", "1"))
+
+# ---- 水印字体配置 ----
+
+# drawtext 水印字体文件路径：服务器精简环境常无 fontconfig/中文字体，drawtext 不指定字体
+# 来源会报「No font filename provided」，故默认指向项目内置中文字体（跨环境稳定）；
+# 设为空串则回退 ffmpeg 的系统字体探测（本地开发可保持原行为）。
+DRAWTEXT_FONT: str = os.getenv(
+    "STREAM_FACTORY_DRAWTEXT_FONT",
+    str(_PROJECT_ROOT / "stream_factory" / "assets" / "fonts" / "DroidSansFallbackFull.ttf"),
+)

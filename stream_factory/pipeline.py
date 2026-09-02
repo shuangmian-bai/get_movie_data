@@ -69,16 +69,32 @@ def _keep_expr(trims: List[TrimSegment]) -> str:
     return "+".join(parts)
 
 
+def _drawtext_fontfile() -> str:
+    """drawtext 的 ``fontfile`` 片段（含结尾冒号）；字体缺失时返回空串交 ffmpeg 探测。
+
+    drawtext 不指定字体来源时依赖编译期 fontconfig + 系统字体兜底，服务器精简环境常
+    无字体导致 ``No font filename provided``，故显式指定内置中文字体保证跨环境一致。
+    """
+    font = config.DRAWTEXT_FONT
+    return f"fontfile='{font}':" if font else ""
+
+
 def _build_filter(rule: FilterRule) -> str:
     """把单个逐帧滤镜规则拼成 ``-vf`` 滤镜链片段。"""
     if rule.name == "drawtext":
         # 水印示例；text 含特殊字符需自行转义（冒号/逗号/单引号）
         text = str(rule.params.get("text", "AD"))
+        # 字体来源：规则显式指定优先，否则用全局配置（内置中文字体），都缺才交 ffmpeg 探测
+        fontfile = rule.params.get("fontfile") or config.DRAWTEXT_FONT
         fontsize = rule.params.get("fontsize", 24)
         x = rule.params.get("x", 10)
         y = rule.params.get("y", 10)
         color = rule.params.get("color", "white")
-        return f"drawtext=text='{text}':fontsize={fontsize}:x={x}:y={y}:fontcolor={color}"
+        opts = [f"text='{text}'"]
+        if fontfile:
+            opts.append(f"fontfile='{fontfile}'")
+        opts += [f"fontsize={fontsize}", f"x={x}", f"y={y}", f"fontcolor={color}"]
+        return "drawtext=" + ":".join(opts)
     # 未知滤镜：透传 name=key1=val1:key2=val2
     opts = ":".join(f"{k}={v}" for k, v in rule.params.items())
     return f"{rule.name}={opts}" if opts else rule.name
@@ -110,7 +126,7 @@ def _build_filters(
         )
         if b.text:
             vparts.append(
-                f"drawtext=text='{b.text}':fontsize=32:fontcolor=white:"
+                f"drawtext={_drawtext_fontfile()}text='{b.text}':fontsize=32:fontcolor=white:"
                 f"x=(w-text_w)/2:y=(h-text_h)/2:enable='{enable}'"
             )
         aparts.append(f"volume=volume=0:enable='{enable}'")
