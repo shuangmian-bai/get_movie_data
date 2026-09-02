@@ -12,9 +12,10 @@
 
 当前仓库里已经接入的示例站点包括：
 
-- `yhdm.one`
 - `cupfox7.com`
 - `qqll.cc`
+
+> 过期不再使用的数据源（如 `yhdm.one`）已移入 `media_source/plugins/_deprecated/` 废弃区，扫描时自动跳过。
 
 ## 主要功能
 

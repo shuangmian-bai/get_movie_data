@@ -17,7 +17,7 @@
 | GET | `/api/info` | `base_url`、`link`（均必填） | 影视详情 |
 | GET | `/api/play` | `base_url`、`link`、`episode_index`（均必填） | 播放地址 |
 
-参数一律走 query string。`base_url` 为站点唯一标识（如 `https://yhdm.one`），
+参数一律走 query string。`base_url` 为站点唯一标识（如 `https://www.cupfox7.com`），
 `link` 为详情页链接，`episode_index` 为集数序号（从 1 开始）。
 
 ## 缓存行为
@@ -53,7 +53,7 @@ python main.py
 curl "http://127.0.0.1:8000/api/sources"
 
 # 搜索（单源）
-curl "http://127.0.0.1:8000/api/search?key=仙逆&base_url=https://yhdm.one"
+curl "http://127.0.0.1:8000/api/search?key=仙逆&base_url=https://www.cupfox7.com"
 
 # 搜索（全源）
 curl "http://127.0.0.1:8000/api/search?key=仙逆"
@@ -65,8 +65,8 @@ curl "http://127.0.0.1:8000/api/search?key=仙逆&base_urls=https://www.cupfox7.
 curl "http://127.0.0.1:8000/api/search?key=仙逆&start=0&count=20&page_concurrency=5"
 
 # 详情
-curl "http://127.0.0.1:8000/api/info?base_url=https://yhdm.one&link=https://yhdm.one/vod/2023684335.html"
+curl "http://127.0.0.1:8000/api/info?base_url=https://www.cupfox7.com&link=https://www.cupfox7.com/voddetail/xxxx.html"
 
 # 播放地址
-curl "http://127.0.0.1:8000/api/play?base_url=https://yhdm.one&link=https://yhdm.one/vod/2023684335.html&episode_index=156"
+curl "http://127.0.0.1:8000/api/play?base_url=https://www.cupfox7.com&link=https://www.cupfox7.com/voddetail/xxxx.html&episode_index=1"
 ```

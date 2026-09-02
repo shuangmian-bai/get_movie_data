@@ -39,7 +39,6 @@ from stream_factory.stream_plugins import (
     CupfoxStreamPlugin,
     PassthroughStreamPlugin,
     QqllStreamPlugin,
-    YhdmStreamPlugin,
 )
 from web import api_router
 
@@ -52,11 +51,6 @@ STREAM_PIPELINES: Dict[str, Tuple[StreamPlugin, List[FramePlugin], List[UrlHandl
         [WatermarkFramePlugin(text="双面酱帧处理"), ShuangmianTextFramePlugin()],
         [OcrUrlHandler()],
     ),
-    # "https://yhdm.one": (
-    #     CompositeStreamPlugin([YhdmStreamPlugin(), BlankInsertStreamPlugin()]),
-    #     [ShuangmianTextFramePlugin()],
-    #     [OcrUrlHandler()],
-    # ),
     "https://www.qqll.cc": (
         CompositeStreamPlugin([QqllStreamPlugin(), BlankInsertStreamPlugin()]),
         [ShuangmianTextFramePlugin()],

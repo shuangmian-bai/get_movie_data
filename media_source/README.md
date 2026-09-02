@@ -26,10 +26,10 @@ media_source/
 ├── config.py              # 全局配置（并发数、超时、默认参数）
 ├── utils/                 # 通用工具包（http / helpers）
 ├── plugins/               # 站点插件目录
-│   ├── template/          # 插件开发模板（新增站点直接复制）
-│   ├── yhdm/              # 樱花动漫
+│   ├── template/          # 插件开发模板（新增站点直接复制，扫描时跳过）
 │   ├── cupfox/            # 茶杯狐
-│   └── qqll/              # 奇奇影视
+│   ├── qqll/              # 奇奇影视
+│   └── _deprecated/       # 废弃数据源区（过期源收纳，扫描时跳过）
 ├── examples/              # 业务使用示例
 ├── tests/                 # 单元测试
 ├── docs/                  # 开发文档

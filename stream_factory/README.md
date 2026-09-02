@@ -36,14 +36,14 @@ stream_factory/
 │   ├── watermark.py     # WatermarkFramePlugin（去水印/打标，示例）
 │   └── shuangmian_text.py  # ShuangmianTextFramePlugin（「双面酱」文字水印）
 ├── stream_plugins/      # 流模块（子模块）：StreamPlugin 基类 + 各流插件
-│   ├── __init__.py      # 导出 StreamPlugin + 6 个流插件
+│   ├── __init__.py      # 导出 StreamPlugin + 5 个流插件
 │   ├── base.py          # StreamPlugin 抽象基类
 │   ├── passthrough.py   # PassthroughStreamPlugin（透传）
 │   ├── cupfox.py        # CupfoxStreamPlugin（站点裁剪）
-│   ├── yhdm.py          # YhdmStreamPlugin（站点裁剪）
 │   ├── qqll.py          # QqllStreamPlugin（站点裁剪）
 │   ├── blank_insert.py  # BlankInsertStreamPlugin（空白插入案例）
-│   └── composite.py     # CompositeStreamPlugin（组合流插件）
+│   ├── composite.py     # CompositeStreamPlugin（组合流插件）
+│   └── _deprecated/     # 废弃流插件区（过期源收纳，不再导出）
 ├── url_handlers/        # URL 处理器（子模块）：UrlHandler 基类 + OCR 违规词处理器
 │   ├── __init__.py      # 导出 UrlHandler / OcrUrlHandler
 │   ├── base.py          # UrlHandler 抽象基类（分片级内容处理器）
@@ -112,7 +112,7 @@ stream_factory/
 - **正确性**：URL 处理器会改变输出，故其 `fingerprint()` 纳入 `process_cache.cache_key` 的 `extra` 维度——处理器配置变化 → 指纹变化 → `sid` 变化 → 重新转流，避免错误复用旧 HLS。
 - **范围**：仅 m3u8 多分片场景生效（mp4 直链无分片、不适用）；`POST /api/stream`（无 `base_url`）不传 URL 处理器，默认不过滤。
 
-`OcrUrlHandler` 已接入三个站点（cupfox / yhdm / qqll）的 `STREAM_PIPELINES`。
+`OcrUrlHandler` 已接入两个站点（cupfox / qqll）的 `STREAM_PIPELINES`。
 
 ## 流/帧/URL 插件与站点组合
 
@@ -130,7 +130,7 @@ stream_factory/
 | 帧 | `ShuangmianTextFramePlugin` | **开发案例**：叠加「双面酱」文字水印 |
 | 流 | `PassthroughStreamPlugin` | 透传，不裁剪 |
 | URL | `OcrUrlHandler` | **开发案例**：抽帧 OCR 识别违规词（如「澳门新葡京」），命中拉黑分片跳过推流 |
-| 流 | `CupfoxStreamPlugin` / `YhdmStreamPlugin` / `QqllStreamPlugin` | 各站点裁剪策略（区间为占位/示例） |
+| 流 | `CupfoxStreamPlugin` / `QqllStreamPlugin` | 各站点裁剪策略（区间为占位/示例） |
 | 流 | `BlankInsertStreamPlugin` | **开发案例**：每隔 N 秒插入 M 秒空白（黑屏+静音+提示文字） |
 | 流 | `CompositeStreamPlugin` | 组合流插件：聚合多个流插件的 trims/blanks，供应用层叠加能力 |
 
@@ -141,11 +141,6 @@ STREAM_PIPELINES = {
     "https://www.cupfox7.com": (
         CompositeStreamPlugin([CupfoxStreamPlugin(), BlankInsertStreamPlugin()]),
         [WatermarkFramePlugin(text="去广告"), ShuangmianTextFramePlugin()],
-        [OcrUrlHandler()],
-    ),
-    "https://yhdm.one": (
-        CompositeStreamPlugin([YhdmStreamPlugin(), BlankInsertStreamPlugin()]),
-        [ShuangmianTextFramePlugin()],
         [OcrUrlHandler()],
     ),
     "https://www.qqll.cc": (
@@ -165,7 +160,7 @@ STREAM_PIPELINES = {
 - **`ShuangmianTextFramePlugin`**（帧插件）：实现 `filters()` 返回一条 `drawtext` 规则，即可在画面上叠加「双面酱」文字。
 - **`BlankInsertStreamPlugin`**（流插件）：覆盖 `blanks()` 返回 `BlankSegment`，实现「每隔 `interval` 秒插入 `duration` 秒空白（黑屏 + 静音 + 居中提示文字，默认「广告已跳过」）」。
 
-> 以上两个开发案例已接入三个真实站点（cupfox / yhdm / qqll）的 `STREAM_PIPELINES`：
+> 以上两个开发案例已接入两个真实站点（cupfox / qqll）的 `STREAM_PIPELINES`：
 > `ShuangmianTextFramePlugin` 加入各站点的帧插件列表，`BlankInsertStreamPlugin` 经 `CompositeStreamPlugin` 与各站点裁剪插件叠加。
 
 自定义流插件时，`trims()`（裁剪）与 `blanks()`（插入空白）是两种流级时间操作，可只实现其中一种；帧插件只需实现 `filters()`。

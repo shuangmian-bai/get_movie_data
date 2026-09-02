@@ -9,7 +9,7 @@
 
 ```
 {项目根}/cache/                     # 缓存根目录（可用环境变量 MEDIA_SOURCE_CACHE_DIR 覆盖）
-└── yhdm.one/                       # 命名空间 = base_url 规范化
+└── cupfox7.com/                    # 命名空间 = base_url 规范化
       ├── <md5>.json                # 搜索 / 详情 / 播放 的缓存条目
       └── ...
 ```
