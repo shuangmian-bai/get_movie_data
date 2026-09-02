@@ -23,11 +23,13 @@ class BlankSegment(BaseModel):
     """周期性空白段：每隔 ``interval`` 秒，覆盖 ``duration`` 秒为黑屏 + 静音（视觉/听觉空白）。
 
     由流插件（``StreamPlugin.blanks``）产出，pipeline 翻译为 ``drawbox``（视频盖黑）
-    + ``volume``（音频静音）滤镜。
+    + ``volume``（音频静音）滤镜；若 ``text`` 非空，则在空白段居中叠加提示文字，
+    避免纯黑屏被误解为故障。
     """
 
     interval: float  # 每隔多少秒插入一段空白
     duration: float  # 每段空白的时长（秒）
+    text: str = ""   # 空白段期间显示的提示文字（空则纯黑屏）
 
 
 class FilterRule(BaseModel):

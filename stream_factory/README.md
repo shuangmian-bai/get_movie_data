@@ -66,7 +66,7 @@ stream_factory/
 | 帧 | `ShuangmianTextFramePlugin` | **开发案例**：叠加「双面酱」文字水印 |
 | 流 | `PassthroughStreamPlugin` | 透传，不裁剪 |
 | 流 | `CupfoxStreamPlugin` / `YhdmStreamPlugin` / `QqllStreamPlugin` | 各站点裁剪策略（区间为占位/示例） |
-| 流 | `BlankInsertStreamPlugin` | **开发案例**：每隔 N 秒插入 M 秒空白（黑屏+静音） |
+| 流 | `BlankInsertStreamPlugin` | **开发案例**：每隔 N 秒插入 M 秒空白（黑屏+静音+提示文字） |
 | 流 | `CompositeStreamPlugin` | 组合流插件：聚合多个流插件的 trims/blanks，供应用层叠加能力 |
 
 插件不携带 `base_url`，站点 → 插件组合关系在**应用层 `main.py`** 的 `STREAM_PIPELINES` 里自由编排：
@@ -95,7 +95,7 @@ STREAM_PIPELINES = {
 `plugins.py` 内附两个可直接照抄的开发案例：
 
 - **`ShuangmianTextFramePlugin`**（帧插件）：实现 `filters()` 返回一条 `drawtext` 规则，即可在画面上叠加「双面酱」文字。
-- **`BlankInsertStreamPlugin`**（流插件）：覆盖 `blanks()` 返回 `BlankSegment`，实现「每隔 `interval` 秒插入 `duration` 秒空白（黑屏 + 静音）」。
+- **`BlankInsertStreamPlugin`**（流插件）：覆盖 `blanks()` 返回 `BlankSegment`，实现「每隔 `interval` 秒插入 `duration` 秒空白（黑屏 + 静音 + 居中提示文字，默认「广告已跳过」）」。
 
 > 以上两个开发案例已接入三个真实站点（cupfox / yhdm / qqll）的 `STREAM_PIPELINES`：
 > `ShuangmianTextFramePlugin` 加入各站点的帧插件列表，`BlankInsertStreamPlugin` 经 `CompositeStreamPlugin` 与各站点裁剪插件叠加。

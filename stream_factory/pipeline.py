@@ -101,12 +101,18 @@ def _build_filters(
     for f in filters:
         vparts.append(_build_filter(f))
 
-    # 周期性空白段：drawbox 盖黑（视频）+ volume 静音（音频），enable 周期性生效
+    # 周期性空白段：drawbox 盖黑（视频）+ volume 静音（音频），enable 周期性生效；
+    # 配置了 text 时在空白段居中叠加提示文字，避免纯黑屏被误解为故障。
     for b in blanks:
         enable = f"between(mod(t\\,{b.interval:.3f})\\,0\\,{b.duration:.3f})"
         vparts.append(
             f"drawbox=x=0:y=0:w=iw:h=ih:color=black@1:t=fill:enable='{enable}'"
         )
+        if b.text:
+            vparts.append(
+                f"drawtext=text='{b.text}':fontsize=32:fontcolor=white:"
+                f"x=(w-text_w)/2:y=(h-text_h)/2:enable='{enable}'"
+            )
         aparts.append(f"volume=volume=0:enable='{enable}'")
 
     vfilter = ",".join(vparts) if vparts else None
