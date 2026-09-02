@@ -60,6 +60,12 @@ cache/
 - 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`STREAM_FACTORY_CACHE_ROOT`（流工厂统一缓存根），以及细分的 `STREAM_FACTORY_HLS_ROOT` / `STREAM_FACTORY_VIDEO_CACHE_ROOT`。
 - **新增缓存时同样放入 `cache/` 下**，保持「所有缓存以 cache 为基础路径」这条约定。
 
+## 环境要求
+
+- **Python 3.8+**：本项目依赖 `Pydantic V2` / `FastAPI` / `httpx` 等库，需 Python 3.8 及以上版本。
+- **FFmpeg**：去广告转流（`stream_factory`）依赖系统 `ffmpeg`，需**单独安装**（非 Python 包），如 `apt install ffmpeg` / `brew install ffmpeg`。
+- **mediamtx**（可选）：RTSP 推流服务器，服务启动时自动拉起；仅用 HLS 可省略（设 `STREAM_FACTORY_RTSP_ENABLED=0`）。
+
 ## 快速开始
 
 ```bash
