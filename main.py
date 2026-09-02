@@ -27,14 +27,16 @@ from stream_factory import (
     stop_mediamtx,
     stream_factory,
 )
-from stream_factory.plugins import (
+from stream_factory.frame_plugins import (
+    ShuangmianTextFramePlugin,
+    WatermarkFramePlugin,
+)
+from stream_factory.stream_plugins import (
     BlankInsertStreamPlugin,
     CompositeStreamPlugin,
     CupfoxStreamPlugin,
     PassthroughStreamPlugin,
     QqllStreamPlugin,
-    ShuangmianTextFramePlugin,
-    WatermarkFramePlugin,
     YhdmStreamPlugin,
 )
 from web import api_router

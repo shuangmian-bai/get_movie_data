@@ -70,7 +70,7 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 
 - 输入 `media_source` 拿到的 m3u8/mp4 播放地址，用 **FFmpeg 子进程**拉流并做**去广告裁剪**（无损 `-c copy` 快路径 / `select` 滤镜重编码路径）。
 - 规则模型（`rules.py`）：`StreamSource`（流源 url/type/headers）、`StreamRequest`（source_url/headers/trims/filters/blanks）、`TrimSegment`（删除区间）、`BlankSegment`（周期性空白段）、`FilterRule`（逐帧滤镜，预留）。
-- 插件抽象（`base.py` + `plugins.py`）：`FramePlugin`（帧插件，产出 FilterRule）/ `StreamPlugin`（流插件，产出 TrimSegment、可选 BlankSegment 并合成 StreamRequest），**不绑定 base_url**；内置水印/文字帧插件 + 各站点流插件（示例裁剪）+ 空白插入案例（`BlankInsertStreamPlugin`）+ 组合流插件（`CompositeStreamPlugin`，聚合多个流插件的 trims/blanks）。
+- 插件抽象（`frame_plugins/` + `stream_plugins/` 两个子包，每个具体插件一个文件即「孙子模块」）：`FramePlugin`（帧插件，产出 FilterRule）/ `StreamPlugin`（流插件，产出 TrimSegment、可选 BlankSegment 并合成 StreamRequest），**不绑定 base_url**；帧子包内置水印/文字帧插件，流子包内置各站点流插件（示例裁剪）+ 空白插入案例（`BlankInsertStreamPlugin`）+ 组合流插件（`CompositeStreamPlugin`，聚合多个流插件的 trims/blanks）。帧/流两子包运行时解耦（`stream_plugins/base.py` 仅在 `TYPE_CHECKING` 块引用 `FramePlugin`）。
 - 编排：`pipeline.py`（规则→ffmpeg 命令）/ `session.py` + `factory.py`（会话子进程生命周期）/ `api.py`（REST + 播放器页）。
 - 源视频缓存（`video_cache.py`）：ffmpeg 拉流前先把上游源缓存到本地（保留 HLS 分片结构 / mp4 直链），`factory.create_stream` 自动 `ensure_source` 命中后改读本地；用**长驻 httpx 连接池**复用 TCP、per-key 锁**并发去重**（同源只下载一次）、TTL 过期惰性重下；AES-128 加密分片 / Master 嵌套过深 / 下载失败均**降级直连**。缓存根 `{项目根}/video_cache/`（`VIDEO_CACHE_ROOT`/`VIDEO_CACHE_TTL`/`VIDEO_CACHE_CONCURRENCY` 可配）。
 - 站点组合在应用层 `main.py` 的 `STREAM_PIPELINES`（`base_url → (流插件, [帧插件])`）自由编排，经 `POST /api/stream/processed`（内部处理入口）按站点触发去广告流；`GET /api/play` 仍无状态返回原始 m3u8。三个站点（cupfox/yhdm/qqll）均已接入「双面酱」文字水印（`ShuangmianTextFramePlugin`）与空白插入案例（`BlankInsertStreamPlugin`，经 `CompositeStreamPlugin` 叠加）。

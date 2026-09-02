@@ -9,7 +9,6 @@ from stream_factory.config import HLS_ROOT
 from stream_factory.factory import StreamFactory, stream_factory
 from stream_factory.mediamtx import ensure_mediamtx, stop_mediamtx
 from stream_factory.api import api_router
-from stream_factory.base import FramePlugin, StreamPlugin
 from stream_factory.rules import (
     BlankSegment,
     FilterRule,
@@ -17,14 +16,18 @@ from stream_factory.rules import (
     StreamSource,
     TrimSegment,
 )
-from stream_factory.plugins import (
+from stream_factory.frame_plugins import (
+    FramePlugin,
+    ShuangmianTextFramePlugin,
+    WatermarkFramePlugin,
+)
+from stream_factory.stream_plugins import (
     BlankInsertStreamPlugin,
     CompositeStreamPlugin,
     CupfoxStreamPlugin,
     PassthroughStreamPlugin,
     QqllStreamPlugin,
-    ShuangmianTextFramePlugin,
-    WatermarkFramePlugin,
+    StreamPlugin,
     YhdmStreamPlugin,
 )
 from stream_factory.video_cache import close_video_cache, ensure_source

@@ -28,8 +28,20 @@ stream_factory/
 ├── __init__.py          # 导出单例、路由、HLS_ROOT、规则模型、插件基类与内置插件
 ├── config.py            # FFmpeg 路径、HLS 目录、RTSP 地址等（环境变量可覆盖）
 ├── rules.py             # 规则模型：StreamSource / TrimSegment / FilterRule / StreamRequest
-├── base.py              # 抽象基类：FramePlugin（帧插件）/ StreamPlugin（流插件）
-├── plugins.py           # 内置插件：水印/文字帧插件 + 各站点流插件 + 空白插入案例
+├── frame_plugins/       # 帧模块（子模块）：FramePlugin 基类 + 水印/文字帧插件
+│   ├── __init__.py      # 导出 FramePlugin / WatermarkFramePlugin / ShuangmianTextFramePlugin
+│   ├── base.py          # FramePlugin 抽象基类
+│   ├── watermark.py     # WatermarkFramePlugin（去水印/打标，示例）
+│   └── shuangmian_text.py  # ShuangmianTextFramePlugin（「双面酱」文字水印）
+├── stream_plugins/      # 流模块（子模块）：StreamPlugin 基类 + 各流插件
+│   ├── __init__.py      # 导出 StreamPlugin + 6 个流插件
+│   ├── base.py          # StreamPlugin 抽象基类
+│   ├── passthrough.py   # PassthroughStreamPlugin（透传）
+│   ├── cupfox.py        # CupfoxStreamPlugin（站点裁剪）
+│   ├── yhdm.py          # YhdmStreamPlugin（站点裁剪）
+│   ├── qqll.py          # QqllStreamPlugin（站点裁剪）
+│   ├── blank_insert.py  # BlankInsertStreamPlugin（空白插入案例）
+│   └── composite.py     # CompositeStreamPlugin（组合流插件）
 ├── pipeline.py          # FFmpeg 命令行构建器（规则 → ffmpeg 参数）
 ├── video_cache.py       # 源视频缓存：长驻连接池 + m3u8/mp4 下载 + 并发去重
 ├── session.py           # StreamSession：单会话子进程生命周期
@@ -74,7 +86,7 @@ stream_factory/
 - **`FramePlugin`（帧插件）**：逐帧处理单元，`filters()` 产出 `FilterRule` 列表（如去水印 `drawtext`）。
 - **`StreamPlugin`（流插件）**：流级裁剪策略，`trims(source)` 产出 `TrimSegment` 列表，`build_request(source, frame_plugins)` 合成 `StreamRequest`。
 
-内置插件（`stream_factory/plugins.py`）：
+内置插件（`stream_factory/frame_plugins/` 与 `stream_factory/stream_plugins/`，每个具体插件一个文件）：
 
 | 类型 | 插件 | 说明 |
 | --- | --- | --- |
@@ -108,7 +120,7 @@ STREAM_PIPELINES = {
 
 ### 自定义插件开发案例
 
-`plugins.py` 内附两个可直接照抄的开发案例：
+两个开发案例分别位于 `frame_plugins/shuangmian_text.py` 与 `stream_plugins/blank_insert.py`，可直接照抄：
 
 - **`ShuangmianTextFramePlugin`**（帧插件）：实现 `filters()` 返回一条 `drawtext` 规则，即可在画面上叠加「双面酱」文字。
 - **`BlankInsertStreamPlugin`**（流插件）：覆盖 `blanks()` 返回 `BlankSegment`，实现「每隔 `interval` 秒插入 `duration` 秒空白（黑屏 + 静音 + 居中提示文字，默认「广告已跳过」）」。

@@ -1,26 +1,16 @@
-"""流处理插件抽象基类
+"""流插件抽象基类
 
-定义两个可复用、不绑定站点的插件基类：
-
-- ``FramePlugin``：帧插件，逐帧处理单元，产出滤镜规则；
-- ``StreamPlugin``：流插件，流级裁剪策略，产出裁剪区间并合成 ``StreamRequest``。
-
-插件不携带 ``base_url``，站点 → 插件组合关系由应用层（``main.py``）自由编排。
+定义 ``StreamPlugin``：流插件，流级裁剪策略，产出裁剪区间并合成 ``StreamRequest``。
+插件不携带 ``base_url``，站点 → 流插件组合关系由应用层（``main.py``）自由编排。
 """
 import abc
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
-from stream_factory.rules import BlankSegment, FilterRule, StreamRequest, StreamSource, TrimSegment
+from stream_factory.rules import BlankSegment, StreamRequest, StreamSource, TrimSegment
 
-
-class FramePlugin(abc.ABC):
-    """帧插件：逐帧处理单元，产出滤镜规则。可复用、不绑定站点。"""
-
-    name: str = ""
-
-    @abc.abstractmethod
-    def filters(self) -> List[FilterRule]:
-        """返回该帧处理对应的滤镜规则列表（交由 pipeline 拼入 ``-vf`` 滤镜链）。"""
+# 仅类型检查时引用帧插件基类，运行时跳过，保持帧/流两个子包解耦（无循环 import）
+if TYPE_CHECKING:
+    from stream_factory.frame_plugins.base import FramePlugin
 
 
 class StreamPlugin(abc.ABC):
@@ -39,7 +29,7 @@ class StreamPlugin(abc.ABC):
     def build_request(
         self,
         source: StreamSource,
-        frame_plugins: Optional[List[FramePlugin]] = None,
+        frame_plugins: Optional[List["FramePlugin"]] = None,
     ) -> StreamRequest:
         """把源 + 裁剪区间 + 帧滤镜 合成 ``StreamRequest``。
 
