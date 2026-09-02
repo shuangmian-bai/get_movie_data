@@ -22,6 +22,20 @@ HTTP_USER_AGENT: str = os.getenv(
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
 )
 
+# ---- 自动重联（HTTP 重试）配置 ----
+
+# 单次请求失败后的最大重试次数（0 表示不重试）
+HTTP_RETRIES: int = int(os.getenv("MEDIA_SOURCE_HTTP_RETRIES", "3"))
+
+# 重试基础退避时间（秒），按 2^n 指数递增
+HTTP_RETRY_BACKOFF: float = float(os.getenv("MEDIA_SOURCE_HTTP_RETRY_BACKOFF", "0.5"))
+
+# 是否默认信任环境代理（HTTP_PROXY/ALL_PROXY 等）；需直连的站点由插件自行关闭
+HTTP_TRUST_ENV: bool = os.getenv("MEDIA_SOURCE_HTTP_TRUST_ENV", "1") == "1"
+
+# 单插件翻页并发抓取上限（搜索有多页时，同时发起的请求数）
+PAGE_CONCURRENCY: int = int(os.getenv("MEDIA_SOURCE_PAGE_CONCURRENCY", "5"))
+
 # ---- 文件缓存配置 ----
 
 # 缓存根目录（按 base_url 划分命名空间），默认位于项目根 cache/
