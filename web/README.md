@@ -13,7 +13,7 @@
 | 方法 | 路径 | 参数 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/api/sources` | 无 | 可用数据源列表 |
-| GET | `/api/search` | `key`（必填）、`base_url`（可选，空则全源） | 搜索影视 |
+| GET | `/api/search` | `key`（必填）、`base_url`（可选，空则全源）、`start`（可选，默认 0）、`count`（可选，空则全部）、`page_concurrency`（可选） | 搜索影视（支持分页） |
 | GET | `/api/info` | `base_url`、`link`（均必填） | 影视详情 |
 | GET | `/api/play` | `base_url`、`link`、`episode_index`（均必填） | 播放地址 |
 
@@ -24,6 +24,7 @@
 
 - 搜索 / 详情 / 播放三类结果均写入文件缓存，TTL 见 `media_source/config.py`
   （默认搜索 10 分钟、详情 1 小时、播放 10 分钟，可环境变量覆盖）。
+- 搜索缓存 key 含分页维度（`start`/`count`），不同分页参数不共享缓存。
 - 播放接口内部复用详情缓存，不会因取播放地址而重复爬详情页。
 - 同一 key 并发请求只触发一次爬取（见 `media_source.cache` 的并发穿透防护）。
 
@@ -53,6 +54,9 @@ curl "http://127.0.0.1:8000/api/search?key=仙逆&base_url=https://yhdm.one"
 
 # 搜索（全源）
 curl "http://127.0.0.1:8000/api/search?key=仙逆"
+
+# 搜索（分页：从第 0 条起取 20 条，并发抓页 5）
+curl "http://127.0.0.1:8000/api/search?key=仙逆&start=0&count=20&page_concurrency=5"
 
 # 详情
 curl "http://127.0.0.1:8000/api/info?base_url=https://yhdm.one&link=https://yhdm.one/vod/2023684335.html"

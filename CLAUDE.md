@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概览
 
-一个 FastAPI Web 应用，对外暴露**插件化多源影视数据源模块**（`media_source/`）。每个已接入站点（樱花动漫 / yhdm.one、茶杯狐 / cupfox7.com）都是独立 Python 包，实现三段链路：关键词搜索 → 详情获取 → 分集播放地址（m3u8/mp4）。
+一个 FastAPI Web 应用，对外暴露**插件化多源影视数据源模块**（`media_source/`）。每个已接入站点（樱花动漫 / yhdm.one、茶杯狐 / cupfox7.com、奇奇影视 / qqll.cc）都是独立 Python 包，实现三段链路：关键词搜索 → 详情获取 → 分集播放地址（m3u8/mp4）。
 
 - `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 前端加载中间件。
 - `web/` — Web 服务模块（属应用层：REST API sources/search/info/play + `frontend/` 前端资源）。
@@ -52,7 +52,7 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 
 ### 插件框架（`media_source/`）
 
-- **`MediaSourcePlugin`**（`base.py`）为抽象基类。插件需声明 4 个类属性（`base_url`、`source_name`、`source_desc`，以及映射模板 `search_mapping`/`info_mapping`/`play_mapping`/`episode_mapping`），并实现 3 个抽象异步方法 `_raw_search(key)` / `_raw_get_info(search_item)` / `_raw_get_play_url(media_info, episode_index)`。
+- **`MediaSourcePlugin`**（`base.py`）为抽象基类。插件需声明 4 个类属性（`base_url`、`source_name`、`source_desc`，以及映射模板 `search_mapping`/`info_mapping`/`play_mapping`/`episode_mapping`），并实现 3 个抽象异步方法 `_raw_search(key)` / `_raw_get_info(search_item)` / `_raw_get_play_url(media_info, episode_index)`。支持分页搜索的站点可额外覆盖可选钩子 `_raw_search_page(key, page)`（page 从 1 开始），基类公开方法 `search_page(key, start, count, page_concurrency)` 据此按「偏移 + 条数」只抓取覆盖区间的分页——先抓第 1 页探明每页条数，再并发抓取所需页码后切片返回；不支持分页的站点降级为抓取全部后切片。
   - **契约**：`_raw_*` 只返回原始 `dict`/`list[dict]`，禁止返回 Pydantic 模型、禁止字段过滤。基类公开方法（`search`/`get_info`/`get_play_url`）把原始数据交给映射引擎，返回标准模型，并自动注入 `base_url`、映射分集列表。
 - **字段映射引擎**（`mapping.py`）：模板语法 `"name": "{title} | default:'未知影片'"`。白名单过滤（丢弃所有模板未声明的原始字段）、解析 `{占位符}`、回退到 `default:` 值（经 `ast.literal_eval` 解析），否则交给 Pydantic 模型默认值兜底。
 - **`PluginManager`**（`plugin_manager.py`）在导入时通过 `pkgutil` 扫描 `media_source.plugins/*`，跳过 `template` 目录。全局单例 `plugin_manager` 在模块导入时创建并扫描（`from media_source import plugin_manager`）。关键方法：`get_supported_sources()`、`get_plugin_instance(base_url)`、异步 `batch_search(key, base_urls=[], max_concurrency=None)`（信号量限流 + 单插件异常隔离）。
@@ -65,7 +65,7 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 
 ## 已知状态 / 注意事项
 
-- **测试套件当前是坏的**：`test_plugin_manager.py`、`test_plugins.py`、`test_batch_search.py` 引用了已被删除的示例插件 `site_a`/`site_b`（`https://www.site-a.example.com`、`https://www.site-b.example.com`）。现在仅剩 `yhdm`、`cupfox` 两个真实插件，这些文件在更新到当前插件集之前会失败/报错。
+- **测试套件当前是坏的**：`test_plugin_manager.py`、`test_plugins.py`、`test_batch_search.py` 引用了已被删除的示例插件 `site_a`/`site_b`（`https://www.site-a.example.com`、`https://www.site-b.example.com`）。现在仅剩 `yhdm`、`cupfox`、`qqll` 三个真实插件，这些文件在更新到当前插件集之前会失败/报错。
 - `yhdm` 插件发起**真实网络请求**到 `https://yhdm.one/`（搜索/详情为服务端渲染 HTML；播放地址来自 JSON 接口 `/_get_plays/<vod_id>/<ep_name>`）。无离线/mock 模式，涉及它的单元测试需要网络。
 - `cupfox` 插件发起**真实网络请求**到 `https://www.cupfox7.com/`（苹果CMS v10，服务端渲染 HTML；播放地址从播放页内嵌 `var player_xxxx` 的 `url` 字段提取 m3u8）。**需直连（`trust_env=False`）绕过代理**，否则代理对 HTTP/2 处理失败；搜索结果有多页时内部用 asyncio 并发（信号量限流）抓取所有分页。涉及它的单元测试需要网络。
 - `plugin_manager.scan_plugins()` 在导入时执行，因此 `get_supported_sources()` 反映的是 `plugins/` 目录下当前实际存在的包，而非静态清单。

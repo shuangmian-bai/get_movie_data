@@ -30,8 +30,8 @@ from media_source.cache import file_cache  # 全局单例
 | `await cache.get_or_fetch(namespace, key, ttl, fetch)` | 命中直接返回；未命中调用 `fetch()` 并回填 |
 | `await cache.clear(namespace=None)` | 清空缓存（不传则清空全部），返回删除文件数 |
 
-`key` 为业务参数键（如 `search:仙逆`、`info:<详情链接>`、`play:<分集链接>`），内部 MD5 成文件名，
-避免路径非法字符问题。
+`key` 为业务参数键（如 `search:仙逆:0:20`、`info:<详情链接>`、`play:<分集链接>`），内部 MD5 成文件名，
+避免路径非法字符问题。搜索 key 含分页维度（`start:count`），不同分页参数不共享缓存。
 
 ## TTL 分级
 
@@ -58,16 +58,17 @@ from media_source import config, plugin_manager
 from media_source.cache import file_cache
 from media_source.models import SearchItem
 
-async def search_with_cache(key: str, base_url: str) -> list[SearchItem]:
+async def search_with_cache(key: str, base_url: str, start: int = 0, count: int | None = None) -> list[SearchItem]:
     plugin = plugin_manager.get_plugin_instance(base_url)
     namespace = file_cache.namespace_of(plugin.base_url)
+    cache_key = f"search:{key}:{start}:{'all' if count is None else count}"
 
     async def fetch():
-        items = await plugin.search(key)
+        items = await plugin.search_page(key, start=start, count=count)
         return [item.model_dump() for item in items]  # 模型 -> dict（可 JSON 化）
 
     data = await file_cache.get_or_fetch(
-        namespace, f"search:{key}", config.SEARCH_CACHE_TTL, fetch
+        namespace, cache_key, config.SEARCH_CACHE_TTL, fetch
     )
     return [SearchItem(**d) for d in data]  # dict -> 模型还原
 ```

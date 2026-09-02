@@ -18,6 +18,15 @@ async def parse_search(key: str) -> List[Dict[str, Any]]:
     raise NotImplementedError("请实现站点搜索解析逻辑")
 
 
+async def parse_search_page(key: str, page: int) -> List[Dict[str, Any]]:
+    """请求搜索接口，抓取指定页码并解析为原始字典列表（page 从 1 开始）。
+
+    仅当站点支持分页时实现；不实现则插件保留基类默认 ``_raw_search_page``
+    （抛 ``NotImplementedError``），框架将降级为抓取全部后切片。
+    """
+    raise NotImplementedError("请实现站点分页搜索解析逻辑")
+
+
 async def parse_info(detail_url: str) -> Dict[str, Any]:
     """请求详情页并解析为原始字典。"""
     raise NotImplementedError("请实现站点详情解析逻辑")

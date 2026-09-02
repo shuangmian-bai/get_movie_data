@@ -85,6 +85,12 @@ def _parse_search_items(selector: Selector) -> List[Dict[str, Any]]:
     return results
 
 
+async def parse_search_page(key: str, page: int) -> List[Dict[str, Any]]:
+    """请求搜索接口，抓取指定页码并解析为原始字典列表（page 从 1 开始）。"""
+    html = await _fetch_text(search_page_url(key, page))
+    return _parse_search_items(Selector(html))
+
+
 async def parse_search(key: str) -> List[Dict[str, Any]]:
     """请求搜索接口，并发抓取所有分页，解析为原始字典列表。"""
     first_html = await _fetch_text(search_page_url(key, 1))

@@ -105,6 +105,26 @@ async def parse_search(key: str) -> List[Dict[str, Any]]:
     ]
 
 
+async def parse_search_page(key: str, page: int) -> List[Dict[str, Any]]:
+    """请求搜索接口，抓取指定页码并解析为原始字典列表（page 从 1 开始，可选实现）。
+
+    仅当站点支持分页时实现；不实现则插件保留基类默认 ``_raw_search_page``
+    （抛 ``NotImplementedError``），框架将降级为抓取全部后切片。
+    """
+    data = await fetch_json(SEARCH_API, params={"wd": key, "page": page})
+    return [
+        {
+            "title": item["name"],
+            "href": abs_url(item["url"]),
+            "type": item["category"],
+            "year": item["pub_year"],
+            "cover": item["poster"],
+            "intro": item["summary"],
+        }
+        for item in data.get("list", [])
+    ]
+
+
 async def parse_info(detail_url: str) -> Dict[str, Any]:
     """请求详情页并解析为原始字典。"""
     data = await fetch_json(detail_url)
@@ -188,6 +208,12 @@ class SiteXxxPlugin(MediaSourcePlugin):
         from media_source.plugins.site_xxx import parser
 
         return await parser.parse_search(key)
+
+    # 可选：站点支持分页时覆盖（page 从 1 开始）；不分页可省略，走框架降级切片
+    async def _raw_search_page(self, key: str, page: int) -> List[Dict[str, Any]]:
+        from media_source.plugins.site_xxx import parser
+
+        return await parser.parse_search_page(key, page)
 
     async def _raw_get_info(self, search_item: SearchItem) -> Dict[str, Any]:
         from media_source.plugins.site_xxx import parser
@@ -309,7 +335,22 @@ python -m unittest discover -s media_source/tests -v
 
 ---
 
-## 9. 开发约束（必须遵守）
+## 9. 分页搜索（可选）
+
+站点搜索通常按「每页固定条数」分页。为支持上层「只取部分结果」的分页需求，
+插件可额外覆盖可选钩子 `_raw_search_page(key, page)`（`page` 从 1 开始，返回第 N 页原始字典）：
+
+- **支持分页的站点**（如苹果CMS）：实现 `_raw_search_page`，框架的
+  `search_page(key, start, count, page_concurrency)` 会先抓第 1 页探明每页条数，
+  再并发抓取覆盖 `[start, start+count)` 的页码，合并后切片返回；
+- **不支持分页的站点**：保留基类默认实现（抛 `NotImplementedError`），
+  框架降级为抓取全部后切片。
+
+对应地，`parser.py` 提供 `parse_search_page(key, page)`，`main.py` 的 `_raw_search_page` 调用它。
+
+---
+
+## 10. 开发约束（必须遵守）
 
 1. 插件**禁止导入**核心框架业务逻辑，仅依赖基类 `MediaSourcePlugin` 和 `utils` 工具方法。
 2. `_raw_*` 方法**仅返回原始字典**，禁止返回标准模型、禁止字段过滤。

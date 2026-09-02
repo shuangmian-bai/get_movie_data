@@ -56,6 +56,12 @@ class TemplatePlugin(MediaSourcePlugin):
 
         return await parser.parse_search(key)
 
+    # 可选：站点支持分页时覆盖（page 从 1 开始）；不分页可省略，走框架降级切片
+    async def _raw_search_page(self, key: str, page: int) -> List[Dict[str, Any]]:
+        from media_source.plugins.template import parser
+
+        return await parser.parse_search_page(key, page)
+
     async def _raw_get_info(self, search_item: SearchItem) -> Dict[str, Any]:
         from media_source.plugins.template import parser
 
