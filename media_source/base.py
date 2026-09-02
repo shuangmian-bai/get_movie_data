@@ -11,10 +11,15 @@
 子类必须自定义 6 个基础类属性 + 实现 3 个 ``_raw_*`` 抽象方法。
 """
 import abc
-from typing import Any, Dict, List
+import asyncio
+import logging
+from typing import Any, Dict, List, Optional
 
+from media_source import config
 from media_source.mapping import map_data
 from media_source.models import EpisodeItem, MediaInfo, PlaySource, SearchItem
+
+logger = logging.getLogger("media_source.base")
 
 
 class MediaSourcePlugin(abc.ABC):
@@ -34,6 +39,14 @@ class MediaSourcePlugin(abc.ABC):
     async def _raw_search(self, key: str) -> List[Dict[str, Any]]:
         """返回站点原始搜索字典列表（禁止字段过滤、禁止返回标准模型）。"""
 
+    async def _raw_search_page(self, key: str, page: int) -> List[Dict[str, Any]]:
+        """返回站点指定页码的原始搜索字典列表（page 从 1 开始）。
+
+        支持分页搜索的站点应覆盖此方法；不支持分页的站点保留默认实现
+        （抛出 :class:`NotImplementedError`），框架将降级为抓取全部后切片。
+        """
+        raise NotImplementedError(f"站点 {self.source_name} 不支持分页搜索")
+
     @abc.abstractmethod
     async def _raw_get_info(self, search_item: SearchItem) -> Dict[str, Any]:
         """返回站点原始详情字典（禁止字段过滤、禁止返回标准模型）。"""
@@ -46,19 +59,76 @@ class MediaSourcePlugin(abc.ABC):
 
     # ---- 对外公开方法（统一封装，自动格式化）----
     async def search(self, key: str) -> List[SearchItem]:
-        """搜索影视，自动格式化返回标准数据。"""
+        """搜索影视（全量），自动格式化返回标准数据。"""
         raw_list = await self._raw_search(key)
-        if not isinstance(raw_list, list):
-            raw_list = [raw_list] if raw_list else []
+        return self._format_search_items(raw_list)
 
-        items: List[SearchItem] = []
-        for raw in raw_list:
-            if not isinstance(raw, dict):
-                continue
-            mapped = map_data(raw, self.search_mapping)
-            mapped["base_url"] = self.base_url  # 注入来源标识，用于单源路由
-            items.append(SearchItem.model_validate(mapped))
-        return items
+    async def search_page(
+        self,
+        key: str,
+        start: int = 0,
+        count: Optional[int] = None,
+        page_concurrency: Optional[int] = None,
+    ) -> List[SearchItem]:
+        """分页搜索：只抓取覆盖 [start, start+count) 的站点分页，并发抓取后切片返回。
+
+        - ``start``：起始偏移（0-based，第 1 条的序号为 0）；
+        - ``count``：期望返回条数；``None`` 表示全量搜索（等价 :meth:`search`）；
+        - ``page_concurrency``：并发抓取页数，默认取 ``config.PAGE_CONCURRENCY``。
+
+        站点支持分页时，先抓第 1 页探明每页条数，再并发抓取覆盖区间的页码，
+        最后切片返回；站点不支持分页时，降级为抓取全部后按区间切片。
+        """
+        start = max(start, 0)
+        if count is None:
+            return await self.search(key)
+        if count <= 0:
+            return []
+
+        try:
+            first_raw = await self._raw_search_page(key, 1)
+        except NotImplementedError:
+            # 站点不支持分页：抓全部后切片
+            return (await self.search(key))[start : start + count]
+
+        page_size = len(first_raw)
+        if page_size == 0:
+            return []
+
+        # 覆盖区间对应的页码（1-based）
+        start_page = start // page_size + 1
+        end_page = (start + count - 1) // page_size + 1
+
+        pages: Dict[int, List[Dict[str, Any]]] = {}
+        if start_page <= 1 <= end_page:
+            pages[1] = first_raw
+
+        pending = [p for p in range(start_page, end_page + 1) if p not in pages]
+        if pending:
+            concurrency = page_concurrency or config.PAGE_CONCURRENCY
+            sem = asyncio.Semaphore(concurrency)
+
+            async def fetch_page(page: int):
+                async with sem:
+                    try:
+                        return page, await self._raw_search_page(key, page)
+                    except Exception as exc:  # noqa: BLE001 - 单页失败不中断整体
+                        logger.warning(
+                            "插件 %s 抓取第 %d 页失败: %s", self.source_name, page, exc
+                        )
+                        return page, []
+
+            results = await asyncio.gather(*(fetch_page(p) for p in pending))
+            for p, items in results:
+                pages[p] = items
+
+        # 按页码顺序合并后切片
+        merged: List[Dict[str, Any]] = []
+        for p in sorted(pages):
+            merged.extend(pages[p])
+
+        offset = start - (start_page - 1) * page_size
+        return self._format_search_items(merged[offset : offset + count])
 
     async def get_info(self, search_item: SearchItem) -> MediaInfo:
         """获取影视详情，自动格式化返回标准数据。"""
@@ -75,6 +145,20 @@ class MediaSourcePlugin(abc.ABC):
         return PlaySource.model_validate(mapped)
 
     # ---- 内部辅助 ----
+    def _format_search_items(self, raw_list: Any) -> List[SearchItem]:
+        """把原始搜索字典列表映射为标准 SearchItem 列表（复用映射引擎）。"""
+        if not isinstance(raw_list, list):
+            raw_list = [raw_list] if raw_list else []
+
+        items: List[SearchItem] = []
+        for raw in raw_list:
+            if not isinstance(raw, dict):
+                continue
+            mapped = map_data(raw, self.search_mapping)
+            mapped["base_url"] = self.base_url  # 注入来源标识，用于单源路由
+            items.append(SearchItem.model_validate(mapped))
+        return items
+
     def _map_episodes(self, raw: Dict[str, Any]) -> List[EpisodeItem]:
         """从原始详情数据中提取并格式化分集列表。"""
         raw_episodes = (

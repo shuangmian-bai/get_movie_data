@@ -3,7 +3,7 @@
 通过 media_source 的公开接口提供服务，并在本层完成缓存编排（防止重复爬虫）。
 本模块不依赖 media_source 内部实现，仅使用其稳定公开能力，保持低耦合。
 """
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -24,28 +24,50 @@ def _get_plugin(base_url: str):
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-async def _search_one(plugin, key: str) -> List[SearchItem]:
-    """单源搜索（带缓存）。"""
+def _search_cache_key(key: str, start: int, count: Optional[int]) -> str:
+    """构造搜索缓存 key（含分页维度，不同分页参数不共享缓存）。"""
+    count_str = "all" if count is None else str(count)
+    return f"search:{key}:{start}:{count_str}"
+
+
+async def _search_one(
+    plugin,
+    key: str,
+    start: int = 0,
+    count: Optional[int] = None,
+    page_concurrency: Optional[int] = None,
+) -> List[SearchItem]:
+    """单源搜索（带缓存，按分页参数区分缓存）。"""
     namespace = file_cache.namespace_of(plugin.base_url)
+    cache_key = _search_cache_key(key, start, count)
 
     async def fetch():
-        items = await plugin.search(key)
+        items = await plugin.search_page(
+            key, start=start, count=count, page_concurrency=page_concurrency
+        )
         return [item.model_dump() for item in items]
 
     data = await file_cache.get_or_fetch(
-        namespace, f"search:{key}", config.SEARCH_CACHE_TTL, fetch
+        namespace, cache_key, config.SEARCH_CACHE_TTL, fetch
     )
     return [SearchItem(**d) for d in data]
 
 
-async def _search_all(key: str) -> List[SearchItem]:
-    """全源批量搜索（带缓存）。"""
+async def _search_all(
+    key: str,
+    start: int = 0,
+    count: Optional[int] = None,
+    page_concurrency: Optional[int] = None,
+) -> List[SearchItem]:
+    """全源批量搜索（带缓存，按分页参数区分缓存）。"""
     async def fetch():
-        items = await plugin_manager.batch_search(key, [])
+        items = await plugin_manager.batch_search(
+            key, [], start=start, count=count, page_concurrency=page_concurrency
+        )
         return [item.model_dump() for item in items]
 
     data = await file_cache.get_or_fetch(
-        "_all", f"search:{key}", config.SEARCH_CACHE_TTL, fetch
+        "_all", _search_cache_key(key, start, count), config.SEARCH_CACHE_TTL, fetch
     )
     return [SearchItem(**d) for d in data]
 
@@ -91,11 +113,16 @@ async def list_sources() -> List[SourceMeta]:
 async def search(
     key: str = Query(..., min_length=1, description="关键词"),
     base_url: str = Query("", description="站点标识，空则全源搜索"),
+    start: int = Query(0, ge=0, description="分页起始偏移（从 0 开始）"),
+    count: Optional[int] = Query(None, ge=1, description="返回条数，空则返回全部"),
+    page_concurrency: Optional[int] = Query(None, ge=1, description="分页并发抓取页数"),
 ) -> List[SearchItem]:
     try:
         if base_url:
-            return await _search_one(_get_plugin(base_url), key)
-        return await _search_all(key)
+            return await _search_one(
+                _get_plugin(base_url), key, start, count, page_concurrency
+            )
+        return await _search_all(key, start, count, page_concurrency)
     except MediaSourceError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

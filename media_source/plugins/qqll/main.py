@@ -54,6 +54,11 @@ class QqllPlugin(MediaSourcePlugin):
 
         return await parser.parse_search(key)
 
+    async def _raw_search_page(self, key: str, page: int) -> List[Dict[str, Any]]:
+        from media_source.plugins.qqll import parser
+
+        return await parser.parse_search_page(key, page)
+
     async def _raw_get_info(self, search_item: SearchItem) -> Dict[str, Any]:
         from media_source.plugins.qqll import parser
 

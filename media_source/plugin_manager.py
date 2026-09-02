@@ -101,13 +101,18 @@ class PluginManager:
         key: str,
         base_urls: Optional[List[str]] = None,
         max_concurrency: Optional[int] = None,
+        start: int = 0,
+        count: Optional[int] = None,
+        page_concurrency: Optional[int] = None,
     ) -> List[SearchItem]:
         """批量并发搜索核心接口。
 
         - ``base_urls=[]`` 或 ``None``：全量已加载插件并发搜索；
         - ``base_urls=[url1, url2]``：指定多源 / 单源搜索；
         - 列表内无效 URL 自动过滤，日志告警，不影响整体任务；
-        - 单插件失败仅记录日志，聚合有效结果返回。
+        - 单插件失败仅记录日志，聚合有效结果返回；
+        - ``start``/``count``：分页参数，透传给各插件的分页搜索；
+        - ``page_concurrency``：单插件翻页并发抓取页数（默认取配置）。
         """
         base_urls = base_urls or []
         if base_urls:
@@ -131,7 +136,9 @@ class PluginManager:
         async def _run(plugin: MediaSourcePlugin) -> List[SearchItem]:
             async with semaphore:
                 try:
-                    return await plugin.search(key)
+                    return await plugin.search_page(
+                        key, start=start, count=count, page_concurrency=page_concurrency
+                    )
                 except Exception as exc:  # noqa: BLE001 - 异常隔离，不中断整体任务
                     logger.error(
                         "插件 %s 搜索失败: %s", plugin.source_name, exc, exc_info=True

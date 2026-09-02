@@ -24,6 +24,7 @@
 - 批量并发搜索多个数据源
 - 文件缓存与过期控制
 - 插件自动扫描与加载
+- 去广告转流（stream_factory，HLS + RTSP 双协议输出）
 
 ## 目录导航
 
@@ -33,6 +34,7 @@
 - [缓存模块说明](./media_source/cache.md)
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
 - [Web 服务说明](./web/README.md)
+- [流工厂模块说明](./stream_factory/README.md)
 
 ### 代码
 
@@ -40,8 +42,29 @@
 - `web/`：HTTP 接口层
 - `media_source/`：插件框架、模型、缓存和数据源实现
 - `frontend_loader/`：前端静态资源加载中间件
+- `stream_factory/`：流工厂（去广告转流，HLS + RTSP 双协议输出）
 - `view/`：演示页面
-- `cache/`：运行时缓存目录
+- `cache/`：统一运行时缓存目录（文件缓存 / HLS 输出 / 源视频缓存）
+
+## 缓存目录约定
+
+所有运行时缓存统一放在项目根的 `cache/` 目录下（以 `cache` 为基础路径），不再散落在根目录：
+
+```
+cache/
+├── {站点}/          # media_source 文件缓存（FileCache，按 base_url 分区，JSON）
+├── streams/         # stream_factory HLS 输出 + 处理结果缓存（内容寻址 sid，去广告后 HLS 复用）
+└── video_cache/     # stream_factory 源视频缓存（按 source_url 哈希，m3u8/mp4）
+```
+
+- 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`STREAM_FACTORY_CACHE_ROOT`（流工厂统一缓存根），以及细分的 `STREAM_FACTORY_HLS_ROOT` / `STREAM_FACTORY_VIDEO_CACHE_ROOT`。
+- **新增缓存时同样放入 `cache/` 下**，保持「所有缓存以 cache 为基础路径」这条约定。
+
+## 环境要求
+
+- **Python 3.8+**：本项目依赖 `Pydantic V2` / `FastAPI` / `httpx` 等库，需 Python 3.8 及以上版本。
+- **FFmpeg**：去广告转流（`stream_factory`）依赖系统 `ffmpeg`，需**单独安装**（非 Python 包），如 `apt install ffmpeg` / `brew install ffmpeg`。
+- **mediamtx**（可选）：RTSP 推流服务器，服务启动时自动拉起；仅用 HLS 可省略（设 `STREAM_FACTORY_RTSP_ENABLED=0`）。
 
 ## 快速开始
 
@@ -60,13 +83,14 @@ python main.py
 - `GET /api/search?key=关键词`
 - `GET /api/info?base_url=...&link=...`
 - `GET /api/play?base_url=...&link=...&episode_index=1`
+- `POST /api/stream`（创建流）、`POST /api/stream/processed`（按站点去广告建流）、`GET /api/stream/{sid}/player`（内嵌播放器）
 
 ## 开发提示
 
 - 新增站点时，优先参考 `media_source/plugins/template`
 - 插件实现只负责输出原始数据
 - 字段映射、默认值和统一结构由基础类完成
-- 视频资源中的广告去除过于麻烦，暂不考虑，如有大佬能够解决欢迎pr
+- 去广告转流由 `stream_factory/` 模块提供（FFmpeg 拉流裁剪 + HLS/RTSP 输出），需系统依赖 ffmpeg；mediamtx 由服务启动时自动拉起，无需手动启动；去广告规则按站点在 `main.py` 的 `STREAM_PIPELINES` 里自由组合流/帧插件
 
 ## 友情链接
 

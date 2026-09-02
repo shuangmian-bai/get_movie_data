@@ -13,6 +13,7 @@
 > 选择器基于苹果CMS v10 默认模板；如站点改用自定义模板，需按实际 HTML 微调。
 > 本文件仅输出原始字典，不做字段过滤与格式化。
 """
+import asyncio
 import json
 import logging
 import re
@@ -20,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from parsel import Selector
 
+from media_source import config
 from media_source.utils.http import AsyncHttpClient
 from media_source.plugins.qqll.constants import (
     BASE_URL,
@@ -32,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 # 播放页内嵌播放器变量：var player_xxxx = { ... }
 _PLAYER_RE = re.compile(r"var\s+player_\w+\s*=\s*(\{.*?\})\s*;?\s*</script>", re.S)
+# 分页链接中的页码：----------<页码>---.html
+_PAGE_RE = re.compile(r"----------(\d+)---\.html")
 # 分集链接：/vplay/<vod_id>-<sid>-<nid>.html，nid 为集数序号
 _EP_LINK_RE = re.compile(r"/vplay/\d+-\d+-(\d+)\.html")
 # 年份（4 位数字）
@@ -118,15 +122,46 @@ def _parse_search_items(selector: Selector) -> List[Dict[str, Any]]:
     return results
 
 
-async def parse_search(key: str) -> List[Dict[str, Any]]:
-    """请求搜索接口并解析为原始字典列表（单页）。
+def _extract_total_pages(selector: Selector) -> int:
+    """从搜索页分页链接中解析最大页码（无分页时为 1）。"""
+    max_page = 1
+    for a in selector.css("a[href*='vsearch']"):
+        m = _PAGE_RE.search(a.attrib.get("href", ""))
+        if m:
+            max_page = max(max_page, int(m.group(1)))
+    return max_page
 
-    站点搜索分页 URL 形如 ``/vsearch/<key>----------<page>---.html``；
-    本实现只抓第 1 页，如需多页并发可参考 ``cupfox`` 插件。
-    """
-    html = await _fetch_text(search_page_url(key, 1))
-    selector = Selector(html)
-    return _parse_search_items(selector)
+
+async def parse_search_page(key: str, page: int) -> List[Dict[str, Any]]:
+    """请求搜索接口，抓取指定页码并解析为原始字典列表（page 从 1 开始）。"""
+    html = await _fetch_text(search_page_url(key, page))
+    return _parse_search_items(Selector(html))
+
+
+async def parse_search(key: str) -> List[Dict[str, Any]]:
+    """请求搜索接口，并发抓取所有分页，解析为原始字典列表。"""
+    first_html = await _fetch_text(search_page_url(key, 1))
+    first_sel = Selector(first_html)
+    total_pages = _extract_total_pages(first_sel)
+    results = _parse_search_items(first_sel)
+
+    if total_pages > 1:
+        sem = asyncio.Semaphore(config.PAGE_CONCURRENCY)
+
+        async def fetch_page(page: int) -> List[Dict[str, Any]]:
+            try:
+                async with sem:
+                    html = await _fetch_text(search_page_url(key, page))
+                return _parse_search_items(Selector(html))
+            except Exception as exc:  # 单页失败不影响整体
+                logger.warning("qqll 抓取第 %d 页失败: %s", page, exc)
+                return []
+
+        rest = await asyncio.gather(*(fetch_page(p) for p in range(2, total_pages + 1)))
+        for items in rest:
+            results.extend(items)
+
+    return results
 
 
 async def parse_info(detail_url: str) -> Dict[str, Any]:
