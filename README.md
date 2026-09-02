@@ -10,7 +10,7 @@
 - 内置文件缓存，减少重复抓取
 - 提供前端静态页面加载入口
 
-当前仓库里已经接入的站点包括：
+当前仓库里已经接入的示例站点包括：
 
 - `yhdm.one`
 - `cupfox7.com`
@@ -28,7 +28,6 @@
 
 ### 文档
 
-- [项目根目录说明](./CLAUDE.md)
 - [媒体数据源模块说明](./media_source/README.md)
 - [缓存模块说明](./media_source/cache.md)
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
@@ -67,3 +66,6 @@ python main.py
 - 插件实现只负责输出原始数据
 - 字段映射、默认值和统一结构由基础类完成
 
+## 友情链接
+
+- [隼目安全](https://sumsafe.org.cn/)
