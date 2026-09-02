@@ -6,6 +6,7 @@
 去广告规则是系统内部知识：此处按 ``base_url`` 把站点映射到「流插件 + 帧插件」组合，
 调用方只传 ``base_url`` 与源，无需关心裁剪区间与滤镜细节。
 """
+from contextlib import asynccontextmanager
 from typing import Dict, List, Tuple
 
 import uvicorn
@@ -21,12 +22,17 @@ from stream_factory import (
     StreamRequest,
     StreamSource,
     api_router as stream_api_router,
+    ensure_mediamtx,
+    stop_mediamtx,
     stream_factory,
 )
 from stream_factory.plugins import (
+    BlankInsertStreamPlugin,
+    CompositeStreamPlugin,
     CupfoxStreamPlugin,
     PassthroughStreamPlugin,
     QqllStreamPlugin,
+    ShuangmianTextFramePlugin,
     WatermarkFramePlugin,
     YhdmStreamPlugin,
 )
@@ -35,9 +41,18 @@ from web import api_router
 # ---- 流处理自由组合（应用层汇总：base_url → 流插件 + 帧插件）----
 # 新增/调整站点只需改这一张表；未匹配的 base_url 走透传（不裁剪）。
 STREAM_PIPELINES: Dict[str, Tuple[StreamPlugin, List[FramePlugin]]] = {
-    "https://www.cupfox7.com": (CupfoxStreamPlugin(), [WatermarkFramePlugin(text="去广告")]),
-    "https://yhdm.one": (YhdmStreamPlugin(), []),
-    "https://www.qqll.cc": (QqllStreamPlugin(), []),
+    "https://www.cupfox7.com": (
+        CompositeStreamPlugin([CupfoxStreamPlugin(), BlankInsertStreamPlugin()]),
+        [WatermarkFramePlugin(text="双面酱帧处理"), ShuangmianTextFramePlugin()],
+    ),
+    "https://yhdm.one": (
+        CompositeStreamPlugin([YhdmStreamPlugin(), BlankInsertStreamPlugin()]),
+        [ShuangmianTextFramePlugin()],
+    ),
+    "https://www.qqll.cc": (
+        CompositeStreamPlugin([QqllStreamPlugin(), BlankInsertStreamPlugin()]),
+        [ShuangmianTextFramePlugin()],
+    ),
 }
 DEFAULT_PIPELINE: Tuple[StreamPlugin, List[FramePlugin]] = (PassthroughStreamPlugin(), [])
 
@@ -55,7 +70,15 @@ class ProcessedStreamRequest(BaseModel):
     source: StreamSource
 
 
-app = FastAPI(title="影视数据源服务", docs_url="/docs")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """服务生命周期：启动时自动拉起 mediamtx（RTSP 依赖），退出时停止本模块拉起的实例。"""
+    await ensure_mediamtx()
+    yield
+    await stop_mediamtx()
+
+
+app = FastAPI(title="影视数据源服务", docs_url="/docs", lifespan=lifespan)
 
 # 挂载 API 路由（web 数据源模块 + 流工厂模块）
 app.include_router(api_router)

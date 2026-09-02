@@ -19,6 +19,17 @@ class TrimSegment(BaseModel):
     end: Optional[float] = None
 
 
+class BlankSegment(BaseModel):
+    """周期性空白段：每隔 ``interval`` 秒，覆盖 ``duration`` 秒为黑屏 + 静音（视觉/听觉空白）。
+
+    由流插件（``StreamPlugin.blanks``）产出，pipeline 翻译为 ``drawbox``（视频盖黑）
+    + ``volume``（音频静音）滤镜。
+    """
+
+    interval: float  # 每隔多少秒插入一段空白
+    duration: float  # 每段空白的时长（秒）
+
+
 class FilterRule(BaseModel):
     """预留：逐帧滤镜规则（插入帧 / 删除帧 / 水印等）。
 
@@ -49,3 +60,4 @@ class StreamRequest(BaseModel):
     headers: Dict[str, str] = Field(default_factory=dict)  # 透传给 ffmpeg 的 -headers
     trims: List[TrimSegment] = Field(default_factory=list)   # 去广告区间
     filters: List[FilterRule] = Field(default_factory=list)  # 预留：逐帧滤镜
+    blanks: List[BlankSegment] = Field(default_factory=list)  # 周期性空白段（黑屏+静音）

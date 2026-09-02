@@ -15,10 +15,11 @@
 | 组件 | 作用 | 安装 |
 | --- | --- | --- |
 | `ffmpeg` / `ffprobe` | 拉流、裁剪、转码、推流 | `apt install ffmpeg` / `brew install ffmpeg` |
-| `mediamtx` | RTSP 服务器（接收 FFmpeg 推流并分发 RTSP/HLS） | 单二进制，见 [mediamtx](https://github.com/bluenviron/mediamtx) |
+| `mediamtx` | RTSP 服务器（接收 FFmpeg 推流并分发 RTSP/HLS；服务启动时自动拉起） | 单二进制，见 [mediamtx](https://github.com/bluenviron/mediamtx) |
 
 > 本机已装：`ffmpeg 7.1.5`、`mediamtx 1.8.1`（`/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx`）。
-> 只需 HLS、不要 RTSP 时，可设环境变量 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭推流，无需 mediamtx。
+> `python main.py` 启动服务时会**自动拉起 mediamtx**（`MEDIAMTX_AUTOSTART=1` 时），无需手动启动；
+> 只需 HLS、不要 RTSP 时，设 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭推流（不拉起、无需 mediamtx）。
 
 ## 目录结构
 
@@ -28,7 +29,7 @@ stream_factory/
 ├── config.py            # FFmpeg 路径、HLS 目录、RTSP 地址等（环境变量可覆盖）
 ├── rules.py             # 规则模型：StreamSource / TrimSegment / FilterRule / StreamRequest
 ├── base.py              # 抽象基类：FramePlugin（帧插件）/ StreamPlugin（流插件）
-├── plugins.py           # 内置插件：水印帧插件 + 各站点流插件（示例裁剪）
+├── plugins.py           # 内置插件：水印/文字帧插件 + 各站点流插件 + 空白插入案例
 ├── pipeline.py          # FFmpeg 命令行构建器（规则 → ffmpeg 参数）
 ├── session.py           # StreamSession：单会话子进程生命周期
 ├── factory.py           # StreamFactory：会话集合管理（单例 stream_factory）
@@ -62,20 +63,44 @@ stream_factory/
 | 类型 | 插件 | 说明 |
 | --- | --- | --- |
 | 帧 | `WatermarkFramePlugin` | 去水印/打标（`drawtext`，示例） |
+| 帧 | `ShuangmianTextFramePlugin` | **开发案例**：叠加「双面酱」文字水印 |
 | 流 | `PassthroughStreamPlugin` | 透传，不裁剪 |
 | 流 | `CupfoxStreamPlugin` / `YhdmStreamPlugin` / `QqllStreamPlugin` | 各站点裁剪策略（区间为占位/示例） |
+| 流 | `BlankInsertStreamPlugin` | **开发案例**：每隔 N 秒插入 M 秒空白（黑屏+静音） |
+| 流 | `CompositeStreamPlugin` | 组合流插件：聚合多个流插件的 trims/blanks，供应用层叠加能力 |
 
 插件不携带 `base_url`，站点 → 插件组合关系在**应用层 `main.py`** 的 `STREAM_PIPELINES` 里自由编排：
 
 ```python
 STREAM_PIPELINES = {
-    "https://www.cupfox7.com": (CupfoxStreamPlugin(), [WatermarkFramePlugin(text="去广告")]),
-    "https://yhdm.one":       (YhdmStreamPlugin(), []),
-    "https://www.qqll.cc":    (QqllStreamPlugin(), []),
+    "https://www.cupfox7.com": (
+        CompositeStreamPlugin([CupfoxStreamPlugin(), BlankInsertStreamPlugin()]),
+        [WatermarkFramePlugin(text="去广告"), ShuangmianTextFramePlugin()],
+    ),
+    "https://yhdm.one": (
+        CompositeStreamPlugin([YhdmStreamPlugin(), BlankInsertStreamPlugin()]),
+        [ShuangmianTextFramePlugin()],
+    ),
+    "https://www.qqll.cc": (
+        CompositeStreamPlugin([QqllStreamPlugin(), BlankInsertStreamPlugin()]),
+        [ShuangmianTextFramePlugin()],
+    ),
 }
 ```
 
 调用方只需传 `base_url` 与源，经 `POST /api/stream/processed` 触发去广告流；新增/调整站点组合只改 `STREAM_PIPELINES` 一处。
+
+### 自定义插件开发案例
+
+`plugins.py` 内附两个可直接照抄的开发案例：
+
+- **`ShuangmianTextFramePlugin`**（帧插件）：实现 `filters()` 返回一条 `drawtext` 规则，即可在画面上叠加「双面酱」文字。
+- **`BlankInsertStreamPlugin`**（流插件）：覆盖 `blanks()` 返回 `BlankSegment`，实现「每隔 `interval` 秒插入 `duration` 秒空白（黑屏 + 静音）」。
+
+> 以上两个开发案例已接入三个真实站点（cupfox / yhdm / qqll）的 `STREAM_PIPELINES`：
+> `ShuangmianTextFramePlugin` 加入各站点的帧插件列表，`BlankInsertStreamPlugin` 经 `CompositeStreamPlugin` 与各站点裁剪插件叠加。
+
+自定义流插件时，`trims()`（裁剪）与 `blanks()`（插入空白）是两种流级时间操作，可只实现其中一种；帧插件只需实现 `filters()`。
 
 ## REST API
 
@@ -110,7 +135,7 @@ HLS 分片由 `main.py` 的 `app.mount("/streams", StaticFiles(...))` 提供（`
 ### 使用示例
 
 ```bash
-# 启动服务（RTSP 需另起 mediamtx：mediamtx）
+# 启动服务（RTSP 依赖的 mediamtx 会自动拉起，无需手动启动）
 python main.py
 
 # 创建流（无裁剪）
@@ -140,11 +165,15 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 | `STREAM_FACTORY_HLS_LIST_SIZE` | `0` | 播放列表长度（0 = 全部分片，适合点播） |
 | `STREAM_FACTORY_RTSP_SERVER` | `rtsp://127.0.0.1:8554` | RTSP 推流目标 |
 | `STREAM_FACTORY_RTSP_ENABLED` | `1` | 是否启用 RTSP 双输出 |
+| `STREAM_FACTORY_MEDIAMTX_AUTOSTART` | `1` | 服务启动时是否自动拉起 mediamtx（RTSP 启用时生效） |
+| `STREAM_FACTORY_MEDIAMTX_BIN` | `/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx` | mediamtx 可执行文件路径 |
+| `STREAM_FACTORY_MEDIAMTX_CONFIG` | `{BIN 同级}/mediamtx.yml` | mediamtx 配置文件（自动拉起时显式传入） |
+| `STREAM_FACTORY_MEDIAMTX_STARTUP_TIMEOUT` | `10` | 拉起后等待端口就绪超时（秒） |
 | `STREAM_FACTORY_READY_TIMEOUT` | `30` | HLS 就绪探测超时（秒） |
 
 ## 注意事项
 
-- 会话就绪判定以 **HLS 索引文件出现** 为准；mediamtx 未启动时 RTSP 推流失败不影响 HLS 输出。
+- 会话就绪判定以 **HLS 索引文件出现** 为准；HLS 是主输出，RTSP 是「尽力而为」的独立进程，mediamtx 不可用时只降级为纯 HLS，RTSP 推流失败不影响 HLS 输出。
 - RTSP 无损 copy 依赖源为 H.264/AAC；H.265 等编码需走重编码（`filters` 或中间段裁剪会触发）。
 - `streams/` 为运行时产物，建议加入 `.gitignore`。
 - `main.py` 挂载 `api_router` 与 `/streams` 静态目录，应用退出时建议调用 `await stream_factory.shutdown()` 清理子进程。

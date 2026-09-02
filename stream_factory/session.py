@@ -1,6 +1,10 @@
-"""流会话 —— 单个 FFmpeg 子进程的生命周期管理
+"""流会话 —— FFmpeg 子进程的生命周期管理
 
-负责：启动 ffmpeg 子进程、等待 HLS 就绪、后台采集 stderr 日志、停止并清理。
+负责：启动 HLS 主进程（Web 播放）、可选启动 RTSP 推流进程（原生客户端）、
+等待 HLS 就绪、后台采集 stderr 日志、停止并清理。
+
+HLS 是主输出，其进程状态决定会话状态；RTSP 是「尽力而为」的独立进程，
+即使失败也只记告警，绝不影响 HLS 输出。
 状态机：``preparing → running`` 或 ``preparing → error``，停止后为 ``stopped``。
 """
 import asyncio
@@ -11,7 +15,7 @@ import time
 from typing import List, Optional
 
 from stream_factory import config
-from stream_factory.pipeline import build_command
+from stream_factory.pipeline import build_hls_command, build_rtsp_command
 from stream_factory.rules import StreamRequest
 
 logger = logging.getLogger("stream_factory.session")
@@ -32,14 +36,16 @@ class StreamSession:
         self.created_at = time.time()
         self.error: Optional[str] = None
         self.process: Optional[asyncio.subprocess.Process] = None
+        self.rtsp_process: Optional[asyncio.subprocess.Process] = None
         self._stderr_tail: List[str] = []
         self._stderr_task: Optional[asyncio.Task] = None
+        self._rtsp_stderr_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
-        """启动 ffmpeg 子进程并等待 HLS 就绪。"""
+        """启动 HLS 主进程并等待就绪；随后可选启动 RTSP 推流进程。"""
         os.makedirs(self.hls_dir, exist_ok=True)
-        cmd = build_command(self.req, self.sid, self.hls_dir)
-        logger.info("会话 %s 启动 ffmpeg：%s", self.sid, " ".join(cmd))
+        cmd = build_hls_command(self.req, self.hls_dir)
+        logger.info("会话 %s 启动 HLS ffmpeg：%s", self.sid, " ".join(cmd))
         try:
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -60,6 +66,8 @@ class StreamSession:
         ready = await self._wait_hls_ready()
         if ready:
             self.status = "running"
+            if self.rtsp_url:
+                self._start_rtsp()
         elif self.process.returncode is not None:
             self.status = "error"
             self.error = (
@@ -69,6 +77,27 @@ class StreamSession:
             # 超时但进程仍存活（源较慢），乐观标记 running，由调用方自行判定
             logger.warning("会话 %s HLS 就绪超时但仍存活，乐观标记 running", self.sid)
             self.status = "running"
+            if self.rtsp_url:
+                self._start_rtsp()
+
+    def _start_rtsp(self) -> None:
+        """后台启动 RTSP 推流进程（失败只记告警，不改变会话状态）。"""
+        cmd = build_rtsp_command(self.req, self.rtsp_url)
+        logger.info("会话 %s 启动 RTSP ffmpeg：%s", self.sid, " ".join(cmd))
+
+        async def _run() -> None:
+            try:
+                self.rtsp_process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("会话 %s RTSP 推流进程启动失败：%s", self.sid, exc)
+                return
+            self._rtsp_stderr_task = asyncio.create_task(self._drain_rtsp_stderr())
+
+        asyncio.create_task(_run())
 
     async def _wait_hls_ready(self) -> bool:
         """轮询等待 HLS 索引文件出现；进程提前退出则判定失败。"""
@@ -83,7 +112,7 @@ class StreamSession:
         return os.path.exists(index)
 
     async def _drain_stderr(self) -> None:
-        """后台读取 stderr，保留最近若干行用于诊断。"""
+        """后台读取 HLS 主进程 stderr，保留最近若干行用于诊断。"""
         assert self.process and self.process.stderr
         while True:
             line = await self.process.stderr.readline()
@@ -97,20 +126,44 @@ class StreamSession:
         if self.process:
             await self.process.wait()
 
+    async def _drain_rtsp_stderr(self) -> None:
+        """后台读取 RTSP 进程 stderr，进程异常退出时记录告警（不影响会话状态）。"""
+        assert self.rtsp_process and self.rtsp_process.stderr
+        tail: List[str] = []
+        while True:
+            line = await self.rtsp_process.stderr.readline()
+            if not line:
+                break
+            tail.append(line.decode(errors="replace").rstrip())
+            if len(tail) > 50:
+                tail.pop(0)
+        await self.rtsp_process.wait()
+        if self.rtsp_process.returncode != 0:
+            logger.warning(
+                "会话 %s RTSP 推流进程退出（返回码 %s）：%s",
+                self.sid,
+                self.rtsp_process.returncode,
+                " | ".join(tail[-5:]),
+            )
+        else:
+            logger.info("会话 %s RTSP 推流进程正常结束", self.sid)
+
     def _tail_summary(self) -> str:
         return "\n".join(self._stderr_tail[-20:])
 
     async def stop(self) -> None:
-        """终止子进程并清理 HLS 目录。"""
-        if self.process and self.process.returncode is None:
-            self.process.terminate()
-            try:
-                await asyncio.wait_for(self.process.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                self.process.kill()
-                await self.process.wait()
-        if self._stderr_task:
-            self._stderr_task.cancel()
+        """终止 HLS 主进程与 RTSP 进程，并清理 HLS 目录。"""
+        for proc in (self.rtsp_process, self.process):
+            if proc and proc.returncode is None:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+        for task in (self._rtsp_stderr_task, self._stderr_task):
+            if task:
+                task.cancel()
         self.status = "stopped"
         shutil.rmtree(self.hls_dir, ignore_errors=True)
 

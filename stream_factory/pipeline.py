@@ -7,13 +7,14 @@
 - 中间段 / 多段裁剪 → ``select``/``aselect`` 滤镜 + ``libx264``/``aac`` 重编码；
 - 存在额外滤镜（如水印 ``drawtext``）→ 视频走重编码，音频可保持 copy。
 
-单条命令双输出：HLS（写本地磁盘）+ RTSP（推流到 mediamtx）。
+HLS 与 RTSP 各生成一条独立命令，由 ``session`` 用两个独立子进程执行：
+HLS 是主输出，RTSP 是「尽力而为」的附加输出，后者失败不影响前者。
 """
 import os
 from typing import List, Optional, Tuple
 
 from stream_factory import config
-from stream_factory.rules import FilterRule, StreamRequest, TrimSegment
+from stream_factory.rules import BlankSegment, FilterRule, StreamRequest, TrimSegment
 
 
 def _classify_trims(trims: List[TrimSegment]) -> Tuple[str, Optional[float]]:
@@ -84,7 +85,7 @@ def _build_filter(rule: FilterRule) -> str:
 
 
 def _build_filters(
-    trims: List[TrimSegment], filters: List[FilterRule]
+    trims: List[TrimSegment], filters: List[FilterRule], blanks: List[BlankSegment]
 ) -> Tuple[Optional[str], Optional[str]]:
     """构建视频/音频滤镜链，返回 ``(vfilter, afilter)``（无则 ``None``）。"""
     vparts: List[str] = []
@@ -100,62 +101,79 @@ def _build_filters(
     for f in filters:
         vparts.append(_build_filter(f))
 
+    # 周期性空白段：drawbox 盖黑（视频）+ volume 静音（音频），enable 周期性生效
+    for b in blanks:
+        enable = f"between(mod(t\\,{b.interval:.3f})\\,0\\,{b.duration:.3f})"
+        vparts.append(
+            f"drawbox=x=0:y=0:w=iw:h=ih:color=black@1:t=fill:enable='{enable}'"
+        )
+        aparts.append(f"volume=volume=0:enable='{enable}'")
+
     vfilter = ",".join(vparts) if vparts else None
     afilter = ",".join(aparts) if aparts else None
     return vfilter, afilter
 
 
-def build_command(req: StreamRequest, sid: str, hls_dir: str) -> List[str]:
-    """构建 ffmpeg 命令（``list[str]``，可直接交给 ``create_subprocess_exec``）。
-
-    :param req:     创建流请求（源地址 + 裁剪/滤镜规则）
-    :param sid:     会话 id（用于 RTSP 推流路径）
-    :param hls_dir: 该会话的 HLS 输出目录
-    """
-    cmd: List[str] = [config.FFMPEG_BIN, "-y", "-re"]  # -re 实时速率：保证 RTSP 推流持续、HLS 边转边出
-
-    # 透传请求头（Referer 等防盗链），用于 HTTP(S) 输入
+def _common_prefix(req: StreamRequest) -> List[str]:
+    """共享的输入前缀：请求头（防盗链）+ 掐头/去尾裁剪（输入侧 seek）。"""
+    prefix: List[str] = []
     if req.headers:
         header_str = "\r\n".join(f"{k}: {v}" for k, v in req.headers.items()) + "\r\n"
-        cmd += ["-headers", header_str]
-
-    # 掐头 / 去尾用输入侧 seek，保证多输出共享同一裁剪后的输入
+        prefix += ["-headers", header_str]
     kind, value = _classify_trims(req.trims)
     if kind == "ss":
-        cmd += ["-ss", f"{value:.3f}"]
+        prefix += ["-ss", f"{value:.3f}"]
     elif kind == "to":
-        cmd += ["-to", f"{value:.3f}"]
+        prefix += ["-to", f"{value:.3f}"]
+    return prefix
 
-    cmd += ["-i", req.source_url]
 
-    # 滤镜链与编码策略：有视频滤镜才重编码视频；有音频滤镜才重编码音频
-    vfilter, afilter = _build_filters(req.trims, req.filters)
+def _codec_args(req: StreamRequest) -> Tuple[str, str, Optional[str], Optional[str]]:
+    """返回 ``(vcodec, acodec, vfilter, afilter)``：有视频滤镜才重编码视频，有音频滤镜才重编码音频。"""
+    vfilter, afilter = _build_filters(req.trims, req.filters, req.blanks)
     vcodec = "libx264" if vfilter else "copy"
     acodec = "aac" if afilter else "copy"
+    return vcodec, acodec, vfilter, afilter
 
+
+def _map_and_encode(
+    cmd: List[str],
+    vcodec: str,
+    acodec: str,
+    vfilter: Optional[str],
+    afilter: Optional[str],
+) -> None:
+    """向 ``cmd`` 追加流映射与编码/滤镜参数（HLS 与 RTSP 输出共享）。"""
     cmd += ["-map", "0:v:0", "-map", "0:a:0?"]
-
-    # 输出 1：HLS 写本地磁盘
     cmd += ["-c:v", vcodec, "-c:a", acodec]
     if vfilter:
         cmd += ["-vf", vfilter]
     if afilter:
         cmd += ["-af", afilter]
+
+
+def build_hls_command(req: StreamRequest, hls_dir: str) -> List[str]:
+    """构建 HLS 输出命令（主输出，无 ``-re``，尽快转完整点播）。"""
+    cmd: List[str] = [config.FFMPEG_BIN, "-y"]
+    cmd += _common_prefix(req)
+    cmd += ["-i", req.source_url]
+    vcodec, acodec, vfilter, afilter = _codec_args(req)
+    _map_and_encode(cmd, vcodec, acodec, vfilter, afilter)
     cmd += [
         "-f", "hls",
         "-hls_time", str(config.HLS_TIME),
         "-hls_list_size", str(config.HLS_LIST_SIZE),
         os.path.join(hls_dir, "index.m3u8"),
     ]
+    return cmd
 
-    # 输出 2：RTSP 推流到 mediamtx（可关闭）
-    if config.RTSP_ENABLED:
-        rtsp_url = config.RTSP_SERVER.rstrip("/") + "/" + sid
-        cmd += ["-c:v", vcodec, "-c:a", acodec]
-        if vfilter:
-            cmd += ["-vf", vfilter]
-        if afilter:
-            cmd += ["-af", afilter]
-        cmd += ["-f", "rtsp", rtsp_url]
 
+def build_rtsp_command(req: StreamRequest, rtsp_url: str) -> List[str]:
+    """构建 RTSP 推流命令（独立进程，带 ``-re`` 实时速率；失败不影响 HLS）。"""
+    cmd: List[str] = [config.FFMPEG_BIN, "-y", "-re"]
+    cmd += _common_prefix(req)
+    cmd += ["-i", req.source_url]
+    vcodec, acodec, vfilter, afilter = _codec_args(req)
+    _map_and_encode(cmd, vcodec, acodec, vfilter, afilter)
+    cmd += ["-f", "rtsp", rtsp_url]
     return cmd

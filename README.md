@@ -70,7 +70,7 @@ python main.py
 - 新增站点时，优先参考 `media_source/plugins/template`
 - 插件实现只负责输出原始数据
 - 字段映射、默认值和统一结构由基础类完成
-- 去广告转流由 `stream_factory/` 模块提供（FFmpeg 拉流裁剪 + HLS/RTSP 输出），需系统依赖 ffmpeg 与 mediamtx；去广告规则按站点在 `main.py` 的 `STREAM_PIPELINES` 里自由组合流/帧插件
+- 去广告转流由 `stream_factory/` 模块提供（FFmpeg 拉流裁剪 + HLS/RTSP 输出），需系统依赖 ffmpeg；mediamtx 由服务启动时自动拉起，无需手动启动；去广告规则按站点在 `main.py` 的 `STREAM_PIPELINES` 里自由组合流/帧插件
 
 ## 友情链接
 

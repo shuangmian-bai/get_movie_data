@@ -64,12 +64,18 @@
     .play { margin-top: 20px; padding: 14px; border: 1px solid rgba(128,128,128,.25); border-radius: 8px; }
     .play .meta { margin-bottom: 8px; }
     .play .row { display: flex; gap: 8px; }
-    .open {
-      padding: 10px 18px; font-size: 14px; border: none; border-radius: 6px;
-      background: #16a34a; color: #fff; text-decoration: none; white-space: nowrap;
+    .player-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; }
+    .rtsp { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+    .rtsp input {
+      flex: 1; padding: 8px 10px; font-size: 13px; border: 1px solid #ccc;
+      border-radius: 6px; background: transparent; color: inherit;
     }
-    .open:hover { background: #15803d; }
+    .rtsp button { padding: 8px 14px; font-size: 13px; border: none; border-radius: 6px; background: #2563eb; color: #fff; }
+    .rtsp button:hover { background: #1d4ed8; }
+    .hint { color: #888; font-size: 12px; margin-top: 8px; }
   </style>
+  <!-- hls.js：浏览器播放 HLS 所需（转流输出的本地 HLS） -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 </head>
 <body>
   <h1>影视数据源服务</h1>
@@ -95,6 +101,7 @@
   <script>
     let searchResults = [];
     let currentInfo = null;
+    let currentSid = null;  // 当前转流会话 id（切换/返回时停止）
 
     // HTML 转义，防止动态文本破坏结构 / XSS
     function esc(s) {
@@ -182,30 +189,84 @@
         ${epBtns}`;
     }
 
-    // 点击选集 -> 播放地址
+    // 停止上一个转流会话（切换集数/返回时清理）
+    async function stopCurrentStream() {
+      if (!currentSid) return;
+      try { await fetch('/api/stream/' + encodeURIComponent(currentSid), { method: 'DELETE' }); } catch (e) {}
+      currentSid = null;
+    }
+
+    // 点击选集 -> 内嵌播放器（转流为本地 HLS 再播，绕开防盗链）
     async function playEpisode(epIndex) {
       if (!currentInfo) return;
       const box = document.getElementById('play-result');
-      box.innerHTML = '获取播放地址中…';
+      box.innerHTML = '<div class="play"><div class="meta">获取播放地址并转流中…</div></div>';
+      await stopCurrentStream();
       try {
+        // 1. 拿原始播放地址
         const resp = await fetch('/api/play?base_url=' + encodeURIComponent(currentInfo.base_url) + '&link=' + encodeURIComponent(currentInfo.link) + '&episode_index=' + epIndex);
         const play = await resp.json();
         if (!resp.ok) { box.innerHTML = '<div class="empty">播放地址获取失败：' + resp.status + '</div>'; return; }
+
+        // 2. 按站点转流（内部去广告），输出本地 HLS
+        const sresp = await fetch('/api/stream/processed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base_url: currentInfo.base_url,
+            source: { url: play.url, type: play.type || 'm3u8', headers: play.headers || {} }
+          })
+        });
+        const stream = await sresp.json();
+        if (!sresp.ok || stream.status === 'error') {
+          box.innerHTML = '<div class="empty">转流失败：' + esc(stream.error || stream.detail || ('HTTP ' + sresp.status)) + '</div>';
+          return;
+        }
+        currentSid = stream.sid;
+
+        // 3. 渲染内嵌播放器并播放
+        const rtsp = stream.rtsp_url
+          ? '<div class="rtsp"><input id="rtsp-url" readonly onclick="this.select()" value="' + esc(stream.rtsp_url) + '"><button onclick="copyRtsp()">复制 RTSP</button></div>'
+          : '';
         box.innerHTML = `
           <div class="play">
-            <div class="meta">类型：${esc(play.type)}${play.headers && play.headers.Referer ? ' · 需要 Referer 请求头' : ''}</div>
-            <div class="row">
-              <input class="url" readonly value="${esc(play.url)}" onclick="this.select()">
-              <a class="open" href="${esc(play.url)}" target="_blank" rel="noopener">打开</a>
-            </div>
+            <div class="meta">类型：${esc(stream.source_type || play.type)} · 会话 ${esc(stream.sid)} · ${esc(stream.status)}</div>
+            <video id="player" class="player-video" controls></video>
+            ${rtsp}
+            <div class="hint" id="player-err"></div>
           </div>`;
+        playHls(stream.hls_url);
       } catch (e) {
-        box.innerHTML = '<div class="empty">播放地址获取失败：' + esc(e) + '</div>';
+        box.innerHTML = '<div class="empty">播放失败：' + esc(e) + '</div>';
       }
+    }
+
+    // 用 hls.js 播放本地 HLS（Safari 原生回退）
+    function playHls(hlsUrl) {
+      const video = document.getElementById('player');
+      const errEl = document.getElementById('player-err');
+      const showErr = msg => { if (errEl) errEl.textContent = msg; };
+      if (window.Hls && Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.ERROR, function (e, data) { if (data.fatal) showErr('HLS 播放错误：' + data.type); });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl; // Safari 原生 HLS
+      } else {
+        showErr('当前浏览器不支持 HLS，请复制 RTSP 地址用原生客户端播放');
+      }
+    }
+
+    function copyRtsp() {
+      const input = document.getElementById('rtsp-url');
+      input.select();
+      navigator.clipboard.writeText(input.value).catch(() => document.execCommand('copy'));
     }
 
     // 返回搜索
     function backToSearch() {
+      stopCurrentStream();
       document.getElementById('detail-view').hidden = true;
       document.getElementById('search-view').hidden = false;
       currentInfo = null;

@@ -33,6 +33,7 @@
 前端静态资源位于本模块 `frontend/` 目录，由 `frontend_loader` 引擎加载：
 
 - 访问根路径 `/` 返回 `frontend/index.html`（含搜索框，前端通过 fetch 调用 `/api/*`）；
+- 点选集后前端经 `/api/play` 取原始播放地址，再经 `/api/stream/processed` 转成本地 HLS，用 hls.js 内嵌播放（绕开防盗链、按站点去广告）；
 - `.html/.css/.js` 等静态资源同样从 `frontend/` 目录提供。
 
 ## 启动

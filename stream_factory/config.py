@@ -26,11 +26,25 @@ RTSP_SERVER: str = os.getenv("STREAM_FACTORY_RTSP_SERVER", "rtsp://127.0.0.1:855
 # 是否启用 RTSP 双输出（关闭后仅输出 HLS，便于无 mediamtx 环境调试）
 RTSP_ENABLED: bool = os.getenv("STREAM_FACTORY_RTSP_ENABLED", "1") == "1"
 
+# 是否在服务启动时自动拉起 mediamtx（RTSP_ENABLED 为真时生效）
+MEDIAMTX_AUTOSTART: bool = os.getenv("STREAM_FACTORY_MEDIAMTX_AUTOSTART", "1") == "1"
+
+# 拉起 mediamtx 后等待其端口就绪的超时（秒）
+MEDIAMTX_STARTUP_TIMEOUT: float = float(
+    os.getenv("STREAM_FACTORY_MEDIAMTX_STARTUP_TIMEOUT", "10")
+)
+
 # 流就绪探测超时（秒）：等待 HLS 索引文件出现
 STREAM_READY_TIMEOUT: float = float(os.getenv("STREAM_FACTORY_READY_TIMEOUT", "30"))
 
-# mediamtx 可执行文件路径（仅文档引用，模块不自动拉起该进程）
+# mediamtx 可执行文件路径（服务启动时由 mediamtx 模块按需自动拉起）
 MEDIAMTX_BIN: str = os.getenv(
     "STREAM_FACTORY_MEDIAMTX_BIN",
     "/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx",
+)
+
+# mediamtx 配置文件路径（自动拉起时显式传入，确保用标准默认配置）
+MEDIAMTX_CONFIG: str = os.getenv(
+    "STREAM_FACTORY_MEDIAMTX_CONFIG",
+    str(Path(MEDIAMTX_BIN).parent / "mediamtx.yml"),
 )

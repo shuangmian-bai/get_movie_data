@@ -10,7 +10,7 @@
 import abc
 from typing import List, Optional
 
-from stream_factory.rules import FilterRule, StreamRequest, StreamSource, TrimSegment
+from stream_factory.rules import BlankSegment, FilterRule, StreamRequest, StreamSource, TrimSegment
 
 
 class FramePlugin(abc.ABC):
@@ -32,6 +32,10 @@ class StreamPlugin(abc.ABC):
     def trims(self, source: StreamSource) -> List[TrimSegment]:
         """返回要删除的广告区间（裁剪区间，单位秒）。"""
 
+    def blanks(self, source: StreamSource) -> List[BlankSegment]:
+        """返回周期性空白段（默认无）。需要「插入空白」的流插件覆盖此方法。"""
+        return []
+
     def build_request(
         self,
         source: StreamSource,
@@ -49,4 +53,5 @@ class StreamPlugin(abc.ABC):
             headers=source.headers,
             trims=self.trims(source),
             filters=[f for fp in frames for f in fp.filters()],
+            blanks=self.blanks(source),
         )

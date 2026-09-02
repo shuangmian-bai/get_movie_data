@@ -36,8 +36,7 @@ pip install -r requirements.txt
 # 启动 Web 服务（uvicorn，热重载；前端由 frontend_loader 从 web/frontend/ 提供）
 python main.py
 
-# 启动 RTSP 服务器 mediamtx（流工厂 RTSP 输出需要；仅 HLS 可跳过）
-mediamtx
+# RTSP 服务器 mediamtx 由服务启动时自动拉起（无需手动启动；详见 stream_factory/README.md）
 
 # 运行全部测试
 python -m unittest discover -s media_source/tests -v
@@ -70,11 +69,11 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 ### 流工厂（`stream_factory/`）
 
 - 输入 `media_source` 拿到的 m3u8/mp4 播放地址，用 **FFmpeg 子进程**拉流并做**去广告裁剪**（无损 `-c copy` 快路径 / `select` 滤镜重编码路径）。
-- 规则模型（`rules.py`）：`StreamSource`（流源 url/type/headers）、`StreamRequest`（source_url/headers/trims/filters）、`TrimSegment`（删除区间）、`FilterRule`（逐帧滤镜，预留）。
-- 插件抽象（`base.py` + `plugins.py`）：`FramePlugin`（帧插件，产出 FilterRule）/ `StreamPlugin`（流插件，产出 TrimSegment 并合成 StreamRequest），**不绑定 base_url**；内置水印帧插件 + 各站点流插件（示例裁剪）。
+- 规则模型（`rules.py`）：`StreamSource`（流源 url/type/headers）、`StreamRequest`（source_url/headers/trims/filters/blanks）、`TrimSegment`（删除区间）、`BlankSegment`（周期性空白段）、`FilterRule`（逐帧滤镜，预留）。
+- 插件抽象（`base.py` + `plugins.py`）：`FramePlugin`（帧插件，产出 FilterRule）/ `StreamPlugin`（流插件，产出 TrimSegment、可选 BlankSegment 并合成 StreamRequest），**不绑定 base_url**；内置水印/文字帧插件 + 各站点流插件（示例裁剪）+ 空白插入案例（`BlankInsertStreamPlugin`）+ 组合流插件（`CompositeStreamPlugin`，聚合多个流插件的 trims/blanks）。
 - 编排：`pipeline.py`（规则→ffmpeg 命令）/ `session.py` + `factory.py`（会话子进程生命周期）/ `api.py`（REST + 播放器页）。
-- 站点组合在应用层 `main.py` 的 `STREAM_PIPELINES`（`base_url → (流插件, [帧插件])`）自由编排，经 `POST /api/stream/processed`（内部处理入口）按站点触发去广告流；`GET /api/play` 仍无状态返回原始 m3u8。
-- 双输出：HLS 写本地磁盘（`/streams/{sid}/index.m3u8`，Web 播放）+ RTSP 推流到 mediamtx（原生播放）。
+- 站点组合在应用层 `main.py` 的 `STREAM_PIPELINES`（`base_url → (流插件, [帧插件])`）自由编排，经 `POST /api/stream/processed`（内部处理入口）按站点触发去广告流；`GET /api/play` 仍无状态返回原始 m3u8。三个站点（cupfox/yhdm/qqll）均已接入「双面酱」文字水印（`ShuangmianTextFramePlugin`）与空白插入案例（`BlankInsertStreamPlugin`，经 `CompositeStreamPlugin` 叠加）。
+- 双输出：HLS 写本地磁盘（`/streams/{sid}/index.m3u8`，Web 播放）+ RTSP 推流到 mediamtx（原生播放）。HLS 与 RTSP 各用独立 ffmpeg 子进程：HLS 是主输出，RTSP 是「尽力而为」的附加输出，后者失败不影响前者。mediamtx 由 `main.py` 生命周期自动拉起（`MEDIAMTX_AUTOSTART`），不可用时降级为纯 HLS。
 
 ## 已知状态 / 注意事项
 
@@ -82,4 +81,4 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 - `yhdm` 插件发起**真实网络请求**到 `https://yhdm.one/`（搜索/详情为服务端渲染 HTML；播放地址来自 JSON 接口 `/_get_plays/<vod_id>/<ep_name>`）。无离线/mock 模式，涉及它的单元测试需要网络。
 - `cupfox` 插件发起**真实网络请求**到 `https://www.cupfox7.com/`（苹果CMS v10，服务端渲染 HTML；播放地址从播放页内嵌 `var player_xxxx` 的 `url` 字段提取 m3u8）。**需直连（`trust_env=False`）绕过代理**，否则代理对 HTTP/2 处理失败；搜索结果有多页时内部用 asyncio 并发（信号量限流）抓取所有分页。涉及它的单元测试需要网络。
 - `plugin_manager.scan_plugins()` 在导入时执行，因此 `get_supported_sources()` 反映的是 `plugins/` 目录下当前实际存在的包，而非静态清单。
-- `stream_factory` 依赖系统 `ffmpeg`（转流）与 `mediamtx`（RTSP 服务器，本机位于 `/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx`）。RTSP 输出需 mediamtx 运行；仅 HLS 可设 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭。
+- `stream_factory` 依赖系统 `ffmpeg`（转流）与 `mediamtx`（RTSP 服务器，本机位于 `/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx`）。mediamtx 由服务启动时**自动拉起**（`STREAM_FACTORY_MEDIAMTX_AUTOSTART=1`，退出时自动停止本模块拉起的实例）；不可用时 RTSP 降级为纯 HLS（HLS 不受影响）。仅 HLS 可设 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭。

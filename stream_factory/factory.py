@@ -8,6 +8,7 @@ import uuid
 from typing import Dict, List, Optional
 
 from stream_factory import config
+from stream_factory.mediamtx import rtsp_reachable
 from stream_factory.rules import StreamRequest
 from stream_factory.session import StreamSession
 
@@ -25,9 +26,9 @@ class StreamFactory:
         """创建并启动一个流会话。"""
         sid = uuid.uuid4().hex[:12]
         hls_dir = os.path.join(config.HLS_ROOT, sid)
-        rtsp_url = (
-            config.RTSP_SERVER.rstrip("/") + "/" + sid if config.RTSP_ENABLED else None
-        )
+        rtsp_url = None
+        if config.RTSP_ENABLED and await rtsp_reachable(config.RTSP_SERVER):
+            rtsp_url = config.RTSP_SERVER.rstrip("/") + "/" + sid
         session = StreamSession(sid, req, hls_dir, rtsp_url)
         self._sessions[sid] = session
         await session.start()
