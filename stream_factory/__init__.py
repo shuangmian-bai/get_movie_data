@@ -30,6 +30,7 @@ from stream_factory.stream_plugins import (
     StreamPlugin,
     YhdmStreamPlugin,
 )
+from stream_factory.url_handlers import OcrUrlHandler, UrlHandler
 from stream_factory.video_cache import close_video_cache, ensure_source
 
 __all__ = [
@@ -56,4 +57,6 @@ __all__ = [
     "QqllStreamPlugin",
     "ensure_source",
     "close_video_cache",
+    "UrlHandler",
+    "OcrUrlHandler",
 ]

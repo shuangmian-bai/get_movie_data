@@ -22,6 +22,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from stream_factory import blacklist
 from stream_factory import config
 
 logger = logging.getLogger("stream_factory.video_cache")
@@ -120,7 +121,10 @@ def _is_hit(url: str, source_type: str) -> bool:
 
 # ---- 主入口 ----
 async def ensure_source(
-    url: str, source_type: str = "m3u8", headers: Optional[Dict[str, str]] = None
+    url: str,
+    source_type: str = "m3u8",
+    headers: Optional[Dict[str, str]] = None,
+    url_handlers: Optional[List] = None,
 ) -> str:
     """确保源视频已缓存到本地，返回本地路径（未缓存时先下载）。
 
@@ -148,7 +152,7 @@ async def ensure_source(
             if source_type == "mp4":
                 await _cache_mp4(url, headers)
             else:
-                ok = await _cache_m3u8(url, headers)
+                ok = await _cache_m3u8(url, headers, url_handlers)
                 if not ok:
                     # 嵌套过深等无法缓存场景：降级直连
                     return url
@@ -203,7 +207,9 @@ def _rewrite_uri_attr(
     return line.replace(raw_uri, local_name), local_name, abs_url
 
 
-async def _cache_m3u8(url: str, headers: Optional[Dict[str, str]]) -> bool:
+async def _cache_m3u8(
+    url: str, headers: Optional[Dict[str, str]], url_handlers: Optional[List] = None
+) -> bool:
     """下载 m3u8 源并缓存，返回是否成功（``False`` 表示需降级直连）。
 
     ``dir_`` 固定用**原始 url** 的缓存目录；Master 递归到 variant 时目录不变，
@@ -212,11 +218,18 @@ async def _cache_m3u8(url: str, headers: Optional[Dict[str, str]]) -> bool:
     client = _get_client()
     resp = await client.get(url, headers=headers)
     resp.raise_for_status()
-    return await _cache_m3u8_text(url, resp.text, headers, depth=0, dir_=_cache_dir(url))
+    return await _cache_m3u8_text(
+        url, resp.text, headers, depth=0, dir_=_cache_dir(url), url_handlers=url_handlers
+    )
 
 
 async def _cache_m3u8_text(
-    base_url: str, text: str, headers: Optional[Dict[str, str]], depth: int, dir_: str
+    base_url: str,
+    text: str,
+    headers: Optional[Dict[str, str]],
+    depth: int,
+    dir_: str,
+    url_handlers: Optional[List] = None,
 ) -> bool:
     """解析播放列表文本并缓存 key / 分片，返回是否成功。
 
@@ -237,12 +250,15 @@ async def _cache_m3u8_text(
         client = _get_client()
         resp = await client.get(sub_url, headers=headers)
         resp.raise_for_status()
-        return await _cache_m3u8_text(sub_url, resp.text, headers, depth + 1, dir_)
+        return await _cache_m3u8_text(
+            sub_url, resp.text, headers, depth + 1, dir_, url_handlers
+        )
 
     # Media playlist：下载 key（AES-128）/ init 分片（fMP4）/ 媒体分片，全部重写为本地引用
     os.makedirs(dir_, exist_ok=True)
 
     jobs: List[tuple] = []          # (本地文件名, 绝对 URL) —— 待下载文件
+    segments: List[tuple] = []      # 媒体分片 (本地文件名, 绝对 URL) —— 供黑名单/OCR 过滤
     rewritten: List[str] = []       # 重写后的播放列表行
     key_uris: Dict[str, str] = {}   # 绝对 key URI → 本地文件名（去重）
     init_uris: Dict[str, str] = {}  # 绝对 init URI → 本地文件名（去重）
@@ -274,10 +290,18 @@ async def _cache_m3u8_text(
             ext = os.path.splitext(urlparse(abs_url).path)[1] or ".ts"
             name = f"segment_{seg_idx:04d}{ext}"
             jobs.append((name, abs_url))
+            segments.append((name, abs_url))
             rewritten.append(name)
             seg_idx += 1
 
-    # 并发下载所有文件（key / init / 分片），信号量限流
+    # 命中黑名单的分片：直接跳过（不下载、不 OCR）
+    blocked: set = set()
+    if url_handlers:
+        for name, abs_url in segments:
+            if blacklist.is_blacklisted(abs_url):
+                blocked.add(name)
+
+    # 并发下载（key / init / 未被拉黑的分片），信号量限流
     sem = asyncio.Semaphore(config.VIDEO_CACHE_CONCURRENCY)
 
     async def _download(name: str, file_url: str) -> None:
@@ -292,11 +316,39 @@ async def _cache_m3u8_text(
                         f.write(chunk)
             os.replace(tmp, dst)
 
-    await asyncio.gather(*[_download(name, file_url) for name, file_url in jobs])
+    await asyncio.gather(
+        *[_download(name, file_url) for name, file_url in jobs if name not in blocked]
+    )
 
-    # 写重写后的播放列表（key / init / 分片 URI 均已替换为本地相对文件名）
+    # 下载后对未被拉黑的分片跑 URL 处理器（如 OCR 违规词检测），命中则拉黑
+    if url_handlers:
+        async def _check(name: str, abs_url: str) -> Optional[str]:
+            local = os.path.join(dir_, name)
+            for handler in url_handlers:
+                try:
+                    if await handler.handle(abs_url, local):
+                        blacklist.mark(abs_url, handler.name)
+                        return name
+                except Exception as exc:  # noqa: BLE001 - 处理器异常一律放行
+                    logger.warning(
+                        "URL 处理器 %s 异常，放行分片 %s：%s", handler.name, abs_url, exc
+                    )
+            return None
+
+        hits = await asyncio.gather(
+            *[_check(name, abs_url) for name, abs_url in segments if name not in blocked]
+        )
+        for hit in hits:
+            if hit:
+                blocked.add(hit)
+
+    # 写重写后的播放列表：跳过被拉黑的分片行（从 index.m3u8 移除 → ffmpeg 不推流）
     with open(os.path.join(dir_, "index.m3u8"), "w", encoding="utf-8") as f:
-        f.write("\n".join(rewritten) + "\n")
+        for line in rewritten:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and stripped in blocked:
+                continue
+            f.write(line + "\n")
     return True
 
 

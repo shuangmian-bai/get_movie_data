@@ -73,3 +73,32 @@ MEDIAMTX_CONFIG: str = os.getenv(
     "STREAM_FACTORY_MEDIAMTX_CONFIG",
     str(Path(MEDIAMTX_BIN).parent / "mediamtx.yml"),
 )
+
+# ---- 黑名单配置 ----
+
+# 黑名单根目录（按 ts 源 URL 哈希建文件），默认位于统一缓存根 blacklist/
+BLACKLIST_ROOT: str = os.getenv(
+    "STREAM_FACTORY_BLACKLIST_ROOT", str(Path(CACHE_ROOT) / "blacklist")
+)
+
+# 黑名单 TTL（秒）：命中违规的 ts 在此时长内直接跳过（不下载、不 OCR、不推流）
+BLACKLIST_TTL: int = int(os.getenv("STREAM_FACTORY_BLACKLIST_TTL", str(7 * 24 * 3600)))
+
+# ---- OCR 检测配置 ----
+
+# tesseract 可执行文件路径
+OCR_TESSERACT_BIN: str = os.getenv("STREAM_FACTORY_OCR_TESSERACT_BIN", "tesseract")
+
+# OCR 识别语言（中文简体 chi_sim，需安装对应语言包）
+OCR_LANG: str = os.getenv("STREAM_FACTORY_OCR_LANG", "chi_sim")
+
+# 每个 ts 分片抽帧数（默认抽中间 1 帧）
+OCR_FRAME_COUNT: int = int(os.getenv("STREAM_FACTORY_OCR_FRAME_COUNT", "1"))
+
+# 违规词表（逗号分隔），命中任一即拉黑该 ts
+OCR_BLOCKWORDS: str = os.getenv(
+    "STREAM_FACTORY_OCR_BLOCKWORDS", "澳门新葡京,新葡京"
+)
+
+# OCR 并发数（tesseract 较重，默认低并发）
+OCR_CONCURRENCY: int = int(os.getenv("STREAM_FACTORY_OCR_CONCURRENCY", "1"))

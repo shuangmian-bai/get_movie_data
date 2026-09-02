@@ -27,6 +27,7 @@
 - 文件缓存与过期控制
 - 插件自动扫描与加载
 - 去广告转流（stream_factory，HLS + RTSP 双协议输出）
+- 违规内容过滤（stream_factory URL 处理器：OCR 识别「澳门新葡京」等违规词，拉黑对应分片跳过推流）
 
 ## 目录导航
 
@@ -56,7 +57,8 @@
 cache/
 ├── {站点}/          # media_source 文件缓存（FileCache，按 base_url 分区，JSON）
 ├── streams/         # stream_factory HLS 输出 + 处理结果缓存（内容寻址 sid，去广告后 HLS 复用）
-└── video_cache/     # stream_factory 源视频缓存（按 source_url 哈希，m3u8/mp4）
+├── video_cache/     # stream_factory 源视频缓存（按 source_url 哈希，m3u8/mp4）
+└── blacklist/       # stream_factory 黑名单（命中违规的 ts 源 URL，跳过推流）
 ```
 
 - 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`STREAM_FACTORY_CACHE_ROOT`（流工厂统一缓存根），以及细分的 `STREAM_FACTORY_HLS_ROOT` / `STREAM_FACTORY_VIDEO_CACHE_ROOT`。
@@ -67,6 +69,7 @@ cache/
 - **Python 3.8+**：本项目依赖 `Pydantic V2` / `FastAPI` / `httpx` 等库，需 Python 3.8 及以上版本。
 - **FFmpeg**：去广告转流（`stream_factory`）依赖系统 `ffmpeg`，需**单独安装**（非 Python 包），如 `apt install ffmpeg` / `brew install ffmpeg`。
 - **mediamtx**（可选）：RTSP 推流服务器，服务启动时自动拉起；仅用 HLS 可省略（设 `STREAM_FACTORY_RTSP_ENABLED=0`）。
+- **tesseract**（可选）：OCR 违规词过滤（`stream_factory` 的 URL 处理器）依赖系统 `tesseract` 与中文语言包 `chi_sim`（`apt install tesseract-ocr tesseract-ocr-chi-sim` / `dnf install tesseract tesseract-langpack-chi_sim`）；不启用 OCR 过滤可省略。
 
 ## 快速开始
 
