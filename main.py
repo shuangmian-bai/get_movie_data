@@ -14,7 +14,7 @@ app = FastAPI(title="影视数据源服务", docs_url="/docs")
 # 挂载 API 路由（web 模块）
 app.include_router(api_router)
 
-# 前端静态资源（web/frontend/ 目录，由 frontend_loader 引擎加载）
+# 前端静态资源（web/frontend/ 目录，由 frontend_loader 引擎加载）1
 app.add_middleware(FrontendStaticLoader)
 
 
