@@ -44,7 +44,21 @@
 - `frontend_loader/`：前端静态资源加载中间件
 - `stream_factory/`：流工厂（去广告转流，HLS + RTSP 双协议输出）
 - `view/`：演示页面
-- `cache/`：运行时缓存目录
+- `cache/`：统一运行时缓存目录（文件缓存 / HLS 输出 / 源视频缓存）
+
+## 缓存目录约定
+
+所有运行时缓存统一放在项目根的 `cache/` 目录下（以 `cache` 为基础路径），不再散落在根目录：
+
+```
+cache/
+├── {站点}/          # media_source 文件缓存（FileCache，按 base_url 分区，JSON）
+├── streams/         # stream_factory HLS 输出（每个流会话一个子目录）
+└── video_cache/     # stream_factory 源视频缓存（按 source_url 哈希，m3u8/mp4）
+```
+
+- 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`STREAM_FACTORY_CACHE_ROOT`（流工厂统一缓存根），以及细分的 `STREAM_FACTORY_HLS_ROOT` / `STREAM_FACTORY_VIDEO_CACHE_ROOT`。
+- **新增缓存时同样放入 `cache/` 下**，保持「所有缓存以 cache 为基础路径」这条约定。
 
 ## 快速开始
 

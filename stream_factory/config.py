@@ -13,8 +13,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FFMPEG_BIN: str = os.getenv("STREAM_FACTORY_FFMPEG_BIN", "ffmpeg")
 FFPROBE_BIN: str = os.getenv("STREAM_FACTORY_FFPROBE_BIN", "ffprobe")
 
-# HLS 输出根目录（每个流会话一个子目录），默认位于项目根 streams/
-HLS_ROOT: str = os.getenv("STREAM_FACTORY_HLS_ROOT", str(_PROJECT_ROOT / "streams"))
+# 统一缓存根目录（所有缓存产物——HLS 输出 / 源视频缓存——都归到其下，不散落在项目根）
+CACHE_ROOT: str = os.getenv("STREAM_FACTORY_CACHE_ROOT", str(_PROJECT_ROOT / "cache"))
+
+# HLS 输出根目录（每个流会话一个子目录），默认位于统一缓存根 streams/
+HLS_ROOT: str = os.getenv("STREAM_FACTORY_HLS_ROOT", str(Path(CACHE_ROOT) / "streams"))
 
 # HLS 分片时长（秒）与播放列表长度（0 = 保留全部分片，适合点播）
 HLS_TIME: int = int(os.getenv("STREAM_FACTORY_HLS_TIME", "2"))
@@ -39,9 +42,9 @@ STREAM_READY_TIMEOUT: float = float(os.getenv("STREAM_FACTORY_READY_TIMEOUT", "3
 
 # ---- 源视频缓存配置 ----
 
-# 源视频缓存根目录（按 source_url 哈希建子目录），默认位于项目根 video_cache/
+# 源视频缓存根目录（按 source_url 哈希建子目录），默认位于统一缓存根 video_cache/
 VIDEO_CACHE_ROOT: str = os.getenv(
-    "STREAM_FACTORY_VIDEO_CACHE_ROOT", str(_PROJECT_ROOT / "video_cache")
+    "STREAM_FACTORY_VIDEO_CACHE_ROOT", str(Path(CACHE_ROOT) / "video_cache")
 )
 
 # 源视频缓存 TTL（秒）：过期后重新下载（惰性删除）

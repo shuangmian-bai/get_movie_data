@@ -188,7 +188,8 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `STREAM_FACTORY_FFMPEG_BIN` | `ffmpeg` | ffmpeg 路径 |
-| `STREAM_FACTORY_HLS_ROOT` | `{项目根}/streams` | HLS 输出根目录 |
+| `STREAM_FACTORY_CACHE_ROOT` | `{项目根}/cache` | 统一缓存根目录（HLS 输出 / 源视频缓存均归其下） |
+| `STREAM_FACTORY_HLS_ROOT` | `{项目根}/cache/streams` | HLS 输出根目录（默认位于统一缓存根下） |
 | `STREAM_FACTORY_HLS_TIME` | `2` | 分片时长（秒） |
 | `STREAM_FACTORY_HLS_LIST_SIZE` | `0` | 播放列表长度（0 = 全部分片，适合点播） |
 | `STREAM_FACTORY_RTSP_SERVER` | `rtsp://127.0.0.1:8554` | RTSP 推流目标 |
@@ -198,7 +199,7 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 | `STREAM_FACTORY_MEDIAMTX_CONFIG` | `{BIN 同级}/mediamtx.yml` | mediamtx 配置文件（自动拉起时显式传入） |
 | `STREAM_FACTORY_MEDIAMTX_STARTUP_TIMEOUT` | `10` | 拉起后等待端口就绪超时（秒） |
 | `STREAM_FACTORY_READY_TIMEOUT` | `30` | HLS 就绪探测超时（秒） |
-| `STREAM_FACTORY_VIDEO_CACHE_ROOT` | `{项目根}/video_cache` | 源视频缓存根目录（按 source_url 哈希建子目录） |
+| `STREAM_FACTORY_VIDEO_CACHE_ROOT` | `{项目根}/cache/video_cache` | 源视频缓存根目录（按 source_url 哈希建子目录，默认位于统一缓存根下） |
 | `STREAM_FACTORY_VIDEO_CACHE_TTL` | `86400` | 源视频缓存过期时间（秒），过期后重新下载 |
 | `STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY` | `5` | m3u8 分片并发下载数 |
 
@@ -206,5 +207,5 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 
 - 会话就绪判定以 **HLS 索引文件出现** 为准；HLS 是主输出，RTSP 是「尽力而为」的独立进程，mediamtx 不可用时只降级为纯 HLS，RTSP 推流失败不影响 HLS 输出。
 - RTSP 无损 copy 依赖源为 H.264/AAC；H.265 等编码需走重编码（`filters` 或中间段裁剪会触发）。
-- `streams/` 为运行时产物，建议加入 `.gitignore`。
+- 所有缓存产物统一放 `cache/`（HLS 输出在 `cache/streams/`、源视频缓存在 `cache/video_cache/`），`cache/` 建议加入 `.gitignore`。
 - `main.py` 挂载 `api_router` 与 `/streams` 静态目录，应用退出时建议调用 `await stream_factory.shutdown()` 清理子进程。
