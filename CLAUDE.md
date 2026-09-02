@@ -20,10 +20,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 一个 FastAPI Web 应用，对外暴露**插件化多源影视数据源模块**（`media_source/`）。每个已接入站点（樱花动漫 / yhdm.one、茶杯狐 / cupfox7.com、奇奇影视 / qqll.cc）都是独立 Python 包，实现三段链路：关键词搜索 → 详情获取 → 分集播放地址（m3u8/mp4）。
 
-- `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 前端加载中间件。
+- `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 流工厂路由 + HLS 静态目录 + 前端加载中间件。
 - `web/` — Web 服务模块（属应用层：REST API sources/search/info/play + `frontend/` 前端资源）。
 - `media_source/` — 可复用的插件框架 + 站点插件 + 文件缓存。
 - `frontend_loader/` — 前端静态资源加载引擎（默认从 `web/frontend/` 提供文件）。
+- `stream_factory/` — 流工厂模块（去广告转流：FFmpeg 拉流裁剪 + HLS/RTSP 双协议输出 + 内嵌播放器）。
 - `requirements.txt` — 运行依赖（`media_source` 数据源 + FastAPI Web 服务）。
 
 ## 常用命令
@@ -34,6 +35,9 @@ pip install -r requirements.txt
 
 # 启动 Web 服务（uvicorn，热重载；前端由 frontend_loader 从 web/frontend/ 提供）
 python main.py
+
+# 启动 RTSP 服务器 mediamtx（流工厂 RTSP 输出需要；仅 HLS 可跳过）
+mediamtx
 
 # 运行全部测试
 python -m unittest discover -s media_source/tests -v
@@ -63,9 +67,19 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 
 插件是 `media_source/plugins/<site>/` 包，固定 4 个文件 —— `__init__.py`（导出插件类）、`constants.py`（站点 URL/请求头）、`parser.py`（纯异步函数，返回原始字典）、`main.py`（`MediaSourcePlugin` 子类 + 映射模板 + `_raw_*` 方法）。`plugins/yhdm/`、`plugins/cupfox/` 是真实参考实现；`plugins/template/` 为同构骨架（扫描时被跳过）。完整指南：`media_source/docs/PLUGIN_DEV_GUIDE.md`。
 
+### 流工厂（`stream_factory/`）
+
+- 输入 `media_source` 拿到的 m3u8/mp4 播放地址，用 **FFmpeg 子进程**拉流并做**去广告裁剪**（无损 `-c copy` 快路径 / `select` 滤镜重编码路径）。
+- 规则模型（`rules.py`）：`StreamSource`（流源 url/type/headers）、`StreamRequest`（source_url/headers/trims/filters）、`TrimSegment`（删除区间）、`FilterRule`（逐帧滤镜，预留）。
+- 插件抽象（`base.py` + `plugins.py`）：`FramePlugin`（帧插件，产出 FilterRule）/ `StreamPlugin`（流插件，产出 TrimSegment 并合成 StreamRequest），**不绑定 base_url**；内置水印帧插件 + 各站点流插件（示例裁剪）。
+- 编排：`pipeline.py`（规则→ffmpeg 命令）/ `session.py` + `factory.py`（会话子进程生命周期）/ `api.py`（REST + 播放器页）。
+- 站点组合在应用层 `main.py` 的 `STREAM_PIPELINES`（`base_url → (流插件, [帧插件])`）自由编排，经 `POST /api/stream/processed`（内部处理入口）按站点触发去广告流；`GET /api/play` 仍无状态返回原始 m3u8。
+- 双输出：HLS 写本地磁盘（`/streams/{sid}/index.m3u8`，Web 播放）+ RTSP 推流到 mediamtx（原生播放）。
+
 ## 已知状态 / 注意事项
 
 - **测试套件当前是坏的**：`test_plugin_manager.py`、`test_plugins.py`、`test_batch_search.py` 引用了已被删除的示例插件 `site_a`/`site_b`（`https://www.site-a.example.com`、`https://www.site-b.example.com`）。现在仅剩 `yhdm`、`cupfox`、`qqll` 三个真实插件，这些文件在更新到当前插件集之前会失败/报错。
 - `yhdm` 插件发起**真实网络请求**到 `https://yhdm.one/`（搜索/详情为服务端渲染 HTML；播放地址来自 JSON 接口 `/_get_plays/<vod_id>/<ep_name>`）。无离线/mock 模式，涉及它的单元测试需要网络。
 - `cupfox` 插件发起**真实网络请求**到 `https://www.cupfox7.com/`（苹果CMS v10，服务端渲染 HTML；播放地址从播放页内嵌 `var player_xxxx` 的 `url` 字段提取 m3u8）。**需直连（`trust_env=False`）绕过代理**，否则代理对 HTTP/2 处理失败；搜索结果有多页时内部用 asyncio 并发（信号量限流）抓取所有分页。涉及它的单元测试需要网络。
 - `plugin_manager.scan_plugins()` 在导入时执行，因此 `get_supported_sources()` 反映的是 `plugins/` 目录下当前实际存在的包，而非静态清单。
+- `stream_factory` 依赖系统 `ffmpeg`（转流）与 `mediamtx`（RTSP 服务器，本机位于 `/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx`）。RTSP 输出需 mediamtx 运行；仅 HLS 可设 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭。

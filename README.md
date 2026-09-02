@@ -24,6 +24,7 @@
 - 批量并发搜索多个数据源
 - 文件缓存与过期控制
 - 插件自动扫描与加载
+- 去广告转流（stream_factory，HLS + RTSP 双协议输出）
 
 ## 目录导航
 
@@ -33,6 +34,7 @@
 - [缓存模块说明](./media_source/cache.md)
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
 - [Web 服务说明](./web/README.md)
+- [流工厂模块说明](./stream_factory/README.md)
 
 ### 代码
 
@@ -40,6 +42,7 @@
 - `web/`：HTTP 接口层
 - `media_source/`：插件框架、模型、缓存和数据源实现
 - `frontend_loader/`：前端静态资源加载中间件
+- `stream_factory/`：流工厂（去广告转流，HLS + RTSP 双协议输出）
 - `view/`：演示页面
 - `cache/`：运行时缓存目录
 
@@ -60,13 +63,14 @@ python main.py
 - `GET /api/search?key=关键词`
 - `GET /api/info?base_url=...&link=...`
 - `GET /api/play?base_url=...&link=...&episode_index=1`
+- `POST /api/stream`（创建流）、`POST /api/stream/processed`（按站点去广告建流）、`GET /api/stream/{sid}/player`（内嵌播放器）
 
 ## 开发提示
 
 - 新增站点时，优先参考 `media_source/plugins/template`
 - 插件实现只负责输出原始数据
 - 字段映射、默认值和统一结构由基础类完成
-- 视频资源中的广告去除过于麻烦，暂不考虑，如有大佬能够解决欢迎pr
+- 去广告转流由 `stream_factory/` 模块提供（FFmpeg 拉流裁剪 + HLS/RTSP 输出），需系统依赖 ffmpeg 与 mediamtx；去广告规则按站点在 `main.py` 的 `STREAM_PIPELINES` 里自由组合流/帧插件
 
 ## 友情链接
 
