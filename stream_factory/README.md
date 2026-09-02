@@ -79,6 +79,7 @@ stream_factory/
 - **保留 HLS 结构**：m3u8 源缓存播放列表、AES-128 解密 key、fMP4 init 分片与媒体分片到本地，播放列表 URI 重写为本地相对引用；mp4 直链缓存为 `source.mp4`。
 - **长驻连接池**：模块级 `httpx.AsyncClient` 懒加载复用，所有会话共享同一 TCP 连接池，减少重复建连。
 - **并发去重**：同一 `source_url` 同时仅一个下载任务（per-key 锁 + 双重检查），其他会话 await 后复用结果。
+- **边下边推（m3u8）**：未命中缓存时，首个分片下载（并 OCR）完成即写出本地 `index.m3u8`（live，无 `#EXT-X-ENDLIST`）并返回，ffmpeg 随即启动边读边推；后台任务继续按序「下载 → OCR → 追加」剩余分片，全部完成后追加 `#EXT-X-ENDLIST` 结束（ffmpeg 读到后正常退出）。设 `STREAM_FACTORY_VIDEO_CACHE_STREAMING=0` 回退到旧版「全量下载后转流」。
 - **TTL 过期**：缓存带 `meta.json`（url / source_type / ts / expires），过期后惰性重新下载。
 
 缓存目录：`{VIDEO_CACHE_ROOT}/{md5(source_url)}/`（`index.m3u8` + `segment_*.ts` + `key_*.key` + `init_*.mp4`，或 `source.mp4` + `meta.json`）。
@@ -236,7 +237,9 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 | `STREAM_FACTORY_READY_TIMEOUT` | `30` | HLS 就绪探测超时（秒） |
 | `STREAM_FACTORY_VIDEO_CACHE_ROOT` | `{项目根}/cache/video_cache` | 源视频缓存根目录（按 source_url 哈希建子目录，默认位于统一缓存根下） |
 | `STREAM_FACTORY_VIDEO_CACHE_TTL` | `86400` | 源视频缓存过期时间（秒），过期后重新下载 |
-| `STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY` | `5` | m3u8 分片并发下载数 |
+| `STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY` | `5` | m3u8 分片并发下载数（旧回退路径；流式下 key/init 并发） |
+| `STREAM_FACTORY_VIDEO_CACHE_STREAMING` | `1` | 边下边推开关（1=首个分片就绪即起 ffmpeg；0=回退全量下载后转流） |
+| `STREAM_FACTORY_VIDEO_CACHE_SEGMENT_RETRY` | `3` | 单个分片下载重试次数（流式下失败重试后仍失败则跳过） |
 | `STREAM_FACTORY_BLACKLIST_ROOT` | `{项目根}/cache/blacklist` | 黑名单目录（按 ts 源 URL 哈希建文件） |
 | `STREAM_FACTORY_BLACKLIST_TTL` | `604800` | 黑名单有效期（秒），命中违规的 ts 在此期间直接跳过 |
 | `STREAM_FACTORY_OCR_TESSERACT_BIN` | `tesseract` | tesseract 可执行文件路径 |

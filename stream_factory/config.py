@@ -50,9 +50,19 @@ VIDEO_CACHE_ROOT: str = os.getenv(
 # 源视频缓存 TTL（秒）：过期后重新下载（惰性删除）
 VIDEO_CACHE_TTL: int = int(os.getenv("STREAM_FACTORY_VIDEO_CACHE_TTL", "86400"))
 
-# m3u8 分片并发下载数
+# m3u8 分片并发下载数（流式边下边推模式下，key/init 与分片按序处理，此项主要影响旧回退路径）
 VIDEO_CACHE_CONCURRENCY: int = int(
     os.getenv("STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY", "5")
+)
+
+# 是否启用流式边下边推（1=首个分片就绪即起 ffmpeg；0=回退到旧的全量下载后转流）
+VIDEO_CACHE_STREAMING: bool = (
+    os.getenv("STREAM_FACTORY_VIDEO_CACHE_STREAMING", "1") == "1"
+)
+
+# 单个分片下载重试次数（流式下分片下载失败先重试，仍失败则跳过该分片继续）
+VIDEO_CACHE_SEGMENT_RETRY: int = int(
+    os.getenv("STREAM_FACTORY_VIDEO_CACHE_SEGMENT_RETRY", "3")
 )
 
 # ---- 处理结果缓存配置 ----
