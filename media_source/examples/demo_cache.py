@@ -59,7 +59,7 @@ async def play_with_cache(info: MediaInfo, episode_index: int) -> PlaySource:
 
 
 async def main() -> None:
-    base_url = "https://yhdm.one"
+    base_url = "https://www.cupfox7.com"
 
     # 第一次：未命中，走网络
     t0 = time.perf_counter()

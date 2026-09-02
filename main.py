@@ -18,9 +18,11 @@ from frontend_loader import FrontendStaticLoader
 from stream_factory import (
     HLS_ROOT,
     FramePlugin,
+    OcrUrlHandler,
     StreamPlugin,
     StreamRequest,
     StreamSource,
+    UrlHandler,
     api_router as stream_api_router,
     close_video_cache,
     ensure_mediamtx,
@@ -37,33 +39,41 @@ from stream_factory.stream_plugins import (
     CupfoxStreamPlugin,
     PassthroughStreamPlugin,
     QqllStreamPlugin,
-    YhdmStreamPlugin,
 )
 from web import api_router
 
-# ---- 流处理自由组合（应用层汇总：base_url → 流插件 + 帧插件）----
-# 新增/调整站点只需改这一张表；未匹配的 base_url 走透传（不裁剪）。
-STREAM_PIPELINES: Dict[str, Tuple[StreamPlugin, List[FramePlugin]]] = {
+# ---- 流处理自由组合（应用层汇总：base_url → 流插件 + 帧插件 + URL 处理器）----
+# 新增/调整站点只需改这一张表；未匹配的 base_url 走透传（不裁剪、不过滤）。
+# URL 处理器（如 OCR 违规词检测）在源视频缓存阶段过滤分片，命中则拉黑跳过推流。
+STREAM_PIPELINES: Dict[str, Tuple[StreamPlugin, List[FramePlugin], List[UrlHandler]]] = {
     "https://www.cupfox7.com": (
         CompositeStreamPlugin([CupfoxStreamPlugin(), BlankInsertStreamPlugin()]),
         [WatermarkFramePlugin(text="双面酱帧处理"), ShuangmianTextFramePlugin()],
-    ),
-    "https://yhdm.one": (
-        CompositeStreamPlugin([YhdmStreamPlugin(), BlankInsertStreamPlugin()]),
-        [ShuangmianTextFramePlugin()],
+        [OcrUrlHandler()],
     ),
     "https://www.qqll.cc": (
         CompositeStreamPlugin([QqllStreamPlugin(), BlankInsertStreamPlugin()]),
         [ShuangmianTextFramePlugin()],
+        [OcrUrlHandler()],
     ),
 }
-DEFAULT_PIPELINE: Tuple[StreamPlugin, List[FramePlugin]] = (PassthroughStreamPlugin(), [])
+DEFAULT_PIPELINE: Tuple[StreamPlugin, List[FramePlugin], List[UrlHandler]] = (
+    PassthroughStreamPlugin(),
+    [],
+    [],
+)
 
 
 def build_stream_request(base_url: str, source: StreamSource) -> StreamRequest:
     """按 ``base_url`` 组合流插件 + 帧插件，合成去广告后的 ``StreamRequest``。"""
-    stream_plugin, frame_plugins = STREAM_PIPELINES.get(base_url, DEFAULT_PIPELINE)
+    stream_plugin, frame_plugins, _ = STREAM_PIPELINES.get(base_url, DEFAULT_PIPELINE)
     return stream_plugin.build_request(source, frame_plugins)
+
+
+def get_url_handlers(base_url: str) -> List[UrlHandler]:
+    """按 ``base_url`` 取该站点的 URL 处理器链（OCR 违规词检测等）。"""
+    _, _, url_handlers = STREAM_PIPELINES.get(base_url, DEFAULT_PIPELINE)
+    return url_handlers
 
 
 class ProcessedStreamRequest(BaseModel):
@@ -102,7 +112,8 @@ async def create_processed_stream(req: ProcessedStreamRequest):
     if not req.source.url:
         raise HTTPException(status_code=400, detail="source.url 不能为空")
     stream_req = build_stream_request(req.base_url, req.source)
-    session = await stream_factory.create_stream(stream_req)
+    url_handlers = get_url_handlers(req.base_url)
+    session = await stream_factory.create_stream(stream_req, url_handlers)
     return session.to_dict()
 
 

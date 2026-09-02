@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- 不发送 Referer，避免第三方海报/资源被防盗链拦截 -->
   <meta name="referrer" content="no-referrer">
-  <title>影视数据源服务</title>
+  <title>影视数据源服务(开发中)</title>
+  <title>欢迎各位大佬扩展评价</title>
+  <meta name="description" content="欢迎各位大佬扩展评价，提交Pull Request到https://github.com/shuangmian-bai/get_movie_data/" />
   <style>
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; }
@@ -27,6 +29,12 @@
     }
     button.search-btn:hover { background: #1d4ed8; }
 
+    .source-select { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 20px; }
+    .source-label { color: #888; font-size: 14px; line-height: 30px; flex-shrink: 0; }
+    .source-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+    .source-check { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: inherit; cursor: pointer; }
+    .source-check input { cursor: pointer; }
+
     .card {
       display: flex; gap: 12px; align-items: flex-start;
       border: 1px solid rgba(128,128,128,.25); border-radius: 8px;
@@ -43,6 +51,15 @@
     .meta { color: #888; font-size: 13px; font-weight: normal; }
     .desc { font-size: 14px; color: #666; margin-top: 6px; }
     .empty { color: #999; padding: 20px 0; }
+
+    .pager { display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 16px; }
+    .pager button {
+      padding: 8px 16px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px;
+      background: transparent; color: inherit; cursor: pointer;
+    }
+    .pager button:disabled { opacity: .4; cursor: not-allowed; }
+    .pager button:not(:disabled):hover { background: rgba(37,99,235,.12); border-color: #2563eb; }
+    .pager .page-info { color: #888; font-size: 14px; min-width: 120px; text-align: center; }
 
     .back {
       margin-bottom: 14px; padding: 8px 14px; font-size: 14px;
@@ -78,17 +95,29 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 </head>
 <body>
-  <h1>影视数据源服务</h1>
-  <div class="sources" id="sources">数据源加载中…</div>
+  <h1>影视数据源服务(开发中)</h1>
+  <p>欢迎各位大佬扩展评价</p>
+  <p>欢迎各位大佬扩展评价，提交Pull Request到<a href="https://github.com/shuangmian-bai/get_movie_data/">https://github.com/shuangmian-bai/get_movie_data/</a></p>
 
   <div class="search">
     <input id="key" type="text" placeholder="输入影视关键词，如：仙逆" />
     <button class="search-btn" onclick="doSearch()">搜索</button>
   </div>
 
+  <!-- 数据源多选（默认全选） -->
+  <div class="source-select" id="source-select">
+    <span class="source-label">数据源：</span>
+    <div class="source-checks" id="source-checks">数据源加载中…</div>
+  </div>
+
   <!-- 搜索结果视图 -->
   <div id="search-view">
     <div id="results"></div>
+    <div class="pager" id="pager" hidden>
+      <button id="prev-btn" onclick="gotoPage(currentPage - 1)">← 上一页</button>
+      <span class="page-info" id="page-info"></span>
+      <button id="next-btn" onclick="gotoPage(currentPage + 1)">下一页 →</button>
+    </div>
   </div>
 
   <!-- 详情视图（含选集 + 播放地址） -->
@@ -99,7 +128,11 @@
   </div>
 
   <script>
-    let searchResults = [];
+    const PAGE_SIZE = 20;   // 每页条数（后端 start/count 分页）
+    let currentKey = '';     // 当前搜索关键词
+    let currentPage = 0;     // 当前展示页（0-based，始终指向有数据的页）
+    let searchResults = [];  // 当前页数据
+    let hasNext = true;      // 是否还有下一页
     let currentInfo = null;
     let currentSid = null;  // 当前转流会话 id（切换/返回时停止）
 
@@ -117,38 +150,106 @@
         : `<div class="${cls} placeholder">${tip}</div>`;
     }
 
-    // 数据源列表
+    // 数据源多选（默认全选）
     fetch('/api/sources')
       .then(r => r.json())
       .then(list => {
-        const names = list.map(s => s.source_name).join('、') || '（无）';
-        document.getElementById('sources').textContent = '数据源：' + names;
+        const box = document.getElementById('source-checks');
+        box.innerHTML = list.map(s => `
+          <label class="source-check">
+            <input type="checkbox" data-url="${esc(s.base_url)}" checked> ${esc(s.source_name)}
+          </label>`).join('');
       })
-      .catch(() => document.getElementById('sources').textContent = '数据源加载失败');
+      .catch(() => document.getElementById('source-checks').textContent = '数据源加载失败');
 
-    // 搜索
-    async function doSearch() {
-      const key = document.getElementById('key').value.trim();
-      if (!key) return;
+    // 读取当前勾选的数据源 base_url（无勾选返回空数组）
+    function selectedUrls() {
+      return Array.from(document.querySelectorAll('#source-checks input:checked'))
+        .map(el => el.dataset.url);
+    }
+
+    // 渲染单个结果卡片
+    function renderCard(item, i) {
+      return `
+        <div class="card" onclick="showDetail(${i})">
+          ${coverHtml(item.cover, 'cover', '无图')}
+          <div class="info">
+            <h3>${esc(item.name)} <span class="meta">${esc(item.type)}${item.year ? ' · ' + esc(item.year) : ''}</span></h3>
+            <div class="desc">${esc(item.desc)}</div>
+          </div>
+        </div>`;
+    }
+
+    // 渲染当前页结果 + 分页条
+    function renderResults() {
+      document.getElementById('results').innerHTML = searchResults.map(renderCard).join('');
+      renderPager();
+    }
+
+    function renderPager() {
+      const pager = document.getElementById('pager');
+      if (!currentKey || !searchResults.length) { pager.hidden = true; return; }
+      pager.hidden = false;
+      document.getElementById('page-info').textContent =
+        '第 ' + (currentPage + 1) + ' 页' + (hasNext ? '' : ' · 已到最后一页');
+      document.getElementById('prev-btn').disabled = currentPage === 0;
+      document.getElementById('next-btn').disabled = !hasNext;
+    }
+
+    // 发起一次分页请求：只抓 [start, start+PAGE_SIZE) 这一页，按需爬取
+    async function fetchPage(page) {
       const box = document.getElementById('results');
+      const urls = selectedUrls();
+      if (!urls.length) {
+        box.innerHTML = '<div class="empty">请至少选择一个数据源</div>';
+        document.getElementById('pager').hidden = true;
+        return;
+      }
       box.innerHTML = '搜索中…';
+      document.getElementById('pager').hidden = true;
       try {
-        const resp = await fetch('/api/search?key=' + encodeURIComponent(key));
+        const start = page * PAGE_SIZE;
+        const qs = urls.map(u => '&base_urls=' + encodeURIComponent(u)).join('');
+        const resp = await fetch('/api/search?key=' + encodeURIComponent(currentKey) + '&start=' + start + '&count=' + PAGE_SIZE + qs);
         const list = await resp.json();
         if (!resp.ok) { box.innerHTML = '<div class="empty">请求失败：' + resp.status + '</div>'; return; }
-        if (!list.length) { box.innerHTML = '<div class="empty">无结果</div>'; return; }
+        if (!list.length) {
+          if (page === 0) {
+            currentKey = '';
+            searchResults = [];
+            box.innerHTML = '<div class="empty">无结果</div>';
+          } else {
+            // 翻过头：停留在上一页，禁用下一页
+            hasNext = false;
+            renderResults();
+          }
+          return;
+        }
+        currentPage = page;
         searchResults = list;
-        box.innerHTML = list.map((item, i) => `
-          <div class="card" onclick="showDetail(${i})">
-            ${coverHtml(item.cover, 'cover', '无图')}
-            <div class="info">
-              <h3>${esc(item.name)} <span class="meta">${esc(item.type)}${item.year ? ' · ' + esc(item.year) : ''}</span></h3>
-              <div class="desc">${esc(item.desc)}</div>
-            </div>
-          </div>`).join('');
+        hasNext = true;
+        renderResults();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (e) {
         box.innerHTML = '<div class="empty">搜索失败：' + esc(e) + '</div>';
       }
+    }
+
+    // 新搜索（固定从第 0 页开始）
+    async function doSearch() {
+      const key = document.getElementById('key').value.trim();
+      if (!key) return;
+      currentKey = key;
+      currentPage = 0;
+      hasNext = true;
+      searchResults = [];
+      await fetchPage(0);
+    }
+
+    // 翻页（上一页/下一页）
+    async function gotoPage(page) {
+      if (!currentKey) return;
+      await fetchPage(page);
     }
 
     // 点击结果 -> 详情 + 选集

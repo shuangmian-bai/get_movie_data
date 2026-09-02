@@ -26,13 +26,19 @@ from stream_factory.rules import StreamRequest
 logger = logging.getLogger("stream_factory.process_cache")
 
 
-def cache_key(req: StreamRequest) -> str:
+def cache_key(req: StreamRequest, extra: str = "") -> str:
     """计算处理结果的缓存键（内容寻址 ``sid``）：规范化 ``StreamRequest`` 的 md5 前 16 位。
 
     规范化 = ``req.model_dump(mode="json")`` 后按键排序序列化，保证「源 url + 帧滤镜 +
     流裁剪/空白 + headers」完全一致时产出相同 ``sid``；任一变化则 ``sid`` 不同。
+
+    ``extra`` 为额外指纹维度（如 URL 处理器的配置指纹）：URL 处理器会改变输出
+    （拉黑分片），但 ``StreamRequest`` 本身不含处理器信息，故需把其指纹拼入哈希，
+    否则处理器配置变化时 ``sid`` 不变，会错误复用旧 HLS。
     """
     data = req.model_dump(mode="json")
+    if extra:
+        data["_url_handlers"] = extra
     raw = json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.md5(raw.encode("utf-8")).hexdigest()[:16]
 

@@ -9,13 +9,11 @@ from stream_factory.stream_plugins.composite import CompositeStreamPlugin
 from stream_factory.stream_plugins.cupfox import CupfoxStreamPlugin
 from stream_factory.stream_plugins.passthrough import PassthroughStreamPlugin
 from stream_factory.stream_plugins.qqll import QqllStreamPlugin
-from stream_factory.stream_plugins.yhdm import YhdmStreamPlugin
 
 __all__ = [
     "StreamPlugin",
     "PassthroughStreamPlugin",
     "CupfoxStreamPlugin",
-    "YhdmStreamPlugin",
     "QqllStreamPlugin",
     "BlankInsertStreamPlugin",
     "CompositeStreamPlugin",

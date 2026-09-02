@@ -34,21 +34,29 @@ class StreamFactory:
                 self._locks[sid] = lock
             return lock
 
-    async def create_stream(self, req: StreamRequest) -> StreamSession:
+    async def create_stream(
+        self, req: StreamRequest, url_handlers: Optional[List] = None
+    ) -> StreamSession:
         """创建并启动一个流会话。
 
         先经源视频缓存把上游源缓存到本地（复用连接池 + 并发去重），命中后
-        ffmpeg 改读本地文件，减少重复网络请求；再按「源 + 去广告规则」内容寻址出
-        ``sid``，命中**处理结果缓存**则跳过 ffmpeg 转流、直接复用 HLS，否则转流，
-        转流完成后登记为处理缓存供后续复用。
+        ffmpeg 改读本地文件，减少重复网络请求；再按「源 + 去广告规则 + URL 处理器指纹」
+        内容寻址出 ``sid``，命中**处理结果缓存**则跳过 ffmpeg 转流、直接复用 HLS，
+        否则转流，转流完成后登记为处理缓存供后续复用。
         """
-        local = await video_cache.ensure_source(req.source_url, req.source_type, req.headers)
+        local = await video_cache.ensure_source(
+            req.source_url, req.source_type, req.headers, url_handlers
+        )
         if local != req.source_url:
             # 命中本地缓存：改读本地路径，本地读无需防盗链头
             req = req.model_copy(update={"source_url": local, "headers": {}})
 
-        # 内容寻址：同一「源 + 规则」→ 同一 sid → 同一 HLS 目录，天然复用
-        sid = process_cache.cache_key(req)
+        # 内容寻址：同一「源 + 规则 + URL 处理器」→ 同一 sid → 同一 HLS 目录，天然复用。
+        # URL 处理器会改变输出（拉黑分片），故其指纹必须纳入 sid，否则配置变化会错误复用旧 HLS。
+        handler_fp = ""
+        if url_handlers:
+            handler_fp = "|".join(h.fingerprint() for h in url_handlers)
+        sid = process_cache.cache_key(req, extra=handler_fp)
         hls_dir = process_cache.hls_dir(sid)
 
         lock = await self._get_lock(sid)

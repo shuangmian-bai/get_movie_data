@@ -19,8 +19,9 @@ from media_source.models import SearchItem, SourceMeta
 
 logger = logging.getLogger("media_source.plugin_manager")
 
-# 扫描时跳过的目录名（插件开发模板，非真实站点）
+# 扫描时跳过的目录名（插件开发模板 / 废弃数据源，非真实站点）
 _TEMPLATE_DIR = "template"
+_DEPRECATED_DIR = "_deprecated"
 
 
 class PluginManager:
@@ -39,7 +40,7 @@ class PluginManager:
 
         loaded = 0
         for _finder, name, ispkg in pkgutil.iter_modules(plugins_pkg.__path__):
-            if not ispkg or name == _TEMPLATE_DIR:
+            if not ispkg or name in (_TEMPLATE_DIR, _DEPRECATED_DIR):
                 continue
             try:
                 module = importlib.import_module(f"media_source.plugins.{name}")

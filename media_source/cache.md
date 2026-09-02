@@ -9,7 +9,7 @@
 
 ```
 {项目根}/cache/                     # 缓存根目录（可用环境变量 MEDIA_SOURCE_CACHE_DIR 覆盖）
-└── yhdm.one/                       # 命名空间 = base_url 规范化
+└── cupfox7.com/                    # 命名空间 = base_url 规范化
       ├── <md5>.json                # 搜索 / 详情 / 播放 的缓存条目
       └── ...
 ```
@@ -37,11 +37,12 @@ from media_source.cache import file_cache  # 全局单例
 
 | 数据类型 | 默认 TTL | 配置项 |
 | --- | --- | --- |
-| 搜索结果 | 10 分钟 | `MEDIA_SOURCE_SEARCH_TTL` |
-| 详情信息 | 1 小时 | `MEDIA_SOURCE_INFO_TTL` |
-| 播放地址 | 10 分钟 | `MEDIA_SOURCE_PLAY_TTL` |
+| 搜索结果 | 7 天 | `MEDIA_SOURCE_SEARCH_TTL` |
+| 详情信息 | 30 天 | `MEDIA_SOURCE_INFO_TTL` |
+| 播放地址 | 7 天 | `MEDIA_SOURCE_PLAY_TTL` |
 
-播放地址（m3u8/CDN）时效性最强，默认取最短 TTL；各值均可通过环境变量覆盖（见 `config.py`）。
+影视数据时效较长，三类缓存均按天级 TTL 失效（`FileCache` 磁盘持久化，跨重启保留，过期惰性删除）；
+各值均可通过环境变量覆盖（见 `config.py`）。
 
 ## 并发穿透防护
 

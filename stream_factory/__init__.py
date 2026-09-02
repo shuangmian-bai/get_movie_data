@@ -28,8 +28,8 @@ from stream_factory.stream_plugins import (
     PassthroughStreamPlugin,
     QqllStreamPlugin,
     StreamPlugin,
-    YhdmStreamPlugin,
 )
+from stream_factory.url_handlers import OcrUrlHandler, UrlHandler
 from stream_factory.video_cache import close_video_cache, ensure_source
 
 __all__ = [
@@ -52,8 +52,9 @@ __all__ = [
     "BlankInsertStreamPlugin",
     "CompositeStreamPlugin",
     "CupfoxStreamPlugin",
-    "YhdmStreamPlugin",
     "QqllStreamPlugin",
     "ensure_source",
     "close_video_cache",
+    "UrlHandler",
+    "OcrUrlHandler",
 ]

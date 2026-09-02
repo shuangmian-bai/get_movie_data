@@ -14,12 +14,14 @@
 
 | 组件 | 作用 | 安装 |
 | --- | --- | --- |
-| `ffmpeg` / `ffprobe` | 拉流、裁剪、转码、推流 | `apt install ffmpeg` / `brew install ffmpeg` |
+| `ffmpeg` / `ffprobe` | 拉流、裁剪、转码、推流、抽帧 | `apt install ffmpeg` / `brew install ffmpeg` |
 | `mediamtx` | RTSP 服务器（接收 FFmpeg 推流并分发 RTSP/HLS；服务启动时自动拉起） | 单二进制，见 [mediamtx](https://github.com/bluenviron/mediamtx) |
+| `tesseract` | OCR 违规词识别（URL 处理器 `OcrUrlHandler`，可选） | `apt install tesseract-ocr tesseract-ocr-chi-sim` / `dnf install tesseract tesseract-langpack-chi_sim` |
 
 > 本机已装：`ffmpeg 7.1.5`、`mediamtx 1.8.1`（`/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx`）。
 > `python main.py` 启动服务时会**自动拉起 mediamtx**（`MEDIAMTX_AUTOSTART=1` 时），无需手动启动；
 > 只需 HLS、不要 RTSP 时，设 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭推流（不拉起、无需 mediamtx）。
+> OCR 违规词过滤需另装 tesseract 中文语言包（本机缺 `chi_sim`，Fedora：`sudo dnf install tesseract-langpack-chi_sim`）；不装则 OCR 一律放行、不影响转流。
 
 ## 目录结构
 
@@ -34,16 +36,21 @@ stream_factory/
 │   ├── watermark.py     # WatermarkFramePlugin（去水印/打标，示例）
 │   └── shuangmian_text.py  # ShuangmianTextFramePlugin（「双面酱」文字水印）
 ├── stream_plugins/      # 流模块（子模块）：StreamPlugin 基类 + 各流插件
-│   ├── __init__.py      # 导出 StreamPlugin + 6 个流插件
+│   ├── __init__.py      # 导出 StreamPlugin + 5 个流插件
 │   ├── base.py          # StreamPlugin 抽象基类
 │   ├── passthrough.py   # PassthroughStreamPlugin（透传）
 │   ├── cupfox.py        # CupfoxStreamPlugin（站点裁剪）
-│   ├── yhdm.py          # YhdmStreamPlugin（站点裁剪）
 │   ├── qqll.py          # QqllStreamPlugin（站点裁剪）
 │   ├── blank_insert.py  # BlankInsertStreamPlugin（空白插入案例）
-│   └── composite.py     # CompositeStreamPlugin（组合流插件）
+│   ├── composite.py     # CompositeStreamPlugin（组合流插件）
+│   └── _deprecated/     # 废弃流插件区（过期源收纳，不再导出）
+├── url_handlers/        # URL 处理器（子模块）：UrlHandler 基类 + OCR 违规词处理器
+│   ├── __init__.py      # 导出 UrlHandler / OcrUrlHandler
+│   ├── base.py          # UrlHandler 抽象基类（分片级内容处理器）
+│   └── ocr.py           # OcrUrlHandler（抽帧 + OCR 识别违规词，命中拉黑分片）
+├── blacklist.py         # 黑名单持久化：命中违规的 ts 源 URL 记录 + TTL
 ├── pipeline.py          # FFmpeg 命令行构建器（规则 → ffmpeg 参数）
-├── video_cache.py       # 源视频缓存：长驻连接池 + m3u8/mp4 下载 + 并发去重
+├── video_cache.py       # 源视频缓存：长驻连接池 + m3u8/mp4 下载 + 并发去重 + 分片过滤
 ├── process_cache.py     # 处理结果缓存：内容寻址 sid + TTL 命中复用（去广告后 HLS）
 ├── session.py           # StreamSession：单会话子进程生命周期
 ├── factory.py           # StreamFactory：会话集合管理（单例 stream_factory）
@@ -94,12 +101,26 @@ stream_factory/
 
 处理缓存目录即 HLS 输出目录 `cache/streams/{sid}/`（`HLS_ROOT`），命中时 `/streams/{sid}/index.m3u8` 直接可播。
 
-## 流/帧插件与站点组合
+## URL 处理器与黑名单（OCR 违规词过滤）
 
-去广告规则是**系统内部知识**，封装为两类可复用、不绑定站点的插件：
+`stream_factory` 提供第三类插件 **`UrlHandler`（URL 处理器）**，在**源视频缓存阶段**对每个已下载的 ts 分片做**内容检测**，识别到违规内容（如「澳门新葡京」等赌博广告文字）时把该分片**拉入黑名单、跳过推流**：
+
+- **挂载点**：`video_cache._cache_m3u8_text()` 已逐分片下载 + URI 重写；URL 处理器在此对本地分片做检测，命中则从重写后的 `index.m3u8` 移除该分片行，ffmpeg 读本地 `index.m3u8`（已无该分片）自然跳过推流。整个过程离线完成，**不动 pipeline / session / ffmpeg 命令**。
+- **内置实现 `OcrUrlHandler`**：对每个 ts 分片用 ffmpeg 抽中间若干帧为 PNG，再用 `tesseract` 识别文字（`-l chi_sim --psm 6`），命中违规词表任一即拉黑。
+- **失败容错**：抽帧 / tesseract 报错、语言包缺失 → 放行（返回 `False`），**宁可漏报不可误杀**，绝不阻断转流。
+- **黑名单持久化**（`blacklist.py`）：命中违规的 ts 源 URL 记入 `{BLACKLIST_ROOT}/{md5(url)}.json`（带 TTL，默认 7 天），后续同一 ts **既不下载也不 OCR**、直接跳过。
+- **正确性**：URL 处理器会改变输出，故其 `fingerprint()` 纳入 `process_cache.cache_key` 的 `extra` 维度——处理器配置变化 → 指纹变化 → `sid` 变化 → 重新转流，避免错误复用旧 HLS。
+- **范围**：仅 m3u8 多分片场景生效（mp4 直链无分片、不适用）；`POST /api/stream`（无 `base_url`）不传 URL 处理器，默认不过滤。
+
+`OcrUrlHandler` 已接入两个站点（cupfox / qqll）的 `STREAM_PIPELINES`。
+
+## 流/帧/URL 插件与站点组合
+
+去广告与内容过滤规则是**系统内部知识**，封装为三类可复用、不绑定站点的插件：
 
 - **`FramePlugin`（帧插件）**：逐帧处理单元，`filters()` 产出 `FilterRule` 列表（如去水印 `drawtext`）。
 - **`StreamPlugin`（流插件）**：流级裁剪策略，`trims(source)` 产出 `TrimSegment` 列表，`build_request(source, frame_plugins)` 合成 `StreamRequest`。
+- **`UrlHandler`（URL 处理器）**：分片级内容处理器，`handle(segment_url, segment_path)` 对已下载的单个 ts 分片做内容检测（如 OCR 识别违规词），返回 `True` 表示拉黑该分片（从重写的 `index.m3u8` 移除，跳过推流）。
 
 内置插件（`stream_factory/frame_plugins/` 与 `stream_factory/stream_plugins/`，每个具体插件一个文件）：
 
@@ -108,7 +129,8 @@ stream_factory/
 | 帧 | `WatermarkFramePlugin` | 去水印/打标（`drawtext`，示例） |
 | 帧 | `ShuangmianTextFramePlugin` | **开发案例**：叠加「双面酱」文字水印 |
 | 流 | `PassthroughStreamPlugin` | 透传，不裁剪 |
-| 流 | `CupfoxStreamPlugin` / `YhdmStreamPlugin` / `QqllStreamPlugin` | 各站点裁剪策略（区间为占位/示例） |
+| URL | `OcrUrlHandler` | **开发案例**：抽帧 OCR 识别违规词（如「澳门新葡京」），命中拉黑分片跳过推流 |
+| 流 | `CupfoxStreamPlugin` / `QqllStreamPlugin` | 各站点裁剪策略（区间为占位/示例） |
 | 流 | `BlankInsertStreamPlugin` | **开发案例**：每隔 N 秒插入 M 秒空白（黑屏+静音+提示文字） |
 | 流 | `CompositeStreamPlugin` | 组合流插件：聚合多个流插件的 trims/blanks，供应用层叠加能力 |
 
@@ -119,14 +141,12 @@ STREAM_PIPELINES = {
     "https://www.cupfox7.com": (
         CompositeStreamPlugin([CupfoxStreamPlugin(), BlankInsertStreamPlugin()]),
         [WatermarkFramePlugin(text="去广告"), ShuangmianTextFramePlugin()],
-    ),
-    "https://yhdm.one": (
-        CompositeStreamPlugin([YhdmStreamPlugin(), BlankInsertStreamPlugin()]),
-        [ShuangmianTextFramePlugin()],
+        [OcrUrlHandler()],
     ),
     "https://www.qqll.cc": (
         CompositeStreamPlugin([QqllStreamPlugin(), BlankInsertStreamPlugin()]),
         [ShuangmianTextFramePlugin()],
+        [OcrUrlHandler()],
     ),
 }
 ```
@@ -140,7 +160,7 @@ STREAM_PIPELINES = {
 - **`ShuangmianTextFramePlugin`**（帧插件）：实现 `filters()` 返回一条 `drawtext` 规则，即可在画面上叠加「双面酱」文字。
 - **`BlankInsertStreamPlugin`**（流插件）：覆盖 `blanks()` 返回 `BlankSegment`，实现「每隔 `interval` 秒插入 `duration` 秒空白（黑屏 + 静音 + 居中提示文字，默认「广告已跳过」）」。
 
-> 以上两个开发案例已接入三个真实站点（cupfox / yhdm / qqll）的 `STREAM_PIPELINES`：
+> 以上两个开发案例已接入两个真实站点（cupfox / qqll）的 `STREAM_PIPELINES`：
 > `ShuangmianTextFramePlugin` 加入各站点的帧插件列表，`BlankInsertStreamPlugin` 经 `CompositeStreamPlugin` 与各站点裁剪插件叠加。
 
 自定义流插件时，`trims()`（裁剪）与 `blanks()`（插入空白）是两种流级时间操作，可只实现其中一种；帧插件只需实现 `filters()`。
@@ -217,6 +237,13 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 | `STREAM_FACTORY_VIDEO_CACHE_ROOT` | `{项目根}/cache/video_cache` | 源视频缓存根目录（按 source_url 哈希建子目录，默认位于统一缓存根下） |
 | `STREAM_FACTORY_VIDEO_CACHE_TTL` | `86400` | 源视频缓存过期时间（秒），过期后重新下载 |
 | `STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY` | `5` | m3u8 分片并发下载数 |
+| `STREAM_FACTORY_BLACKLIST_ROOT` | `{项目根}/cache/blacklist` | 黑名单目录（按 ts 源 URL 哈希建文件） |
+| `STREAM_FACTORY_BLACKLIST_TTL` | `604800` | 黑名单有效期（秒），命中违规的 ts 在此期间直接跳过 |
+| `STREAM_FACTORY_OCR_TESSERACT_BIN` | `tesseract` | tesseract 可执行文件路径 |
+| `STREAM_FACTORY_OCR_LANG` | `chi_sim` | OCR 识别语言（中文简体，需安装对应语言包） |
+| `STREAM_FACTORY_OCR_FRAME_COUNT` | `1` | 每个 ts 分片抽帧数（默认抽中间 1 帧） |
+| `STREAM_FACTORY_OCR_BLOCKWORDS` | `澳门新葡京,新葡京` | 违规词表（逗号分隔），命中任一即拉黑该 ts |
+| `STREAM_FACTORY_OCR_CONCURRENCY` | `1` | OCR 并发数（tesseract 较重，默认低并发） |
 
 ## 注意事项
 
