@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import Dict, List, Optional
 
-from stream_factory import config
+from stream_factory import config, video_cache
 from stream_factory.mediamtx import rtsp_reachable
 from stream_factory.rules import StreamRequest
 from stream_factory.session import StreamSession
@@ -23,7 +23,15 @@ class StreamFactory:
         os.makedirs(config.HLS_ROOT, exist_ok=True)
 
     async def create_stream(self, req: StreamRequest) -> StreamSession:
-        """创建并启动一个流会话。"""
+        """创建并启动一个流会话。
+
+        先经源视频缓存把上游源缓存到本地（复用连接池 + 并发去重），命中后
+        ffmpeg 改读本地文件，减少重复网络请求；下载失败/加密分片时降级直连。
+        """
+        local = await video_cache.ensure_source(req.source_url, req.source_type, req.headers)
+        if local != req.source_url:
+            # 命中本地缓存：改读本地路径，本地读无需防盗链头
+            req = req.model_copy(update={"source_url": local, "headers": {}})
         sid = uuid.uuid4().hex[:12]
         hls_dir = os.path.join(config.HLS_ROOT, sid)
         rtsp_url = None

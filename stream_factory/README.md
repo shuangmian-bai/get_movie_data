@@ -31,6 +31,7 @@ stream_factory/
 ├── base.py              # 抽象基类：FramePlugin（帧插件）/ StreamPlugin（流插件）
 ├── plugins.py           # 内置插件：水印/文字帧插件 + 各站点流插件 + 空白插入案例
 ├── pipeline.py          # FFmpeg 命令行构建器（规则 → ffmpeg 参数）
+├── video_cache.py       # 源视频缓存：长驻连接池 + m3u8/mp4 下载 + 并发去重
 ├── session.py           # StreamSession：单会话子进程生命周期
 ├── factory.py           # StreamFactory：会话集合管理（单例 stream_factory）
 ├── api.py               # FastAPI 路由（创建/查询/停止 + 播放器页）
@@ -50,6 +51,21 @@ stream_factory/
 
 - 无损快路径（copy）裁剪精度受关键帧/GOP 限制，去广告可接受；精确到帧需走重编码路径。
 - `filters`（逐帧滤镜）为**预留扩展**，当前实现水印示例 `drawtext`；存在滤镜时视频强制重编码。
+
+## 源视频缓存与连接池复用
+
+`video_cache.py` 在 ffmpeg 拉流之前先做一次**源视频缓存**，避免同一部影片被多个会话/客户端重复拉取上游：
+
+- **保留 HLS 结构**：m3u8 源缓存播放列表 + 分片到本地，播放列表重写为本地相对引用；mp4 直链缓存为 `source.mp4`。
+- **长驻连接池**：模块级 `httpx.AsyncClient` 懒加载复用，所有会话共享同一 TCP 连接池，减少重复建连。
+- **并发去重**：同一 `source_url` 同时仅一个下载任务（per-key 锁 + 双重检查），其他会话 await 后复用结果。
+- **TTL 过期**：缓存带 `meta.json`（url / source_type / ts / expires），过期后惰性重新下载。
+
+缓存目录：`{VIDEO_CACHE_ROOT}/{md5(source_url)}/`（`index.m3u8` + `segment_*.ts`，或 `source.mp4` + `meta.json`）。
+
+`factory.create_stream` 会自动先 `ensure_source(...)`；命中缓存后 ffmpeg 改读本地文件（`headers` 清空，本地读无需防盗链）。
+
+**降级场景**（保持原直连行为）：AES-128 加密分片、Master playlist 嵌套过深、下载失败、空 URL / 本地路径 —— 均返回原 `url`，ffmpeg 照旧直连拉流。
 
 ## 流/帧插件与站点组合
 
@@ -170,6 +186,9 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 | `STREAM_FACTORY_MEDIAMTX_CONFIG` | `{BIN 同级}/mediamtx.yml` | mediamtx 配置文件（自动拉起时显式传入） |
 | `STREAM_FACTORY_MEDIAMTX_STARTUP_TIMEOUT` | `10` | 拉起后等待端口就绪超时（秒） |
 | `STREAM_FACTORY_READY_TIMEOUT` | `30` | HLS 就绪探测超时（秒） |
+| `STREAM_FACTORY_VIDEO_CACHE_ROOT` | `{项目根}/video_cache` | 源视频缓存根目录（按 source_url 哈希建子目录） |
+| `STREAM_FACTORY_VIDEO_CACHE_TTL` | `86400` | 源视频缓存过期时间（秒），过期后重新下载 |
+| `STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY` | `5` | m3u8 分片并发下载数 |
 
 ## 注意事项
 

@@ -22,6 +22,7 @@ from stream_factory import (
     StreamRequest,
     StreamSource,
     api_router as stream_api_router,
+    close_video_cache,
     ensure_mediamtx,
     stop_mediamtx,
     stream_factory,
@@ -72,10 +73,11 @@ class ProcessedStreamRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """服务生命周期：启动时自动拉起 mediamtx（RTSP 依赖），退出时停止本模块拉起的实例。"""
+    """服务生命周期：启动时自动拉起 mediamtx（RTSP 依赖），退出时停止实例并关闭源视频连接池。"""
     await ensure_mediamtx()
     yield
     await stop_mediamtx()
+    await close_video_cache()
 
 
 app = FastAPI(title="影视数据源服务", docs_url="/docs", lifespan=lifespan)

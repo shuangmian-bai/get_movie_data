@@ -27,6 +27,7 @@ from stream_factory.plugins import (
     WatermarkFramePlugin,
     YhdmStreamPlugin,
 )
+from stream_factory.video_cache import close_video_cache, ensure_source
 
 __all__ = [
     "StreamFactory",
@@ -50,4 +51,6 @@ __all__ = [
     "CupfoxStreamPlugin",
     "YhdmStreamPlugin",
     "QqllStreamPlugin",
+    "ensure_source",
+    "close_video_cache",
 ]

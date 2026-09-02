@@ -37,6 +37,21 @@ MEDIAMTX_STARTUP_TIMEOUT: float = float(
 # 流就绪探测超时（秒）：等待 HLS 索引文件出现
 STREAM_READY_TIMEOUT: float = float(os.getenv("STREAM_FACTORY_READY_TIMEOUT", "30"))
 
+# ---- 源视频缓存配置 ----
+
+# 源视频缓存根目录（按 source_url 哈希建子目录），默认位于项目根 video_cache/
+VIDEO_CACHE_ROOT: str = os.getenv(
+    "STREAM_FACTORY_VIDEO_CACHE_ROOT", str(_PROJECT_ROOT / "video_cache")
+)
+
+# 源视频缓存 TTL（秒）：过期后重新下载（惰性删除）
+VIDEO_CACHE_TTL: int = int(os.getenv("STREAM_FACTORY_VIDEO_CACHE_TTL", "86400"))
+
+# m3u8 分片并发下载数
+VIDEO_CACHE_CONCURRENCY: int = int(
+    os.getenv("STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY", "5")
+)
+
 # mediamtx 可执行文件路径（服务启动时由 mediamtx 模块按需自动拉起）
 MEDIAMTX_BIN: str = os.getenv(
     "STREAM_FACTORY_MEDIAMTX_BIN",
