@@ -41,7 +41,7 @@ PAGE_CONCURRENCY: int = int(os.getenv("MEDIA_SOURCE_PAGE_CONCURRENCY", "5"))
 # 缓存根目录（按 base_url 划分命名空间），默认位于项目根 cache/
 CACHE_DIR: str = os.getenv("MEDIA_SOURCE_CACHE_DIR", str(_PROJECT_ROOT / "cache"))
 
-# 各类数据缓存 TTL（秒）：在「防止重复爬虫」与「数据不过于落后」之间取平衡
-SEARCH_CACHE_TTL: int = int(os.getenv("MEDIA_SOURCE_SEARCH_TTL", "600"))   # 搜索结果 10 分钟
-INFO_CACHE_TTL: int = int(os.getenv("MEDIA_SOURCE_INFO_TTL", "3600"))      # 详情信息 1 小时
-PLAY_CACHE_TTL: int = int(os.getenv("MEDIA_SOURCE_PLAY_TTL", "600"))       # 播放地址 10 分钟
+# 各类数据缓存 TTL（秒）：影视数据时效长，按天级缓存（环境变量可覆盖）
+SEARCH_CACHE_TTL: int = int(os.getenv("MEDIA_SOURCE_SEARCH_TTL", str(7 * 24 * 3600)))   # 搜索结果 7 天
+INFO_CACHE_TTL: int = int(os.getenv("MEDIA_SOURCE_INFO_TTL", str(30 * 24 * 3600)))      # 详情信息 30 天
+PLAY_CACHE_TTL: int = int(os.getenv("MEDIA_SOURCE_PLAY_TTL", str(7 * 24 * 3600)))       # 播放地址 7 天

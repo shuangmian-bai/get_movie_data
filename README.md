@@ -22,6 +22,8 @@
 - 获取影视详情
 - 获取指定集数的播放地址
 - 批量并发搜索多个数据源
+- 前端搜索分页（每页 20 条，按需翻页爬取，减少引擎压力）
+- 数据源多选（前端勾选数据源，仅请求所选站点）
 - 文件缓存与过期控制
 - 插件自动扫描与加载
 - 去广告转流（stream_factory，HLS + RTSP 双协议输出）
@@ -80,7 +82,7 @@ python main.py
 ## 常用接口
 
 - `GET /api/sources`
-- `GET /api/search?key=关键词`
+- `GET /api/search?key=关键词`（可选 `base_url` 单源 / `base_urls` 多源 / `start`+`count` 分页）
 - `GET /api/info?base_url=...&link=...`
 - `GET /api/play?base_url=...&link=...&episode_index=1`
 - `POST /api/stream`（创建流）、`POST /api/stream/processed`（按站点去广告建流）、`GET /api/stream/{sid}/player`（内嵌播放器）

@@ -53,22 +53,23 @@ async def _search_one(
     return [SearchItem(**d) for d in data]
 
 
-async def _search_all(
+async def _search_batch(
     key: str,
+    base_urls: Optional[List[str]] = None,
     start: int = 0,
     count: Optional[int] = None,
     page_concurrency: Optional[int] = None,
 ) -> List[SearchItem]:
-    """全源批量搜索（带缓存，按分页参数区分缓存）。"""
+    """批量搜索（带缓存）：``base_urls`` 为空则全源，非空则只搜指定源（按源组合区分缓存）。"""
     async def fetch():
         items = await plugin_manager.batch_search(
-            key, [], start=start, count=count, page_concurrency=page_concurrency
+            key, base_urls or [], start=start, count=count, page_concurrency=page_concurrency
         )
         return [item.model_dump() for item in items]
 
-    data = await file_cache.get_or_fetch(
-        "_all", _search_cache_key(key, start, count), config.SEARCH_CACHE_TTL, fetch
-    )
+    srcs = ",".join(sorted(base_urls)) if base_urls else "_all"
+    cache_key = f"{_search_cache_key(key, start, count)}:{srcs}"
+    data = await file_cache.get_or_fetch("_all", cache_key, config.SEARCH_CACHE_TTL, fetch)
     return [SearchItem(**d) for d in data]
 
 
@@ -112,7 +113,8 @@ async def list_sources() -> List[SourceMeta]:
 @api_router.get("/search", response_model=List[SearchItem], summary="搜索影视")
 async def search(
     key: str = Query(..., min_length=1, description="关键词"),
-    base_url: str = Query("", description="站点标识，空则全源搜索"),
+    base_url: str = Query("", description="站点标识（单源），空则按 base_urls / 全源"),
+    base_urls: Optional[List[str]] = Query(None, description="站点标识列表（多源），空则全源"),
     start: int = Query(0, ge=0, description="分页起始偏移（从 0 开始）"),
     count: Optional[int] = Query(None, ge=1, description="返回条数，空则返回全部"),
     page_concurrency: Optional[int] = Query(None, ge=1, description="分页并发抓取页数"),
@@ -122,7 +124,7 @@ async def search(
             return await _search_one(
                 _get_plugin(base_url), key, start, count, page_concurrency
             )
-        return await _search_all(key, start, count, page_concurrency)
+        return await _search_batch(key, base_urls, start, count, page_concurrency)
     except MediaSourceError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
