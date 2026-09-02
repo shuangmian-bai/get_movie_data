@@ -69,3 +69,4 @@ python main.py
 ## 友情链接
 
 - [隼目安全](https://sumsafe.org.cn/)
+- [双面的小窝](https://blog.shuangmian.top/)
