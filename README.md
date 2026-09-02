@@ -53,7 +53,7 @@
 ```
 cache/
 ├── {站点}/          # media_source 文件缓存（FileCache，按 base_url 分区，JSON）
-├── streams/         # stream_factory HLS 输出（每个流会话一个子目录）
+├── streams/         # stream_factory HLS 输出 + 处理结果缓存（内容寻址 sid，去广告后 HLS 复用）
 └── video_cache/     # stream_factory 源视频缓存（按 source_url 哈希，m3u8/mp4）
 ```
 

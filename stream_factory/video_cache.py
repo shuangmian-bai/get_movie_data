@@ -5,7 +5,7 @@
 
 - **长驻连接池**：模块级 ``httpx.AsyncClient`` 懒加载复用，多会话共享同一 TCP 连接池；
 - **并发去重**：同一 ``source_url`` 同时仅一个下载任务，其他会话 ``await`` 后复用（双重检查）；
-- **保留 HLS 结构**：缓存 m3u8 播放列表与分片，播放列表重写为本地相对引用；
+- **保留 HLS 结构**：缓存 m3u8 播放列表、AES-128 解密 key、fMP4 init 分片与媒体分片，播放列表 URI 重写为本地相对引用；
 - **TTL 过期**：命中未过期的缓存直接返回本地路径，过期后惰性重新下载。
 
 本模块只依赖 ``stream_factory.config``，不跨模块 import ``media_source``（遵守「低耦合」）。
@@ -35,6 +35,9 @@ _locks_guard = asyncio.Lock()
 
 # Master playlist 最大递归层级，防止畸形嵌套
 _MAX_DEPTH = 3
+
+# URI 属性（#EXT-X-KEY / #EXT-X-MAP 行内 ``URI="..."``）
+_URI_ATTR_RE = re.compile(r'URI\s*=\s*"([^"]*)"')
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -121,7 +124,7 @@ async def ensure_source(
 ) -> str:
     """确保源视频已缓存到本地，返回本地路径（未缓存时先下载）。
 
-    命中缓存或下载成功后返回本地文件路径；下载失败 / 加密分片 / 其他异常时**降级直连**，
+    命中缓存或下载成功后返回本地文件路径；下载失败 / 嵌套过深 / 其他异常时**降级直连**，
     返回原 ``url``，保持现有 ffmpeg 直连拉流行为不变。
 
     空 URL 与本地路径（``file://`` / 绝对路径）直接原样返回，无需缓存。
@@ -147,7 +150,7 @@ async def ensure_source(
             else:
                 ok = await _cache_m3u8(url, headers)
                 if not ok:
-                    # 加密分片等无法缓存场景：降级直连
+                    # 嵌套过深等无法缓存场景：降级直连
                     return url
         except Exception as exc:  # noqa: BLE001 - 任何下载失败都降级直连
             logger.warning("源视频缓存失败，降级直连：%s（%s）", url, exc)
@@ -174,6 +177,32 @@ async def _cache_mp4(url: str, headers: Optional[Dict[str, str]]) -> None:
 
 
 # ---- m3u8 播放列表 + 分片 ----
+
+
+def _rewrite_uri_attr(
+    line: str, base_url: str, seen: Dict[str, str], prefix: str, default_ext: str
+) -> tuple:
+    """重写含 URI 属性的行（``#EXT-X-KEY`` / ``#EXT-X-MAP``），返回三元组。
+
+    - ``rewritten``：URI 已替换为本地文件名的新行（无 URI 时返回原行）；
+    - ``local_name``：本地文件名（无 URI 时为 ``""``）；
+    - ``abs_url``：解析后的绝对 URI（无 URI 时为 ``""``）。
+
+    ``seen`` 用于同一绝对 URI 去重（复用同一本地文件），避免重复下载。
+    """
+    m = _URI_ATTR_RE.search(line)
+    if not m or not m.group(1):
+        return line, "", ""
+    raw_uri = m.group(1)
+    abs_url = urljoin(base_url, raw_uri)
+    local_name = seen.get(abs_url)
+    if local_name is None:
+        ext = os.path.splitext(urlparse(abs_url).path)[1] or default_ext
+        local_name = f"{prefix}_{len(seen) + 1:04d}{ext}"
+        seen[abs_url] = local_name
+    return line.replace(raw_uri, local_name), local_name, abs_url
+
+
 async def _cache_m3u8(url: str, headers: Optional[Dict[str, str]]) -> bool:
     """下载 m3u8 源并缓存，返回是否成功（``False`` 表示需降级直连）。
 
@@ -189,17 +218,17 @@ async def _cache_m3u8(url: str, headers: Optional[Dict[str, str]]) -> bool:
 async def _cache_m3u8_text(
     base_url: str, text: str, headers: Optional[Dict[str, str]], depth: int, dir_: str
 ) -> bool:
-    """解析播放列表文本并缓存分片，返回是否成功。"""
+    """解析播放列表文本并缓存 key / 分片，返回是否成功。
+
+    Master 递归选带宽最高的 variant；Media 则把 key（AES-128 解密密钥）、
+    init 分片（fMP4）与媒体分片全部下载到本地，播放列表 URI 重写为本地引用，
+    使 ffmpeg 完全离线拉流，不再对源站发起重复请求。
+    """
     if depth > _MAX_DEPTH:
         logger.warning("m3u8 嵌套层级过深，降级直连：%s", base_url)
         return False
 
     lines = text.splitlines()
-
-    # AES-128 加密分片：不缓存，降级直连（保留现有 ffmpeg 直连行为）
-    if any("#EXT-X-KEY" in line and "AES-128" in line.upper() for line in lines):
-        logger.warning("检测到 AES-128 加密分片，降级直连：%s", base_url)
-        return False
 
     # Master playlist：选带宽最高的 variant 递归缓存其 media playlist（缓存目录不变）
     variants = _extract_variants(lines)
@@ -210,43 +239,62 @@ async def _cache_m3u8_text(
         resp.raise_for_status()
         return await _cache_m3u8_text(sub_url, resp.text, headers, depth + 1, dir_)
 
-    # Media playlist：逐分片下载 + 重写播放列表为本地引用
+    # Media playlist：下载 key（AES-128）/ init 分片（fMP4）/ 媒体分片，全部重写为本地引用
     os.makedirs(dir_, exist_ok=True)
 
-    jobs: List[tuple] = []  # (本地文件名, 分片绝对 URL)
-    rewritten: List[str] = []
-    idx = 0
+    jobs: List[tuple] = []          # (本地文件名, 绝对 URL) —— 待下载文件
+    rewritten: List[str] = []       # 重写后的播放列表行
+    key_uris: Dict[str, str] = {}   # 绝对 key URI → 本地文件名（去重）
+    init_uris: Dict[str, str] = {}  # 绝对 init URI → 本地文件名（去重）
+    seg_idx = 0
     for line in lines:
         stripped = line.strip()
-        # 注释行（#EXTM3U / #EXTINF / #EXT-X-* / 空行）原样保留
-        if not stripped or stripped.startswith("#"):
+        if stripped.startswith("#EXT-X-KEY") and "URI=" in stripped:
+            # 解密密钥：下载 key，URI 重写为本地文件名（METHOD=NONE 无 URI，走注释分支原样保留）
+            new_line, local_name, abs_url = _rewrite_uri_attr(
+                line, base_url, key_uris, "key", ".key"
+            )
+            rewritten.append(new_line)
+            if local_name:
+                jobs.append((local_name, abs_url))
+        elif stripped.startswith("#EXT-X-MAP"):
+            # fMP4 init 分片：下载到本地，URI 重写为本地文件名
+            new_line, local_name, abs_url = _rewrite_uri_attr(
+                line, base_url, init_uris, "init", ".mp4"
+            )
+            rewritten.append(new_line)
+            if local_name:
+                jobs.append((local_name, abs_url))
+        elif not stripped or stripped.startswith("#"):
+            # 其余注释行（#EXTM3U / #EXTINF / #EXT-X-* / 空行）原样保留
             rewritten.append(line)
-            continue
-        abs_url = urljoin(base_url, stripped)
-        ext = os.path.splitext(urlparse(abs_url).path)[1] or ".ts"
-        name = f"segment_{idx:04d}{ext}"
-        jobs.append((name, abs_url))
-        rewritten.append(name)
-        idx += 1
+        else:
+            # 媒体分片：下载到本地，行替换为本地文件名
+            abs_url = urljoin(base_url, stripped)
+            ext = os.path.splitext(urlparse(abs_url).path)[1] or ".ts"
+            name = f"segment_{seg_idx:04d}{ext}"
+            jobs.append((name, abs_url))
+            rewritten.append(name)
+            seg_idx += 1
 
-    # 并发下载分片（信号量限流）
+    # 并发下载所有文件（key / init / 分片），信号量限流
     sem = asyncio.Semaphore(config.VIDEO_CACHE_CONCURRENCY)
 
-    async def _download(name: str, seg_url: str) -> None:
+    async def _download(name: str, file_url: str) -> None:
         async with sem:
             client = _get_client()
             tmp = os.path.join(dir_, name + ".tmp")
             dst = os.path.join(dir_, name)
-            async with client.stream("GET", seg_url, headers=headers) as r:
+            async with client.stream("GET", file_url, headers=headers) as r:
                 r.raise_for_status()
                 with open(tmp, "wb") as f:
                     async for chunk in r.aiter_bytes():
                         f.write(chunk)
             os.replace(tmp, dst)
 
-    await asyncio.gather(*[_download(name, seg_url) for name, seg_url in jobs])
+    await asyncio.gather(*[_download(name, file_url) for name, file_url in jobs])
 
-    # 写重写后的播放列表（分片行已替换为本地相对文件名）
+    # 写重写后的播放列表（key / init / 分片 URI 均已替换为本地相对文件名）
     with open(os.path.join(dir_, "index.m3u8"), "w", encoding="utf-8") as f:
         f.write("\n".join(rewritten) + "\n")
     return True

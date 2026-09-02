@@ -14,7 +14,7 @@ import shutil
 import time
 from typing import List, Optional
 
-from stream_factory import config
+from stream_factory import config, process_cache
 from stream_factory.pipeline import build_hls_command, build_rtsp_command
 from stream_factory.rules import StreamRequest
 
@@ -40,6 +40,13 @@ class StreamSession:
         self._stderr_tail: List[str] = []
         self._stderr_task: Optional[asyncio.Task] = None
         self._rtsp_stderr_task: Optional[asyncio.Task] = None
+
+    @classmethod
+    def from_cache(cls, sid: str, req: StreamRequest, hls_dir: str) -> "StreamSession":
+        """命中处理结果缓存的轻量会话：HLS 已就绪，无 ffmpeg 进程，无 RTSP。"""
+        session = cls(sid, req, hls_dir, rtsp_url=None)
+        session.status = "running"
+        return session
 
     async def start(self) -> None:
         """启动 HLS 主进程并等待就绪；随后可选启动 RTSP 推流进程。"""
@@ -125,6 +132,9 @@ class StreamSession:
         # stderr 读到 EOF，等待进程退出以便 returncode 就绪
         if self.process:
             await self.process.wait()
+            # 正常转流结束（returncode == 0）→ 登记处理结果缓存，供后续复用
+            if self.process.returncode == 0:
+                process_cache.mark_complete(self.hls_dir, self.sid, self.req.source_url)
 
     async def _drain_rtsp_stderr(self) -> None:
         """后台读取 RTSP 进程 stderr，进程异常退出时记录告警（不影响会话状态）。"""
@@ -152,7 +162,7 @@ class StreamSession:
         return "\n".join(self._stderr_tail[-20:])
 
     async def stop(self) -> None:
-        """终止 HLS 主进程与 RTSP 进程，并清理 HLS 目录。"""
+        """终止 HLS 主进程与 RTSP 进程；仅清理「半成品」HLS 目录（完整缓存保留）。"""
         for proc in (self.rtsp_process, self.process):
             if proc and proc.returncode is None:
                 proc.terminate()
@@ -165,7 +175,9 @@ class StreamSession:
             if task:
                 task.cancel()
         self.status = "stopped"
-        shutil.rmtree(self.hls_dir, ignore_errors=True)
+        # 完整缓存（有未过期 meta）保留复用；转流中的半成品目录清理
+        if not process_cache.is_complete(self.hls_dir):
+            shutil.rmtree(self.hls_dir, ignore_errors=True)
 
     def is_alive(self) -> bool:
         return self.process is not None and self.process.returncode is None

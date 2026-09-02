@@ -134,6 +134,18 @@ def _common_prefix(req: StreamRequest) -> List[str]:
     return prefix
 
 
+def _input_options(req: StreamRequest) -> List[str]:
+    """输入侧选项：HLS（m3u8）放开扩展名限制，允许读本地缓存里的 ``.key`` 解密密钥文件。
+
+    ffmpeg 7 的 hls demuxer 默认 ``allowed_extensions`` 白名单只含多媒体扩展名，
+    ``.key`` 不在其中，本地缓存 key 文件会被「安全策略」拦截、无法解密；
+    设为 ``ALL`` 放开（仅 m3u8 输入生效，mp4 直链不受影响）。
+    """
+    if req.source_type == "m3u8":
+        return ["-allowed_extensions", "ALL"]
+    return []
+
+
 def _codec_args(req: StreamRequest) -> Tuple[str, str, Optional[str], Optional[str]]:
     """返回 ``(vcodec, acodec, vfilter, afilter)``：有视频滤镜才重编码视频，有音频滤镜才重编码音频。"""
     vfilter, afilter = _build_filters(req.trims, req.filters, req.blanks)
@@ -162,6 +174,7 @@ def build_hls_command(req: StreamRequest, hls_dir: str) -> List[str]:
     """构建 HLS 输出命令（主输出，无 ``-re``，尽快转完整点播）。"""
     cmd: List[str] = [config.FFMPEG_BIN, "-y"]
     cmd += _common_prefix(req)
+    cmd += _input_options(req)
     cmd += ["-i", req.source_url]
     vcodec, acodec, vfilter, afilter = _codec_args(req)
     _map_and_encode(cmd, vcodec, acodec, vfilter, afilter)
@@ -178,6 +191,7 @@ def build_rtsp_command(req: StreamRequest, rtsp_url: str) -> List[str]:
     """构建 RTSP 推流命令（独立进程，带 ``-re`` 实时速率；失败不影响 HLS）。"""
     cmd: List[str] = [config.FFMPEG_BIN, "-y", "-re"]
     cmd += _common_prefix(req)
+    cmd += _input_options(req)
     cmd += ["-i", req.source_url]
     vcodec, acodec, vfilter, afilter = _codec_args(req)
     _map_and_encode(cmd, vcodec, acodec, vfilter, afilter)

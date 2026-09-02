@@ -55,6 +55,13 @@ VIDEO_CACHE_CONCURRENCY: int = int(
     os.getenv("STREAM_FACTORY_VIDEO_CACHE_CONCURRENCY", "5")
 )
 
+# ---- 处理结果缓存配置 ----
+
+# 处理结果缓存 TTL（秒）：去广告转流后的 HLS 目录复用有效期，过期后重新转流（惰性）
+PROCESS_CACHE_TTL: int = int(
+    os.getenv("STREAM_FACTORY_PROCESS_CACHE_TTL", str(7 * 24 * 3600))
+)
+
 # mediamtx 可执行文件路径（服务启动时由 mediamtx 模块按需自动拉起）
 MEDIAMTX_BIN: str = os.getenv(
     "STREAM_FACTORY_MEDIAMTX_BIN",
