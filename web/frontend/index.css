@@ -1,11 +1,101 @@
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
+
+/* 背景视频（进入详情页隐藏，返回搜索恢复） */
+.home-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #000;
+}
+.home-bg[hidden] { display: none; }
+.bg-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+@media (min-width: 721px) {
+  .bg-video {
+    top: 50%;
+    left: 50%;
+    width: 100vh;
+    height: 100vw;
+    transform: translate(-50%, -50%) rotate(-90deg);
+  }
+}
+.page { position: relative; z-index: 1; }
+
+/* 顶部横幅（毛玻璃） */
+.masthead {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255,255,255,.35);
+  border-radius: 10px;
+  background: rgba(255,255,255,.22);
+  background: linear-gradient(135deg, rgba(255,255,255,.30), rgba(255,255,255,.08) 55%, rgba(255,255,255,.18));
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+}
+@media (prefers-color-scheme: dark) {
+  .masthead {
+    border-color: rgba(255,255,255,.18);
+    background: rgba(17,19,24,.26);
+    background: linear-gradient(135deg, rgba(17,19,24,.34), rgba(17,19,24,.10) 55%, rgba(17,19,24,.22));
+  }
+}
+
+/* 背景声音开关 */
+.audio-toggle {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.4);
+  border-radius: 50%;
+  background: rgba(255,255,255,.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: inherit;
+  font-size: 17px;
+  cursor: pointer;
+  transition: background .15s, transform .15s;
+}
+.audio-toggle:hover { background: rgba(255,255,255,.28); transform: scale(1.05); }
+@media (prefers-color-scheme: dark) {
+  .audio-toggle {
+    border-color: rgba(255,255,255,.22);
+    background: rgba(255,255,255,.10);
+  }
+}
+
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   max-width: 900px; margin: 0 auto; padding: 24px 16px; line-height: 1.5;
 }
 h1 { font-size: 22px; margin: 0 0 4px; }
-.search { display: flex; gap: 8px; margin-bottom: 20px; }
+.sources { color: #888; font-size: 13px; margin-bottom: 18px; }
+
+/* 搜索框（毛玻璃） */
+.search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.32);
+  border-radius: 10px;
+  background: rgba(255,255,255,.16);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
 input[type=text], input.url {
   flex: 1; padding: 10px 12px; font-size: 15px;
   border: 1px solid #ccc; border-radius: 6px; background: transparent; color: inherit;
@@ -17,12 +107,25 @@ button.search-btn {
 }
 button.search-btn:hover { background: #1d4ed8; }
 
-.source-select { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 20px; }
+/* 数据源多选（毛玻璃） */
+.source-select {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,.32);
+  border-radius: 10px;
+  background: rgba(255,255,255,.14);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
 .source-label { color: #888; font-size: 14px; line-height: 30px; flex-shrink: 0; }
 .source-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .source-check { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: inherit; cursor: pointer; }
 .source-check input { cursor: pointer; }
 
+/* 结果卡片 */
 .card {
   display: flex; gap: 12px; align-items: flex-start;
   border: 1px solid rgba(128,128,128,.25); border-radius: 8px;
@@ -40,15 +143,20 @@ button.search-btn:hover { background: #1d4ed8; }
 .desc { font-size: 14px; color: #666; margin-top: 6px; }
 .empty { color: #999; padding: 20px 0; }
 
+/* 分页条（毛玻璃） */
 .pager { display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 16px; }
 .pager button {
   padding: 8px 16px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px;
-  background: transparent; color: inherit; cursor: pointer;
+  background: rgba(255,255,255,.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: inherit; cursor: pointer;
 }
 .pager button:disabled { opacity: .4; cursor: not-allowed; }
-.pager button:not(:disabled):hover { background: rgba(37,99,235,.12); border-color: #2563eb; }
+.pager button:not(:disabled):hover { background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.5); }
 .pager .page-info { color: #888; font-size: 14px; min-width: 120px; text-align: center; }
 
+/* 详情 */
 .back {
   margin-bottom: 14px; padding: 8px 14px; font-size: 14px;
   border: 1px solid #ccc; border-radius: 6px; background: transparent; color: inherit;
@@ -66,6 +174,7 @@ button.search-btn:hover { background: #1d4ed8; }
 }
 .ep:hover { background: rgba(37,99,235,.12); border-color: #2563eb; }
 
+/* 播放器 */
 .play { margin-top: 20px; padding: 14px; border: 1px solid rgba(128,128,128,.25); border-radius: 8px; }
 .play .meta { margin-bottom: 8px; }
 .player-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; }

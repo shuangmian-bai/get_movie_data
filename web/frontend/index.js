@@ -130,6 +130,7 @@ async function showDetail(i) {
   if (!item) return;
   document.getElementById('search-view').hidden = true;
   document.getElementById('detail-view').hidden = false;
+  document.getElementById('home-bg').hidden = true;  // 进入详情隐藏背景视频
   const detail = document.getElementById('detail');
   detail.innerHTML = '加载详情中…';
   try {
@@ -216,6 +217,7 @@ function playHls(hlsUrl) {
 function backToSearch() {
   document.getElementById('detail-view').hidden = true;
   document.getElementById('search-view').hidden = false;
+  document.getElementById('home-bg').hidden = false;  // 返回搜索恢复背景视频
   currentInfo = null;
 }
 
@@ -223,3 +225,61 @@ function backToSearch() {
 document.getElementById('key').addEventListener('keydown', e => {
   if (e.key === 'Enter') doSearch();
 });
+
+// 背景视频：尽量带声音播放；若被浏览器自动播放策略拦截，先静音保证画面，
+// 用户任意点击/按键/触摸时恢复声音，也可点击右上角声音按钮手动切换。
+(function () {
+  var v = document.getElementById('bg-video');
+  var btn = document.getElementById('audio-toggle');
+  if (!v) return;
+
+  function renderState() {
+    if (!btn) return;
+    btn.textContent = v.muted ? '🔇' : '🔊';
+    btn.setAttribute('aria-pressed', v.muted ? 'false' : 'true');
+  }
+
+  function setMuted(m) {
+    v.muted = m;
+    renderState();
+  }
+
+  function unmute() {
+    setMuted(false);
+    var p = v.play();
+    if (p && p.catch) p.catch(function () {});
+  }
+
+  function tryPlay() {
+    var p = v.play();
+    if (p && p.catch) {
+      p.catch(function () {
+        setMuted(true);
+        var retry = v.play();
+        if (retry && retry.catch) retry.catch(function () {});
+      });
+    }
+  }
+
+  var events = ['pointerdown', 'keydown', 'touchstart', 'click'];
+  function onGesture() {
+    if (v.muted) unmute();
+  }
+  events.forEach(function (evt) {
+    document.addEventListener(evt, onGesture, { passive: true });
+  });
+
+  if (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (v.muted) {
+        unmute();
+      } else {
+        setMuted(true);
+      }
+    });
+  }
+
+  renderState();
+  tryPlay();
+})();
