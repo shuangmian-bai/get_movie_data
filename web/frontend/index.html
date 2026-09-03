@@ -81,6 +81,10 @@
     .play { margin-top: 20px; padding: 14px; border: 1px solid rgba(128,128,128,.25); border-radius: 8px; }
     .play .meta { margin-bottom: 8px; }
     .play .row { display: flex; gap: 8px; }
+    .play-mode { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; margin: 16px 0 10px; }
+    .play-mode-label { color: #888; font-size: 14px; flex-shrink: 0; }
+    .play-mode-item { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; }
+    .play-mode-item input { cursor: pointer; }
     .player-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; }
     .player-placeholder {
       display: flex; align-items: center; justify-content: center;
@@ -289,6 +293,11 @@
             <div class="desc">${esc(info.desc)}</div>
           </div>
         </div>
+        <div class="play-mode">
+          <span class="play-mode-label">播放方式：</span>
+          <label class="play-mode-item"><input type="radio" name="play-mode" value="processed" checked> 流处理（去广告 · 转流 · 缓存）</label>
+          <label class="play-mode-item"><input type="radio" name="play-mode" value="native"> 原生 m3u8（直连 · 无转流/缓存/去广告）</label>
+        </div>
         <div id="play-result">
           <div class="play player-shell">
             <div class="player-placeholder">请选择分集开始播放</div>
@@ -305,11 +314,18 @@
       currentSid = null;
     }
 
-    // 点击选集 -> 内嵌播放器（转流为本地 HLS 再播，绕开防盗链）
+    // 读取当前选中的播放方式（processed=流处理去广告转流；native=原生直连 m3u8）
+    function currentPlayMode() {
+      const el = document.querySelector('input[name="play-mode"]:checked');
+      return el ? el.value : 'processed';
+    }
+
+    // 点击选集 -> 按所选播放方式播放
     async function playEpisode(epIndex) {
       if (!currentInfo) return;
       const box = document.getElementById('play-result');
-      box.innerHTML = '<div class="play player-shell"><div class="meta">获取播放地址并转流中…</div></div>';
+      const mode = currentPlayMode();
+      box.innerHTML = '<div class="play player-shell"><div class="meta">获取播放地址中…</div></div>';
       await stopCurrentStream();
       try {
         // 1. 拿原始播放地址
@@ -317,6 +333,12 @@
         const play = await resp.json();
         if (!resp.ok) {
           box.innerHTML = '<div class="play player-shell"><div class="empty">播放地址获取失败：' + resp.status + '</div></div>';
+          return;
+        }
+
+        // 原生播放：直接播放原始 m3u8/mp4，不走转流/缓存/去广告
+        if (mode === 'native') {
+          playNative(play, box);
           return;
         }
 
@@ -350,6 +372,23 @@
         playHls(stream.hls_url);
       } catch (e) {
         box.innerHTML = '<div class="play player-shell"><div class="empty">播放失败：' + esc(e) + '</div></div>';
+      }
+    }
+
+    // 原生直连播放：直接播原始 m3u8/mp4（不转流、不缓存、不去广告）
+    function playNative(play, box) {
+      const type = String(play.type || 'm3u8').toLowerCase();
+      box.innerHTML = `
+        <div class="play">
+          <div class="meta">类型：${esc(play.type || 'm3u8')} · 原生直连（无转流/缓存/去广告）</div>
+          <video id="player" class="player-video" controls></video>
+          <div class="hint" id="player-err"></div>
+          <div class="hint">提示：原生直连不带防盗链请求头，如播放失败（403/跨域）请改用「流处理」方式。</div>
+        </div>`;
+      if (type === 'mp4') {
+        document.getElementById('player').src = play.url;   // mp4 直链
+      } else {
+        playHls(play.url);                                   // m3u8 交给 hls.js
       }
     }
 
