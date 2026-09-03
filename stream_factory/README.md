@@ -18,7 +18,7 @@
 | `mediamtx` | RTSP 服务器（接收 FFmpeg 推流并分发 RTSP/HLS；服务启动时自动拉起） | 单二进制，见 [mediamtx](https://github.com/bluenviron/mediamtx) |
 | `tesseract` | OCR 违规词识别（URL 处理器 `OcrUrlHandler`，可选） | `apt install tesseract-ocr tesseract-ocr-chi-sim` / `dnf install tesseract tesseract-langpack-chi_sim` |
 
-> 本机已装：`ffmpeg 7.1.5`、`mediamtx 1.8.1`（`/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx`）。
+> 本机已装：`ffmpeg 7.1.5`、`mediamtx 1.8.1`（默认从 PATH 查找 `mediamtx`，可用 `STREAM_FACTORY_MEDIAMTX_BIN` 覆盖为绝对路径）。
 > `python main.py` 启动服务时会**自动拉起 mediamtx**（`MEDIAMTX_AUTOSTART=1` 时），无需手动启动；
 > 只需 HLS、不要 RTSP 时，设 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭推流（不拉起、无需 mediamtx）。
 > OCR 违规词过滤需另装 tesseract 中文语言包（本机缺 `chi_sim`，Fedora：`sudo dnf install tesseract-langpack-chi_sim`）；不装则 OCR 一律放行、不影响转流。
@@ -231,8 +231,8 @@ curl -X POST "http://127.0.0.1:8000/api/stream" \
 | `STREAM_FACTORY_RTSP_SERVER` | `rtsp://127.0.0.1:8554` | RTSP 推流目标 |
 | `STREAM_FACTORY_RTSP_ENABLED` | `1` | 是否启用 RTSP 双输出 |
 | `STREAM_FACTORY_MEDIAMTX_AUTOSTART` | `1` | 服务启动时是否自动拉起 mediamtx（RTSP 启用时生效） |
-| `STREAM_FACTORY_MEDIAMTX_BIN` | `/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx` | mediamtx 可执行文件路径 |
-| `STREAM_FACTORY_MEDIAMTX_CONFIG` | `{BIN 同级}/mediamtx.yml` | mediamtx 配置文件（自动拉起时显式传入） |
+| `STREAM_FACTORY_MEDIAMTX_BIN` | `mediamtx` | mediamtx 可执行文件路径（默认从 PATH 查找） |
+| `STREAM_FACTORY_MEDIAMTX_CONFIG` | `""`（空） | mediamtx 配置文件（留空则用内置默认配置） |
 | `STREAM_FACTORY_MEDIAMTX_STARTUP_TIMEOUT` | `10` | 拉起后等待端口就绪超时（秒） |
 | `STREAM_FACTORY_READY_TIMEOUT` | `30` | HLS 就绪探测超时（秒） |
 | `STREAM_FACTORY_VIDEO_CACHE_ROOT` | `{项目根}/cache/video_cache` | 源视频缓存根目录（按 source_url 哈希建子目录，默认位于统一缓存根下） |
