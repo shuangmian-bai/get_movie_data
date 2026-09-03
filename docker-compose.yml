@@ -3,7 +3,7 @@ services:
     image: bluenviron/mediamtx:1.20.1
     ports:
       - "8554:8554"
-      - "8888:8888"
+      - "9999:8888"
       - "1935:1935"
     restart: unless-stopped
 
