@@ -77,6 +77,7 @@ cache/
 
 ```bash
 pip install -r requirements.txt
+apt install ffmpeg
 python main.py
 ```
 
