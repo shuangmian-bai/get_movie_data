@@ -73,16 +73,12 @@ PROCESS_CACHE_TTL: int = int(
 )
 
 # mediamtx 可执行文件路径（服务启动时由 mediamtx 模块按需自动拉起）
-MEDIAMTX_BIN: str = os.getenv(
-    "STREAM_FACTORY_MEDIAMTX_BIN",
-    "/mnt/4t/linux/huanjing/mediamtx/1.8.1/mediamtx",
-)
+# 默认 "mediamtx" 从 PATH 查找；可用 STREAM_FACTORY_MEDIAMTX_BIN 覆盖为绝对路径
+#（如 Docker 内 /usr/local/bin/mediamtx），避免硬编码特定主机路径。
+MEDIAMTX_BIN: str = os.getenv("STREAM_FACTORY_MEDIAMTX_BIN", "mediamtx")
 
-# mediamtx 配置文件路径（自动拉起时显式传入，确保用标准默认配置）
-MEDIAMTX_CONFIG: str = os.getenv(
-    "STREAM_FACTORY_MEDIAMTX_CONFIG",
-    str(Path(MEDIAMTX_BIN).parent / "mediamtx.yml"),
-)
+# mediamtx 配置文件路径（自动拉起时显式传入；留空则用 mediamtx 内置默认配置，无需配置文件）
+MEDIAMTX_CONFIG: str = os.getenv("STREAM_FACTORY_MEDIAMTX_CONFIG", "")
 
 # ---- 黑名单配置 ----
 

@@ -54,9 +54,11 @@ async def ensure_mediamtx() -> bool:
         return True  # 已在运行（外部或先前拉起），直接复用
 
     try:
+        cmd = [config.MEDIAMTX_BIN]
+        if config.MEDIAMTX_CONFIG:
+            cmd.append(config.MEDIAMTX_CONFIG)
         _process = await asyncio.create_subprocess_exec(
-            config.MEDIAMTX_BIN,
-            config.MEDIAMTX_CONFIG,
+            *cmd,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
             start_new_session=True,
