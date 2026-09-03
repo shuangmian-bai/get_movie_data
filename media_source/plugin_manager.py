@@ -112,7 +112,9 @@ class PluginManager:
         - ``base_urls=[url1, url2]``：指定多源 / 单源搜索；
         - 列表内无效 URL 自动过滤，日志告警，不影响整体任务；
         - 单插件失败仅记录日志，聚合有效结果返回；
-        - ``start``/``count``：分页参数，透传给各插件的分页搜索；
+        - ``start``/``count``：**全局分页参数**——多源时先把各源前 ``start+count`` 条结果按
+          稳定顺序（base_url 字典序）合并，再整体切片 ``[start, start+count)``，保证每页条数是
+          「所有源整合后的总数」，而非每源各 ``count`` 条；
         - ``page_concurrency``：单插件翻页并发抓取页数（默认取配置）。
         """
         base_urls = base_urls or []
@@ -131,14 +133,21 @@ class PluginManager:
             logger.warning("无可用插件执行搜索")
             return []
 
+        # 稳定全局顺序：按 base_url 字典序排序，保证多源合并/切片结果可复现
+        #（与 web 层缓存 key 的 sorted(base_urls) 语义一致）
+        plugins.sort(key=lambda p: p.base_url)
+
         concurrency = max_concurrency or config.MAX_PLUGIN_CONCURRENCY
         semaphore = asyncio.Semaphore(concurrency)
+
+        # 全局分页：各源抓取前 ``start + count`` 条，合并后统一切片（count=None 抓全部）
+        fetch_count = None if count is None else (start + count)
 
         async def _run(plugin: MediaSourcePlugin) -> List[SearchItem]:
             async with semaphore:
                 try:
                     return await plugin.search_page(
-                        key, start=start, count=count, page_concurrency=page_concurrency
+                        key, start=0, count=fetch_count, page_concurrency=page_concurrency
                     )
                 except Exception as exc:  # noqa: BLE001 - 异常隔离，不中断整体任务
                     logger.error(
@@ -147,7 +156,11 @@ class PluginManager:
                     return []
 
         results = await asyncio.gather(*[_run(p) for p in plugins])
-        return [item for sub in results for item in sub]
+        merged = [item for sub in results for item in sub]
+
+        if count is None:
+            return merged
+        return merged[start : start + count]
 
 
 # 全局单例，便于业务直接调用（导入时自动扫描插件）

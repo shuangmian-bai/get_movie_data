@@ -81,7 +81,7 @@ asyncio.run(main())
 - `base_urls = []`：全量已加载插件并发搜索
 - `base_urls = [url1, url2]`：指定多源 / 单源搜索
 - 列表内无效 URL 自动过滤，日志告警，不影响整体任务
-- `start` / `count`：分页参数（偏移从 0 开始 + 条数），透传给各插件；`count=None` 表示全量
+- `start` / `count`：**全局分页参数**（偏移从 0 开始 + 条数）——多源时各源先抓前 `start+count` 条，按稳定顺序（base_url 字典序）合并后整体切片 `[start, start+count)`，即每页是「所有源整合后的总数」而非每源各 `count` 条；`count=None` 表示全量
 - `page_concurrency`：单插件翻页并发抓取页数（默认取 `config.PAGE_CONCURRENCY`）
 
 ### 双层异常策略
