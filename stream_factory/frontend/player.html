@@ -5,38 +5,134 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>流播放器</title>
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --paper: #171512;
+      --paper-2: #201d18;
+      --ink: #eee7d7;
+      --ink-soft: #b8ad99;
+      --ink-muted: #857c6b;
+      --line: #383329;
+      --line-strong: #4c4539;
+      --cinnabar: #d45b45;
+      --cinnabar-deep: #b64a37;
+      --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+      --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
     * { box-sizing: border-box; }
+
     body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: #111; color: #eee; max-width: 960px; margin: 0 auto; padding: 24px 16px;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 26px 18px 44px;
+      font-family: var(--font-body);
+      color: var(--ink);
+      background:
+        radial-gradient(900px 280px at 50% -120px, rgba(212, 91, 69, 0.12), transparent 70%),
+        var(--paper);
+      min-height: 100vh;
     }
-    h1 { font-size: 20px; margin: 0 0 12px; }
-    .meta { color: #999; font-size: 13px; margin-bottom: 16px; }
-    video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; }
+
+    .player-card {
+      padding: 20px;
+      background: var(--paper-2);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+      font-size: 22px;
+      letter-spacing: 0.01em;
+    }
+
+    .meta {
+      color: var(--ink-soft);
+      font-size: 13px;
+      margin-bottom: 18px;
+      overflow-wrap: anywhere;
+    }
+
+    video {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 2px;
+    }
+
     .rtsp {
-      margin-top: 16px; padding: 12px; border: 1px solid rgba(255,255,255,.15);
-      border-radius: 8px; font-size: 13px; display: flex; gap: 8px; align-items: center;
+      margin-top: 18px;
+      padding: 12px 13px;
+      font-size: 13px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--line);
+      border-radius: 3px;
     }
-    .rtsp input { flex: 1; padding: 8px 10px; font-size: 13px; border: 1px solid #444; border-radius: 6px; background: #1a1a1a; color: #eee; }
-    .rtsp button { padding: 8px 14px; font-size: 13px; border: none; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
-    .rtsp button:hover { background: #1d4ed8; }
-    .error { color: #f87171; margin-top: 16px; font-size: 14px; }
-    .hint { color: #888; font-size: 12px; margin-top: 8px; }
+
+    .rtsp input {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: var(--ink);
+      background: var(--paper);
+      border: 1px solid var(--line-strong);
+      border-radius: 3px;
+    }
+
+    .rtsp button {
+      padding: 10px 15px;
+      font-size: 13px;
+      color: #fff;
+      background: var(--cinnabar);
+      border: 1px solid var(--cinnabar-deep);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .rtsp button:hover { background: var(--cinnabar-deep); }
+
+    .error {
+      color: #f0a08e;
+      margin-top: 18px;
+      font-size: 14px;
+    }
+
+    .hint {
+      color: var(--ink-muted);
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 16px 12px 30px; }
+      .player-card { padding: 14px; }
+      .rtsp { flex-direction: column; align-items: stretch; }
+      .rtsp button { width: 100%; }
+    }
   </style>
   <!-- hls.js：浏览器播放 HLS 所需；离线环境可将此文件本地化 -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 </head>
 <body>
-  <h1>流播放器</h1>
-  <div class="meta" id="meta">加载中…</div>
-  <video id="video" controls></video>
-  <div class="rtsp" id="rtsp" hidden>
-    <input id="rtsp-url" readonly onclick="this.select()">
-    <button onclick="copyRtsp()">复制 RTSP 地址</button>
+  <div class="player-card">
+    <h1>流播放器</h1>
+    <div class="meta" id="meta">加载中…</div>
+    <video id="video" controls></video>
+    <div class="rtsp" id="rtsp" hidden>
+      <input id="rtsp-url" readonly onclick="this.select()">
+      <button onclick="copyRtsp()">复制 RTSP 地址</button>
+    </div>
+    <div class="error" id="error"></div>
+    <div class="hint">HLS 由浏览器 hls.js 播放；RTSP 地址供原生客户端（VLC / ffplay / ijkplayer）拉流。</div>
   </div>
-  <div class="error" id="error"></div>
-  <div class="hint">HLS 由浏览器 hls.js 播放；RTSP 地址供原生客户端（VLC / ffplay / ijkplayer）拉流。</div>
 
   <script>
     // 从 URL 提取会话 id：/api/stream/{sid}/player -> sid

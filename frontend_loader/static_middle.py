@@ -15,7 +15,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 DEFAULT_FRONTEND_ROOT = os.path.join(_PROJECT_ROOT, "web", "frontend")
 
 # 静态资源扩展名白名单
-_STATIC_EXTS = (".html", ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico")
+_STATIC_EXTS = (".html", ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".mp4")
 
 
 class FrontendStaticLoader:
