@@ -168,7 +168,7 @@ python -m unittest discover -s media_source/tests -v
 ## 依赖
 
 ```
-httpx>=0.27.0
+httpx[socks]>=0.27.0
 pydantic>=2.0
 lxml>=5.0
 parsel>=1.8.1
