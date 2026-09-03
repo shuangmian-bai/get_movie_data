@@ -1,0 +1,17 @@
+services:
+  movie-api:
+    build:
+      context: .
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: movie-api
+    ports:
+      - "8000:8000"   # Web API + HLS
+      - "8554:8554"   # RTSP（mediamtx）
+    volumes:
+      - ./cache:/app/cache   # 缓存持久化（host 已有 cache/ 目录）
+    # 可选：按需覆盖环境变量（关闭 RTSP / 自定义违规词表等）
+    # environment:
+    #   - STREAM_FACTORY_RTSP_ENABLED=0
+    restart: unless-stopped

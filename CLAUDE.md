@@ -47,9 +47,15 @@ python -m unittest media_source.tests.test_mapping.TestMapData -v
 
 # 运行端到端示例（搜索 -> 详情 -> 播放）
 python -m media_source.examples.demo_full_flow
+
+# Docker 一键部署 / 下线（完整环境：ffmpeg + mediamtx + tesseract，见 README「Docker 部署」）
+docker compose up -d --build
+docker compose down
 ```
 
 Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` 解析到 pyenv 的 3.13 解释器，所需依赖均已安装（`fastapi`/`uvicorn` 已纳入 `requirements.txt`）。
+
+亦可用 Docker 一键部署：项目根已内置 `Dockerfile` + `docker-compose.yml`，镜像内含 ffmpeg / mediamtx / tesseract 完整环境，无需在宿主机装系统依赖（见 README「Docker 部署」章节）。
 
 ## 架构
 

@@ -1,0 +1,12 @@
+.git/
+.venv/
+.venv_win/
+cache/
+.idea/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.DS_Store
+Dockerfile
+docker-compose.yml
+.dockerignore

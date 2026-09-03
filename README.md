@@ -71,6 +71,7 @@ cache/
 - **FFmpeg**：去广告转流（`stream_factory`）依赖系统 `ffmpeg`，需**单独安装**（非 Python 包），如 `apt install ffmpeg` / `brew install ffmpeg`。
 - **mediamtx**（可选）：RTSP 推流服务器，服务启动时自动拉起；仅用 HLS 可省略（设 `STREAM_FACTORY_RTSP_ENABLED=0`）。
 - **tesseract**（可选）：OCR 违规词过滤（`stream_factory` 的 URL 处理器）依赖系统 `tesseract` 与中文语言包 `chi_sim`（`apt install tesseract-ocr tesseract-ocr-chi-sim` / `dnf install tesseract tesseract-langpack-chi_sim`）；不启用 OCR 过滤可省略。
+- **Docker**（可选，推荐）：项目已内置 `Dockerfile` + `docker-compose.yml`，可一键拉起包含 ffmpeg / mediamtx / tesseract 的完整环境，见下文「Docker 部署」。
 
 ## 快速开始
 
@@ -82,6 +83,38 @@ python main.py
 启动后可访问：
 
 - `http://127.0.0.1:8000/docs`
+
+## Docker 部署
+
+项目已内置 `Dockerfile` + `docker-compose.yml`，一条命令即可在任意环境拉起完整服务：镜像内自带
+ffmpeg / mediamtx / tesseract 中文 OCR，无需在宿主机单独安装，也规避了服务器 ffmpeg 版本过旧
+（如 2.8 不支持 `drawtext` 字体、`drawbox t=fill`、`-allowed_extensions` 等新语法）导致的兼容问题。
+
+```bash
+docker compose up -d --build
+```
+
+启动后可访问：
+
+- Web 接口与文档：`http://127.0.0.1:8000/docs`
+- HLS 播放：`http://127.0.0.1:8000/streams/{sid}/index.m3u8`
+- RTSP 推流：`rtsp://127.0.0.1:8554/{sid}`（容器内 mediamtx 自动拉起）
+
+常用操作：
+
+```bash
+docker compose logs -f movie-api   # 查看日志
+docker compose down                # 停止并移除容器
+```
+
+构建参数与说明：
+
+- `UID` / `GID`（默认 `1000`）：容器内非 root 运行用户，与宿主机 `cache/` 目录属主匹配，
+  避免 bind mount 缓存权限问题。若宿主机 UID 非 1000，用
+  `UID=$(id -u) GID=$(id -g) docker compose build` 重建。
+- `MEDIAMTX_VERSION`（默认 `1.20.1`）：RTSP 服务器版本，可在 `Dockerfile` 顶部 `ARG` 处调整。
+- 缓存目录挂载到宿主机 `./cache/`，删除容器不丢缓存。
+- 需要关闭 RTSP 时，在 `docker-compose.yml` 里放开 `STREAM_FACTORY_RTSP_ENABLED=0` 注释即可（HLS 不受影响）。
 
 ## 常用接口
 
