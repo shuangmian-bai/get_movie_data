@@ -82,6 +82,11 @@
     .play .meta { margin-bottom: 8px; }
     .play .row { display: flex; gap: 8px; }
     .player-video { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; }
+    .player-placeholder {
+      display: flex; align-items: center; justify-content: center;
+      aspect-ratio: 16/9; background: #000; border-radius: 8px; color: #aaa;
+      font-size: 14px;
+    }
     .rtsp { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
     .rtsp input {
       flex: 1; padding: 8px 10px; font-size: 13px; border: 1px solid #ccc;
@@ -124,7 +129,6 @@
   <div id="detail-view" hidden>
     <button class="back" onclick="backToSearch()">← 返回搜索</button>
     <div id="detail"></div>
-    <div id="play-result"></div>
   </div>
 
   <script>
@@ -258,7 +262,6 @@
       if (!item) return;
       document.getElementById('search-view').hidden = true;
       document.getElementById('detail-view').hidden = false;
-      document.getElementById('play-result').innerHTML = '';
       const detail = document.getElementById('detail');
       detail.innerHTML = '加载详情中…';
       try {
@@ -286,6 +289,11 @@
             <div class="desc">${esc(info.desc)}</div>
           </div>
         </div>
+        <div id="play-result">
+          <div class="play player-shell">
+            <div class="player-placeholder">请选择分集开始播放</div>
+          </div>
+        </div>
         <h3>选集（${eps.length}）</h3>
         ${epBtns}`;
     }
@@ -301,13 +309,16 @@
     async function playEpisode(epIndex) {
       if (!currentInfo) return;
       const box = document.getElementById('play-result');
-      box.innerHTML = '<div class="play"><div class="meta">获取播放地址并转流中…</div></div>';
+      box.innerHTML = '<div class="play player-shell"><div class="meta">获取播放地址并转流中…</div></div>';
       await stopCurrentStream();
       try {
         // 1. 拿原始播放地址
         const resp = await fetch('/api/play?base_url=' + encodeURIComponent(currentInfo.base_url) + '&link=' + encodeURIComponent(currentInfo.link) + '&episode_index=' + epIndex);
         const play = await resp.json();
-        if (!resp.ok) { box.innerHTML = '<div class="empty">播放地址获取失败：' + resp.status + '</div>'; return; }
+        if (!resp.ok) {
+          box.innerHTML = '<div class="play player-shell"><div class="empty">播放地址获取失败：' + resp.status + '</div></div>';
+          return;
+        }
 
         // 2. 按站点转流（内部去广告），输出本地 HLS
         const sresp = await fetch('/api/stream/processed', {
@@ -320,7 +331,7 @@
         });
         const stream = await sresp.json();
         if (!sresp.ok || stream.status === 'error') {
-          box.innerHTML = '<div class="empty">转流失败：' + esc(stream.error || stream.detail || ('HTTP ' + sresp.status)) + '</div>';
+          box.innerHTML = '<div class="play player-shell"><div class="empty">转流失败：' + esc(stream.error || stream.detail || ('HTTP ' + sresp.status)) + '</div></div>';
           return;
         }
         currentSid = stream.sid;
@@ -338,7 +349,7 @@
           </div>`;
         playHls(stream.hls_url);
       } catch (e) {
-        box.innerHTML = '<div class="empty">播放失败：' + esc(e) + '</div>';
+        box.innerHTML = '<div class="play player-shell"><div class="empty">播放失败：' + esc(e) + '</div></div>';
       }
     }
 
