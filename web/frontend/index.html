@@ -12,14 +12,13 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
 </head>
 <body>
-  <!-- 背景视频（进入详情页隐藏，返回搜索恢复） -->
+  <!-- 背景图片（进入详情页隐藏，返回搜索恢复） -->
   <div class="home-bg" id="home-bg" aria-hidden="true">
-    <video id="bg-video" class="bg-video" src="a.mp4" loop playsinline preload="auto"></video>
+    <img class="bg-image" src="a.jpg" alt="" loading="eager" decoding="async">
   </div>
 
   <div class="page">
     <header class="masthead">
-      <button id="audio-toggle" class="audio-toggle" type="button" aria-label="切换背景声音" aria-pressed="false">🔇</button>
       <h1>影视数据源服务(开发中)</h1>
       <p>欢迎各位大佬扩展评价</p>
       <p>欢迎各位大佬扩展评价，提交Pull Request到<a href="https://github.com/shuangmian-bai/get_movie_data/">https://github.com/shuangmian-bai/get_movie_data/</a></p>
