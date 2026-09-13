@@ -7,6 +7,7 @@ let currentPage = 0;     // 当前展示页（0-based，始终指向有数据的
 let searchResults = [];  // 当前页数据
 let hasNext = true;      // 是否还有下一页
 let currentInfo = null;  // 当前详情
+let sourceNameMap = {};  // base_url -> source_name
 
 // HTML 转义，防止动态文本破坏结构 / XSS
 function esc(s) {
@@ -22,11 +23,17 @@ function coverHtml(cover, cls, tip) {
     : `<div class="${cls} placeholder">${tip}</div>`;
 }
 
+// 根据来源站点标识返回站点友好名称（映射缺失时回退为 base_url）
+function sourceName(baseUrl) {
+  return sourceNameMap[baseUrl] || baseUrl;
+}
+
 // 数据源多选（默认全选）
 fetch('/api/sources')
   .then(r => r.json())
   .then(list => {
     const box = document.getElementById('source-checks');
+    list.forEach(s => { sourceNameMap[s.base_url] = s.source_name; });
     box.innerHTML = list.map(s => `
       <label class="source-check">
         <input type="checkbox" data-url="${esc(s.base_url)}" checked> ${esc(s.source_name)}
@@ -46,7 +53,7 @@ function renderCard(item, i) {
     <div class="card" onclick="showDetail(${i})">
       ${coverHtml(item.cover, 'cover', '无图')}
       <div class="info">
-        <h3>${esc(item.name)} <span class="meta">${esc(item.type)}${item.year ? ' · ' + esc(item.year) : ''}</span></h3>
+        <h3>${esc(item.name)} <span class="meta">${esc(item.type)}${item.year ? ' · ' + esc(item.year) : ''}</span><span class="source-badge">${esc(sourceName(item.base_url))}</span></h3>
         <div class="desc">${esc(item.desc)}</div>
       </div>
     </div>`;
@@ -154,7 +161,7 @@ function renderDetail(info) {
       ${coverHtml(info.cover, 'cover-lg', '无图')}
       <div class="detail-info">
         <h2>${esc(info.name)}</h2>
-        <div class="meta">${esc(info.type)}${info.year ? ' · ' + esc(info.year) : ''}</div>
+        <div class="meta">${esc(info.type)}${info.year ? ' · ' + esc(info.year) : ''}<span class="source-badge">${esc(sourceName(info.base_url))}</span></div>
         <div class="desc">${esc(info.desc)}</div>
       </div>
     </div>

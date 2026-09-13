@@ -103,6 +103,22 @@ button.search-btn:hover { background: #1d4ed8; }
 .card .info { flex: 1; min-width: 0; }
 .card h3 { margin: 0 0 6px; font-size: 16px; }
 .meta { color: #888; font-size: 13px; font-weight: normal; }
+.source-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: inherit;
+  border: 1px solid rgba(255,255,255,.32);
+  border-radius: 999px;
+  background: rgba(255,255,255,.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  vertical-align: middle;
+}
+.card h3 .source-badge { margin-left: 8px; }
+.detail-info .source-badge { margin-left: 8px; }
 .desc { font-size: 14px; color: #666; margin-top: 6px; }
 .empty { color: #999; padding: 20px 0; }
 
