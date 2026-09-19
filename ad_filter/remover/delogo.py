@@ -4,7 +4,6 @@
 重编码写回 .ts 分片（视频重编码 + 音频 copy）。不依赖系统 ffmpeg 二进制（PyAV
 自带 ffmpeg 库），去水印为通用近似（非还原原画），作为内置实现可替换。
 """
-import asyncio
 import logging
 import os
 from typing import List
@@ -13,6 +12,7 @@ import cv2
 import numpy as np
 
 from ad_filter import config
+from ad_filter._compat import to_thread
 from ad_filter.models import Box
 from ad_filter.remover.base import Remover
 
@@ -40,7 +40,7 @@ class DelogoRemover(Remover):
     ) -> str:
         if not boxes:
             return segment_path  # 无水印区域，原样返回
-        return await asyncio.to_thread(self._remove, segment_path, boxes, out_path)
+        return await to_thread(self._remove, segment_path, boxes, out_path)
 
     def _remove(self, segment_path: str, boxes: List[Box], out_path: str) -> str:
         """同步处理体（在线程池中执行）：视频 inpaint 重编码 + 音频 copy。"""

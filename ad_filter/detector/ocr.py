@@ -20,6 +20,7 @@ import cv2
 import numpy as np
 
 from ad_filter import config
+from ad_filter._compat import to_thread
 from ad_filter.detector.base import Detector
 from ad_filter.models import Box, DetectionResult
 
@@ -199,7 +200,7 @@ class OcrDetector(Detector):
             finally:
                 cap.release()
 
-        return await asyncio.to_thread(_run)
+        return await to_thread(_run)
 
     async def _ocr_words(
         self, frame: np.ndarray
@@ -213,7 +214,7 @@ class OcrDetector(Detector):
 
         async with _get_sem():
             try:
-                result = await asyncio.to_thread(_run)
+                result = await to_thread(_run)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("OCR 识别失败：%s", exc)
                 return []
@@ -247,6 +248,6 @@ class OcrDetector(Detector):
                 cap.release()
 
         try:
-            return await asyncio.to_thread(_run)
+            return await to_thread(_run)
         except Exception:  # noqa: BLE001
             return 0, 0
