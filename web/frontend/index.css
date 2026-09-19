@@ -163,3 +163,20 @@ button.search-btn:hover { background: #1d4ed8; }
   font-size: 14px;
 }
 .hint { color: #888; font-size: 12px; margin-top: 8px; }
+
+/* 播放方式切换按钮（原生直连 / 去广告播放） */
+.mode-btn {
+  margin-left: 8px;
+  padding: 4px 12px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+}
+.mode-btn:hover { border-color: #2563eb; color: #2563eb; }
+.mode-btn.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}

@@ -8,6 +8,8 @@ let searchResults = [];  // 当前页数据
 let hasNext = true;      // 是否还有下一页
 let currentInfo = null;  // 当前详情
 let sourceNameMap = {};  // base_url -> source_name
+let currentPlay = null;  // 当前播放地址（PlaySource）
+let hlsInstance = null;  // 当前 hls.js 实例（切换播放方式时销毁）
 
 // HTML 转义，防止动态文本破坏结构 / XSS
 function esc(s) {
@@ -174,7 +176,7 @@ function renderDetail(info) {
     ${epBtns}`;
 }
 
-// 点击选集 -> 原生直连播放（直接播原始 m3u8/mp4，不转流、不缓存、不去广告）
+// 点击选集 -> 渲染播放器 + 两种播放方式（原生直连 / 去广告播放），默认原生直连
 async function playEpisode(epIndex) {
   if (!currentInfo) return;
   const box = document.getElementById('play-result');
@@ -186,30 +188,87 @@ async function playEpisode(epIndex) {
       box.innerHTML = '<div class="play player-shell"><div class="empty">播放地址获取失败：' + resp.status + '</div></div>';
       return;
     }
+    currentPlay = play;
     const type = String(play.type || 'm3u8').toLowerCase();
+    const adBtn = type === 'm3u8'
+      ? '<button class="mode-btn" id="mode-ad" onclick="playAdFiltered()">去广告播放</button>'
+      : '';
     box.innerHTML = `
       <div class="play">
-        <div class="meta">类型：${esc(play.type || 'm3u8')} · 原生直连</div>
+        <div class="meta">类型：${esc(play.type || 'm3u8')} · 播放方式：
+          <button class="mode-btn active" id="mode-raw" onclick="playRaw()">原生直连</button>
+          ${adBtn}
+        </div>
         <video id="player" class="player-video" controls></video>
         <div class="hint" id="player-err"></div>
       </div>`;
-    if (type === 'mp4') {
-      document.getElementById('player').src = play.url;   // mp4 直链
-    } else {
-      playHls(play.url);                                   // m3u8 交给 hls.js
-    }
+    playRaw();
   } catch (e) {
     box.innerHTML = '<div class="play player-shell"><div class="empty">播放失败：' + esc(e) + '</div></div>';
   }
 }
 
-// 用 hls.js 播放 m3u8（Safari 原生回退）
+// 高亮当前播放方式按钮
+function setModeActive(id) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+// 原生直连播放：直接播原始 m3u8/mp4（不去广告）
+function playRaw() {
+  if (!currentPlay) return;
+  setModeActive('mode-raw');
+  const errEl = document.getElementById('player-err');
+  if (errEl) errEl.textContent = '';
+  const type = String(currentPlay.type || 'm3u8').toLowerCase();
+  const player = document.getElementById('player');
+  if (type === 'mp4') {
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    player.src = currentPlay.url;   // mp4 直链
+  } else {
+    playHls(currentPlay.url);       // m3u8 交给 hls.js
+  }
+}
+
+// 去广告播放：调 ad_filter 处理，返回处理后 m3u8 再播
+async function playAdFiltered() {
+  if (!currentPlay) return;
+  setModeActive('mode-ad');
+  const errEl = document.getElementById('player-err');
+  if (errEl) errEl.textContent = '去广告处理中，请稍候…';
+  try {
+    const resp = await fetch('/api/ad_filter/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        m3u8_url: currentPlay.url,
+        headers: currentPlay.headers || {},
+        base_url: currentInfo ? currentInfo.base_url : ''
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      if (errEl) errEl.textContent = '去广告处理失败：' + resp.status + (data.detail ? ' ' + data.detail : '');
+      return;
+    }
+    if (errEl) errEl.textContent = '';
+    playHls(data.playlist_url);
+  } catch (e) {
+    if (errEl) errEl.textContent = '去广告处理失败：' + esc(e);
+  }
+}
+
+// 用 hls.js 播放 m3u8（Safari 原生回退）；切换播放方式时销毁旧实例避免叠加
 function playHls(hlsUrl) {
   const video = document.getElementById('player');
   const errEl = document.getElementById('player-err');
   const showErr = msg => { if (errEl) errEl.textContent = msg; };
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  video.removeAttribute('src');
   if (window.Hls && Hls.isSupported()) {
     const hls = new Hls();
+    hlsInstance = hls;
     hls.loadSource(hlsUrl);
     hls.attachMedia(video);
     hls.on(Hls.Events.ERROR, function (e, data) { if (data.fatal) showErr('HLS 播放错误：' + data.type); });

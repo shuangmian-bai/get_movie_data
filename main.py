@@ -40,6 +40,10 @@ from stream_factory.stream_plugins import (
     PassthroughStreamPlugin,
     QqllStreamPlugin,
 )
+from ad_filter import api as ad_api
+from ad_filter import close_proxy
+from ad_filter.detector.ocr import OcrDetector
+from ad_filter.remover.delogo import DelogoRemover
 from web import api_router
 
 # ---- 流处理自由组合（应用层汇总：base_url → 流插件 + 帧插件 + URL 处理器）----
@@ -62,6 +66,23 @@ DEFAULT_PIPELINE: Tuple[StreamPlugin, List[FramePlugin], List[UrlHandler]] = (
     [],
     [],
 )
+
+# ---- 去广告处理自由组合（base_url → 检测器列表 + 去水印器）----
+# 不同资源广告形式/内容不同，站点 → 去广告插件组合在此编排；未匹配走默认（OCR + delogo）。
+AD_FILTER_PIPELINES: Dict[str, Tuple[List, object]] = {
+    "https://www.cupfox7.com": ([OcrDetector()], DelogoRemover()),
+    "https://www.qqll.cc": ([OcrDetector()], DelogoRemover()),
+}
+AD_FILTER_DEFAULT: Tuple[List, object] = ([OcrDetector()], DelogoRemover())
+
+
+def get_ad_pipeline(base_url: str) -> Tuple[List, object]:
+    """按 ``base_url`` 取该站点的检测器 + 去水印器组合。"""
+    return AD_FILTER_PIPELINES.get(base_url, AD_FILTER_DEFAULT)
+
+
+# 注入编排函数，供 ad_filter.api 按站点解析插件组合
+ad_api.set_pipeline_getter(get_ad_pipeline)
 
 
 def build_stream_request(base_url: str, source: StreamSource) -> StreamRequest:
@@ -90,6 +111,7 @@ async def lifespan(app: FastAPI):
     yield
     await stop_mediamtx()
     await close_video_cache()
+    await close_proxy()
 
 
 app = FastAPI(title="影视数据源服务", docs_url="/docs", lifespan=lifespan)
@@ -97,6 +119,7 @@ app = FastAPI(title="影视数据源服务", docs_url="/docs", lifespan=lifespan
 # 挂载 API 路由（web 数据源模块 + 流工厂模块）
 app.include_router(api_router)
 app.include_router(stream_api_router)
+app.include_router(ad_api.api_router)
 
 # HLS 静态文件（流工厂输出目录；目录由 StreamFactory 单例在导入时创建）
 app.mount("/streams", StaticFiles(directory=HLS_ROOT), name="streams")

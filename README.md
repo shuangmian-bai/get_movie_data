@@ -29,6 +29,7 @@
 - 插件自动扫描与加载
 - 去广告转流（stream_factory，HLS + RTSP 双协议输出）
 - 违规内容过滤（stream_factory URL 处理器：OCR 识别「澳门新葡京」等违规词，拉黑对应分片跳过推流）
+- 插件化去广告处理（ad_filter：逐分片抽帧检测广告，全广告丢弃 / 水印广告去水印 / 正常分片代理）
 
 ## 目录导航
 
@@ -39,6 +40,7 @@
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
 - [Web 服务说明](./web/README.md)
 - [流工厂模块说明](./stream_factory/README.md)
+- [去广告处理模块说明](./ad_filter/README.md)
 
 ### 代码
 
@@ -47,6 +49,7 @@
 - `media_source/`：插件框架、模型、缓存和数据源实现
 - `frontend_loader/`：前端静态资源加载中间件
 - `stream_factory/`：流工厂（去广告转流，HLS + RTSP 双协议输出）
+- `ad_filter/`：插件化去广告处理（逐分片检测 → 丢弃/去水印/代理 → 处理后 m3u8）
 - `view/`：演示页面
 - `cache/`：统一运行时缓存目录（文件缓存 / HLS 输出 / 源视频缓存）
 
@@ -59,7 +62,8 @@ cache/
 ├── {站点}/          # media_source 文件缓存（FileCache，按 base_url 分区，JSON）
 ├── streams/         # stream_factory HLS 输出 + 处理结果缓存（内容寻址 sid，去广告后 HLS 复用）
 ├── video_cache/     # stream_factory 源视频缓存（按 source_url 哈希，m3u8/mp4）
-└── blacklist/       # stream_factory 黑名单（命中违规的 ts 源 URL，跳过推流）
+├── blacklist/       # stream_factory 黑名单（命中违规的 ts 源 URL，跳过推流）
+└── ad_filter/       # ad_filter 处理结果（处理后的 m3u8 + 去水印分片 + 会话元数据）
 ```
 
 - 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`STREAM_FACTORY_CACHE_ROOT`（流工厂统一缓存根），以及细分的 `STREAM_FACTORY_HLS_ROOT` / `STREAM_FACTORY_VIDEO_CACHE_ROOT`。
@@ -70,7 +74,7 @@ cache/
 - **Python 3.8+**：本项目依赖 `Pydantic V2` / `FastAPI` / `httpx` 等库，需 Python 3.8 及以上版本。
 - **FFmpeg**：去广告转流（`stream_factory`）依赖系统 `ffmpeg`，需**单独安装**（非 Python 包），如 `apt install ffmpeg` / `brew install ffmpeg`。
 - **mediamtx**（可选）：RTSP 推流服务器，服务启动时自动拉起；仅用 HLS 可省略（设 `STREAM_FACTORY_RTSP_ENABLED=0`）。
-- **tesseract**（可选）：OCR 违规词过滤（`stream_factory` 的 URL 处理器）依赖系统 `tesseract` 与中文语言包 `chi_sim`（`apt install tesseract-ocr tesseract-ocr-chi-sim` / `dnf install tesseract tesseract-langpack-chi_sim`）；不启用 OCR 过滤可省略。
+- **tesseract**（可选）：OCR 违规词过滤（`stream_factory` 的 URL 处理器）与 `ad_filter` 的 OCR 检测器依赖系统 `tesseract` 与中文语言包 `chi_sim`（`apt install tesseract-ocr tesseract-ocr-chi-sim` / `dnf install tesseract tesseract-langpack-chi_sim`）；不启用 OCR 可省略（`ad_filter` 缺 tesseract 时检测器一律放行，不影响代理透传）。
 - **Docker**（可选，推荐）：项目已内置 `Dockerfile` + `docker-compose.yml`，可一键拉起包含 ffmpeg / mediamtx / tesseract 的完整环境，见下文「Docker 部署」。
 
 ## 快速开始
@@ -124,6 +128,7 @@ docker compose down                # 停止并移除容器
 - `GET /api/info?base_url=...&link=...`
 - `GET /api/play?base_url=...&link=...&episode_index=1`
 - `POST /api/stream`（创建流）、`POST /api/stream/processed`（按站点去广告建流）、`GET /api/stream/{sid}/player`（内嵌播放器）
+- `POST /api/ad_filter/process`（去广告处理：返回处理后 m3u8 地址）
 
 ## 开发提示
 

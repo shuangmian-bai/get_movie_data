@@ -25,6 +25,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `media_source/` — 可复用的插件框架 + 站点插件 + 文件缓存。
 - `frontend_loader/` — 前端静态资源加载引擎（默认从 `web/frontend/` 提供文件）。
 - `stream_factory/` — 流工厂模块（去广告转流：FFmpeg 拉流裁剪 + HLS/RTSP 双协议输出 + 内嵌播放器）。
+- `ad_filter/` — 插件化去广告处理模块（逐分片抽帧检测广告：全广告丢弃 / 水印广告去水印 / 正常分片代理，产出处理后 m3u8）。
 - `requirements.txt` — 运行依赖（`media_source` 数据源 + FastAPI Web 服务）。
 
 ## 常用命令
@@ -83,9 +84,19 @@ Python 为 3.13.13（pyenv）。`.venv/` 已存在但被 gitignore；`python3` �
 - 站点组合在应用层 `main.py` 的 `STREAM_PIPELINES`（`base_url → (流插件, [帧插件])`）自由编排，经 `POST /api/stream/processed`（内部处理入口）按站点触发去广告流；`GET /api/play` 仍无状态返回原始 m3u8。两个站点（cupfox/qqll）均已接入「双面酱」文字水印（`ShuangmianTextFramePlugin`）与空白插入案例（`BlankInsertStreamPlugin`，经 `CompositeStreamPlugin` 叠加）。
 - 双输出：HLS 写本地磁盘（`/streams/{sid}/index.m3u8`，Web 播放）+ RTSP 推流到 mediamtx（原生播放）。HLS 与 RTSP 各用独立 ffmpeg 子进程：HLS 是主输出，RTSP 是「尽力而为」的附加输出，后者失败不影响前者。mediamtx 由 `main.py` 生命周期自动拉起（`MEDIAMTX_AUTOSTART`），不可用时降级为纯 HLS。
 
+### 去广告处理（`ad_filter/`）
+
+独立于 `stream_factory` 的插件化去广告模块（不 import `stream_factory`/`media_source`，仅依赖 ffmpeg/ffprobe + 可选 tesseract + httpx）。核心链路：传入 m3u8 → 解析（相对/绝对/协议相对 URI 统一 `urljoin`）→ 逐分片下载到临时目录 → 检测器抽帧分类 → 重写 m3u8 → 返回处理结果。
+
+- 插件抽象：`Detector`（检测器，`detect() -> DetectionResult`，判定 `none`/`full`/`watermark` 并给出水印区域）与 `Remover`（去水印器，`remove(segment_path, boxes, out_path)`）。内置 `OcrDetector`（抽帧 + tesseract 分类 + 水印坐标）与 `DelogoRemover`（ffmpeg delogo 滤镜去水印）。插件不绑定站点，站点 → 组合在应用层 `main.py` 的 `AD_FILTER_PIPELINES`（`base_url → (检测器列表, 去水印器)`）编排，经 `ad_filter.api.set_pipeline_getter(...)` 注入。
+- 分片动作：`full`（全广告）→ 丢弃（不输出该分片块）；`watermark`（水印广告）→ 去水印后落盘 `{OUTPUT_ROOT}/{sid}/`，引用 `file/{name}`；`none`（正常）→ 不落盘，引用 `proxy/{name}`（`proxy.py` 长驻 httpx 连接池带防盗链头转发上游）。**本地只保存修改了画面的分片**。
+- 编排（`engine.py`）：`sid = md5(m3u8_url + headers + 检测器指纹)[:16]` 内容寻址幂等复用；写 `index.m3u8` + `meta.json`（分片名→上游 URL 映射，供代理查询）。REST：`POST /api/ad_filter/process`、`GET /ad_filter/{sid}/index.m3u8`、`GET /ad_filter/{sid}/file/{name}`、`GET /ad_filter/{sid}/proxy/{name}`。
+- 失败容错：检测器/OCR 异常一律放行（`none`），分片下载失败降级代理，绝不阻断播放链路。tesseract 缺失时 OCR 检测器一律放行（仅失去检测能力）；加密分片（AES-128）抽帧失败自动放行（走代理）。前端播放页提供「原生直连 / 去广告播放」两种方式。
+
 ## 已知状态 / 注意事项
 
 - **测试套件当前是坏的**：`test_plugin_manager.py`、`test_plugins.py`、`test_batch_search.py` 引用了已被删除的示例插件 `site_a`/`site_b`（`https://www.site-a.example.com`、`https://www.site-b.example.com`）。现在仅剩 `cupfox`、`qqll` 两个真实插件（`yhdm` 已移入 `plugins/_deprecated/` 废弃区），这些文件在更新到当前插件集之前会失败/报错。
 - `cupfox` 插件发起**真实网络请求**到 `https://www.cupfox7.com/`（苹果CMS v10，服务端渲染 HTML；播放地址从播放页内嵌 `var player_xxxx` 的 `url` 字段提取 m3u8）。**需直连（`trust_env=False`）绕过代理**，否则代理对 HTTP/2 处理失败；搜索结果有多页时内部用 asyncio 并发（信号量限流）抓取所有分页。涉及它的单元测试需要网络。
 - `plugin_manager.scan_plugins()` 在导入时执行，因此 `get_supported_sources()` 反映的是 `plugins/` 目录下当前实际存在的包，而非静态清单。
 - `stream_factory` 依赖系统 `ffmpeg`（转流）与 `mediamtx`（RTSP 服务器，默认从 PATH 查找 `mediamtx`，可用 `STREAM_FACTORY_MEDIAMTX_BIN` 覆盖为绝对路径）。mediamtx 由服务启动时**自动拉起**（`STREAM_FACTORY_MEDIAMTX_AUTOSTART=1`，退出时自动停止本模块拉起的实例）；不可用时 RTSP 降级为纯 HLS（HLS 不受影响）。仅 HLS 可设 `STREAM_FACTORY_RTSP_ENABLED=0` 关闭。
+- `ad_filter` 依赖系统 `ffmpeg`/`ffprobe`（抽帧 / delogo 去水印）与可选的 `tesseract` + `chi_sim`（OCR 检测）；缺 tesseract 时 OCR 检测器一律放行，去广告仅退化为全分片代理透传。配置前缀 `AD_FILTER_*`（详见 `ad_filter/README.md`）。
