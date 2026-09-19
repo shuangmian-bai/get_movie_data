@@ -39,6 +39,7 @@
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
 - [Web 服务说明](./web/README.md)
 - [去广告处理模块说明](./ad_filter/README.md)
+- [去广告按需调度设计（待实现）](./ad_filter/DESIGN.md)
 
 ### 代码
 

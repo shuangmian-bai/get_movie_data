@@ -44,6 +44,8 @@ ad_filter/
 ├── config.py            # 环境变量配置（前缀 AD_FILTER_*）
 ├── models.py            # Box / DetectionResult / ProcessRequest / ProcessResult
 ├── m3u8.py              # m3u8 解析（Master/Media、相对/绝对 URI 统一解析）
+├── _compat.py           # Python 3.8 兼容工具（asyncio.to_thread 替代）
+├── DESIGN.md            # 按需去广告调度设计（快速起播 / seek 优先 / 分片级复用，待实现）
 ├── detector/            # 检测器插件子包
 │   ├── base.py          # Detector 抽象基类（detect() + fingerprint()）
 │   └── ocr.py           # OcrDetector（opencv 抽帧 + rapidocr + 分类 + 水印坐标）
