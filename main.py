@@ -65,7 +65,7 @@ if __name__ == "__main__":
         help="代理地址（http/https/socks5），如 http://127.0.0.1:7890；留空则自动检测系统代理",
     )
     parser.add_argument("--host", default="127.0.0.1", help="监听地址")
-    parser.add_argument("--port", type=int, default=8000, help="监听端口")
+    parser.add_argument("--port", type=int, default=9999, help="监听端口")
     args = parser.parse_args()
 
     if args.proxy:
