@@ -19,12 +19,15 @@ _client: Optional[httpx.AsyncClient] = None
 def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(
+        kwargs = dict(
             timeout=config.HTTP_TIMEOUT,
             headers={"User-Agent": config.HTTP_USER_AGENT},
             follow_redirects=True,
             trust_env=config.HTTP_TRUST_ENV,
         )
+        if config.HTTP_PROXY:
+            kwargs["proxy"] = config.HTTP_PROXY
+        _client = httpx.AsyncClient(**kwargs)
     return _client
 
 

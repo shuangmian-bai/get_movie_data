@@ -33,6 +33,9 @@ HTTP_RETRY_BACKOFF: float = float(os.getenv("MEDIA_SOURCE_HTTP_RETRY_BACKOFF", "
 # 是否默认信任环境代理（HTTP_PROXY/ALL_PROXY 等）；需直连的站点由插件自行关闭
 HTTP_TRUST_ENV: bool = os.getenv("MEDIA_SOURCE_HTTP_TRUST_ENV", "1") == "1"
 
+# 显式代理地址（http/https/socks5），如 http://127.0.0.1:7890；空则回退 trust_env 自动检测系统代理
+HTTP_PROXY: str = os.getenv("MEDIA_SOURCE_HTTP_PROXY", "")
+
 # 单插件翻页并发抓取上限（搜索有多页时，同时发起的请求数）
 PAGE_CONCURRENCY: int = int(os.getenv("MEDIA_SOURCE_PAGE_CONCURRENCY", "5"))
 

@@ -35,6 +35,8 @@ pip install -r requirements.txt
 
 # 启动 Web 服务（uvicorn，热重载；前端由 frontend_loader 从 web/frontend/ 提供）
 python main.py
+# 需要显式代理时：python main.py --proxy http://127.0.0.1:7890
+# 默认自动检测系统代理（HTTP_PROXY/HTTPS_PROXY/ALL_PROXY）；显式代理（MEDIA_SOURCE_HTTP_PROXY / AD_FILTER_HTTP_PROXY）优先
 
 # 运行全部测试
 python -m unittest discover -s media_source/tests -v

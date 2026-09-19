@@ -55,4 +55,22 @@ app.add_middleware(FrontendStaticLoader)
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", reload=True)
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description="影视数据源服务")
+    parser.add_argument(
+        "--proxy",
+        default="",
+        help="代理地址（http/https/socks5），如 http://127.0.0.1:7890；留空则自动检测系统代理",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="监听地址")
+    parser.add_argument("--port", type=int, default=8000, help="监听端口")
+    args = parser.parse_args()
+
+    if args.proxy:
+        # 把显式代理下发到各模块（环境变量在 uvicorn reload 子进程中同样生效）
+        os.environ["MEDIA_SOURCE_HTTP_PROXY"] = args.proxy
+        os.environ["AD_FILTER_HTTP_PROXY"] = args.proxy
+
+    uvicorn.run("main:app", host=args.host, port=args.port, reload=True)

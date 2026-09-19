@@ -75,6 +75,15 @@ pip install -r requirements.txt
 python main.py
 ```
 
+- 默认**自动检测系统代理**（读 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 环境变量）。
+- 需要显式指定代理时，用启动参数：
+
+```bash
+python main.py --proxy http://127.0.0.1:7890
+```
+
+代理支持 http / https / socks5（socks5 由 `httpx[socks]` 提供）；显式代理优先于系统代理。
+
 启动后可访问：
 
 - `http://127.0.0.1:8000/docs`

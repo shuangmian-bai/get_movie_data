@@ -105,7 +105,8 @@ ad_filter/
 | `AD_FILTER_FULL_FRAME_RATIO` | `0.6` | 全广告判定：命中帧占比阈值 |
 | `AD_FILTER_FULL_AREA_RATIO` | `0.3` | 全广告判定：命中区域面积占比阈值 |
 | `AD_FILTER_WATERMARK_MARGIN` | `10` | 水印区域向外扩展边距（像素） |
-| `AD_FILTER_HTTP_TIMEOUT` / `AD_FILTER_HTTP_TRUST_ENV` | `15` / `1` | HTTP 超时 / 是否信任代理 |
+| `AD_FILTER_HTTP_TIMEOUT` / `AD_FILTER_HTTP_TRUST_ENV` | `15` / `1` | HTTP 超时 / 是否自动检测系统代理 |
+| `AD_FILTER_HTTP_PROXY` | `""`（空） | 显式代理地址（http/https/socks5），空则自动检测系统代理 |
 
 ## 已知限制
 

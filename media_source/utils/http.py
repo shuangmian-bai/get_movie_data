@@ -29,21 +29,27 @@ class AsyncHttpClient:
         headers: Optional[Dict[str, str]] = None,
         retries: Optional[int] = None,
         trust_env: Optional[bool] = None,
+        proxy: Optional[str] = None,
     ) -> None:
         self.timeout = timeout or config.HTTP_TIMEOUT
         self.headers = headers or {"User-Agent": config.HTTP_USER_AGENT}
         self.retries = config.HTTP_RETRIES if retries is None else retries
         self.trust_env = config.HTTP_TRUST_ENV if trust_env is None else trust_env
+        # 显式代理：入参优先，其次配置（MEDIA_SOURCE_HTTP_PROXY）；空则交给 trust_env 自动检测
+        self.proxy = proxy if proxy is not None else config.HTTP_PROXY
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
+            kwargs: Dict[str, Any] = dict(
                 timeout=self.timeout,
                 headers=self.headers,
                 follow_redirects=True,
                 trust_env=self.trust_env,
             )
+            if self.proxy:
+                kwargs["proxy"] = self.proxy
+            self._client = httpx.AsyncClient(**kwargs)
         return self._client
 
     @staticmethod
@@ -121,10 +127,11 @@ async def fetch_text(
     headers: Optional[Dict[str, str]] = None,
     retries: Optional[int] = None,
     trust_env: Optional[bool] = None,
+    proxy: Optional[str] = None,
     **kwargs: Any,
 ) -> str:
     """便捷函数：一次性 GET 请求返回文本。"""
-    client = AsyncHttpClient(retries=retries, trust_env=trust_env)
+    client = AsyncHttpClient(retries=retries, trust_env=trust_env, proxy=proxy)
     try:
         return await client.get_text(url, params=params, headers=headers, **kwargs)
     finally:
@@ -137,10 +144,11 @@ async def fetch_json(
     headers: Optional[Dict[str, str]] = None,
     retries: Optional[int] = None,
     trust_env: Optional[bool] = None,
+    proxy: Optional[str] = None,
     **kwargs: Any,
 ) -> Any:
     """便捷函数：一次性 GET 请求返回 JSON。"""
-    client = AsyncHttpClient(retries=retries, trust_env=trust_env)
+    client = AsyncHttpClient(retries=retries, trust_env=trust_env, proxy=proxy)
     try:
         return await client.get_json(url, params=params, headers=headers, **kwargs)
     finally:

@@ -27,6 +27,8 @@ HTTP_USER_AGENT: str = os.getenv(
 )
 # 是否信任环境代理（HTTP_PROXY 等）
 HTTP_TRUST_ENV: bool = os.getenv("AD_FILTER_HTTP_TRUST_ENV", "1") == "1"
+# 显式代理地址（http/https/socks5），空则回退 trust_env 自动检测系统代理
+HTTP_PROXY: str = os.getenv("AD_FILTER_HTTP_PROXY", "")
 
 # ---- 分片处理 ----
 
