@@ -1,6 +1,6 @@
 # get_movie_data
 
-一个基于 `FastAPI` 的影视数据源聚合项目，核心目标是把多个站点插件统一成一套检索、详情和播放地址接口。
+一个基于 `FastAPI` 的影视数据源聚合项目，核心目标是把多个站点插件统一成一套检索、详情和播放地址接口，并对播放源做**插件化去广告处理**。
 
 ## 项目做什么
 
@@ -9,6 +9,7 @@
 - 提供 `FastAPI` Web 接口，便于直接对外调用
 - 内置文件缓存，减少重复抓取
 - 提供前端静态页面加载入口
+- 插件化去广告处理（逐分片检测广告：全广告丢弃 / 水印广告去水印 / 正常分片代理）
 
 当前仓库里已经接入的示例站点包括：
 
@@ -23,13 +24,11 @@
 - 获取影视详情
 - 获取指定集数的播放地址
 - 批量并发搜索多个数据源
-- 前端搜索分页（每页 20 条，按需翻页爬取，减少引擎压力）
+- 前端搜索分页（每页按需翻页爬取，减少引擎压力）
 - 数据源多选（前端勾选数据源，仅请求所选站点）
 - 文件缓存与过期控制
 - 插件自动扫描与加载
-- 去广告转流（stream_factory，HLS + RTSP 双协议输出）
-- 违规内容过滤（stream_factory URL 处理器：OCR 识别「澳门新葡京」等违规词，拉黑对应分片跳过推流）
-- 插件化去广告处理（ad_filter：逐分片抽帧检测广告，全广告丢弃 / 水印广告去水印 / 正常分片代理）
+- 插件化去广告处理（ad_filter：逐分片抽帧检测，全广告丢弃 / 水印广告去水印 / 正常分片代理）
 
 ## 目录导航
 
@@ -39,7 +38,6 @@
 - [缓存模块说明](./media_source/cache.md)
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
 - [Web 服务说明](./web/README.md)
-- [流工厂模块说明](./stream_factory/README.md)
 - [去广告处理模块说明](./ad_filter/README.md)
 
 ### 代码
@@ -47,41 +45,33 @@
 - `main.py`：应用入口
 - `web/`：HTTP 接口层
 - `media_source/`：插件框架、模型、缓存和数据源实现
-- `frontend_loader/`：前端静态资源加载中间件
-- `stream_factory/`：流工厂（去广告转流，HLS + RTSP 双协议输出）
 - `ad_filter/`：插件化去广告处理（逐分片检测 → 丢弃/去水印/代理 → 处理后 m3u8）
+- `frontend_loader/`：前端静态资源加载中间件
 - `view/`：演示页面
-- `cache/`：统一运行时缓存目录（文件缓存 / HLS 输出 / 源视频缓存）
+- `cache/`：统一运行时缓存目录
 
 ## 缓存目录约定
 
-所有运行时缓存统一放在项目根的 `cache/` 目录下（以 `cache` 为基础路径），不再散落在根目录：
+所有运行时缓存统一放在项目根的 `cache/` 目录下（以 `cache` 为基础路径）：
 
 ```
 cache/
 ├── {站点}/          # media_source 文件缓存（FileCache，按 base_url 分区，JSON）
-├── streams/         # stream_factory HLS 输出 + 处理结果缓存（内容寻址 sid，去广告后 HLS 复用）
-├── video_cache/     # stream_factory 源视频缓存（按 source_url 哈希，m3u8/mp4）
-├── blacklist/       # stream_factory 黑名单（命中违规的 ts 源 URL，跳过推流）
 └── ad_filter/       # ad_filter 处理结果（处理后的 m3u8 + 去水印分片 + 会话元数据）
 ```
 
-- 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`STREAM_FACTORY_CACHE_ROOT`（流工厂统一缓存根），以及细分的 `STREAM_FACTORY_HLS_ROOT` / `STREAM_FACTORY_VIDEO_CACHE_ROOT`。
+- 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`AD_FILTER_OUTPUT_ROOT`（ad_filter 处理结果根目录）。
 - **新增缓存时同样放入 `cache/` 下**，保持「所有缓存以 cache 为基础路径」这条约定。
 
 ## 环境要求
 
-- **Python 3.8+**：本项目依赖 `Pydantic V2` / `FastAPI` / `httpx` 等库，需 Python 3.8 及以上版本。
-- **FFmpeg**：去广告转流（`stream_factory`）依赖系统 `ffmpeg`，需**单独安装**（非 Python 包），如 `apt install ffmpeg` / `brew install ffmpeg`。
-- **mediamtx**（可选）：RTSP 推流服务器，服务启动时自动拉起；仅用 HLS 可省略（设 `STREAM_FACTORY_RTSP_ENABLED=0`）。
-- **tesseract**（可选）：OCR 违规词过滤（`stream_factory` 的 URL 处理器）与 `ad_filter` 的 OCR 检测器依赖系统 `tesseract` 与中文语言包 `chi_sim`（`apt install tesseract-ocr tesseract-ocr-chi-sim` / `dnf install tesseract tesseract-langpack-chi_sim`）；不启用 OCR 可省略（`ad_filter` 缺 tesseract 时检测器一律放行，不影响代理透传）。
-- **Docker**（可选，推荐）：项目已内置 `Dockerfile` + `docker-compose.yml`，可一键拉起包含 ffmpeg / mediamtx / tesseract 的完整环境，见下文「Docker 部署」。
+- **Python 3.8+**（本项目用 pyenv 3.13.13 开发）。
+- **纯 Python 依赖**：视频处理用 PyAV（`av`，自带 ffmpeg 库）、去水印用 `opencv-python-headless`、OCR 用 `rapidocr_onnxruntime`，全部 `pip install -r requirements.txt` 即可，**无需手动安装系统 ffmpeg / tesseract / mediamtx**。
 
 ## 快速开始
 
 ```bash
 pip install -r requirements.txt
-apt install ffmpeg
 python main.py
 ```
 
@@ -89,45 +79,12 @@ python main.py
 
 - `http://127.0.0.1:8000/docs`
 
-## Docker 部署
-
-项目已内置 `Dockerfile` + `docker-compose.yml`，一条命令即可在任意环境拉起完整服务：镜像内自带
-ffmpeg / mediamtx / tesseract 中文 OCR，无需在宿主机单独安装，也规避了服务器 ffmpeg 版本过旧
-（如 2.8 不支持 `drawtext` 字体、`drawbox t=fill`、`-allowed_extensions` 等新语法）导致的兼容问题。
-
-```bash
-docker compose up -d --build
-```
-
-启动后可访问：
-
-- Web 接口与文档：`http://127.0.0.1:8000/docs`
-- HLS 播放：`http://127.0.0.1:8000/streams/{sid}/index.m3u8`
-- RTSP 推流：`rtsp://127.0.0.1:8554/{sid}`（容器内 mediamtx 自动拉起）
-
-常用操作：
-
-```bash
-docker compose logs -f movie-api   # 查看日志
-docker compose down                # 停止并移除容器
-```
-
-构建参数与说明：
-
-- `UID` / `GID`（默认 `1000`）：容器内非 root 运行用户，与宿主机 `cache/` 目录属主匹配，
-  避免 bind mount 缓存权限问题。若宿主机 UID 非 1000，用
-  `UID=$(id -u) GID=$(id -g) docker compose build` 重建。
-- `MEDIAMTX_VERSION`（默认 `1.20.1`）：RTSP 服务器版本，可在 `Dockerfile` 顶部 `ARG` 处调整。
-- 缓存目录挂载到宿主机 `./cache/`，删除容器不丢缓存。
-- 需要关闭 RTSP 时，在 `docker-compose.yml` 里放开 `STREAM_FACTORY_RTSP_ENABLED=0` 注释即可（HLS 不受影响）。
-
 ## 常用接口
 
 - `GET /api/sources`
 - `GET /api/search?key=关键词`（可选 `base_url` 单源 / `base_urls` 多源 / `start`+`count` 分页）
 - `GET /api/info?base_url=...&link=...`
 - `GET /api/play?base_url=...&link=...&episode_index=1`
-- `POST /api/stream`（创建流）、`POST /api/stream/processed`（按站点去广告建流）、`GET /api/stream/{sid}/player`（内嵌播放器）
 - `POST /api/ad_filter/process`（去广告处理：返回处理后 m3u8 地址）
 
 ## 开发提示
@@ -135,10 +92,9 @@ docker compose down                # 停止并移除容器
 - 新增站点时，优先参考 `media_source/plugins/template`
 - 插件实现只负责输出原始数据
 - 字段映射、默认值和统一结构由基础类完成
-- 去广告转流由 `stream_factory/` 模块提供（FFmpeg 拉流裁剪 + HLS/RTSP 输出），需系统依赖 ffmpeg；mediamtx 由服务启动时自动拉起，无需手动启动；去广告规则按站点在 `main.py` 的 `STREAM_PIPELINES` 里自由组合流/帧插件
+- 去广告处理由 `ad_filter/` 模块提供（opencv 抽帧 + rapidocr 检测 + opencv inpaint 去水印 + PyAV 写回），站点 → 检测器/去水印器组合在 `main.py` 的 `AD_FILTER_PIPELINES` 里编排
 
 ## 友情链接
 
 - [隼目安全](https://sumsafe.org.cn/)
 - [双面的小窝](https://blog.shuangmian.top/)
-

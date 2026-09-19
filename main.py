@@ -1,71 +1,23 @@
 """应用入口 —— 编排汇总各功能模块
 
-组装 FastAPI 应用：挂载 web 模块的 API 路由 + 流工厂路由 + HLS 静态目录 + 前端中间件。
-各功能模块（media_source / web / stream_factory）互不直接调用，统一在此编排。
+组装 FastAPI 应用：挂载 web 模块的 API 路由 + 去广告模块路由 + 前端中间件。
+各功能模块（media_source / web / ad_filter）互不直接调用，统一在此编排。
 
-去广告规则是系统内部知识：此处按 ``base_url`` 把站点映射到「流插件 + 帧插件」组合，
-调用方只传 ``base_url`` 与源，无需关心裁剪区间与滤镜细节。
+去广告规则是系统内部知识：此处按 ``base_url`` 把站点映射到「检测器 + 去水印器」组合，
+调用方只传 ``base_url`` 与源，无需关心检测/去水印细节。
 """
 from contextlib import asynccontextmanager
 from typing import Dict, List, Tuple
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from fastapi import FastAPI
 
-from frontend_loader import FrontendStaticLoader
-from stream_factory import (
-    HLS_ROOT,
-    FramePlugin,
-    OcrUrlHandler,
-    StreamPlugin,
-    StreamRequest,
-    StreamSource,
-    UrlHandler,
-    api_router as stream_api_router,
-    close_video_cache,
-    ensure_mediamtx,
-    stop_mediamtx,
-    stream_factory,
-)
-from stream_factory.frame_plugins import (
-    ShuangmianTextFramePlugin,
-    WatermarkFramePlugin,
-)
-from stream_factory.stream_plugins import (
-    BlankInsertStreamPlugin,
-    CompositeStreamPlugin,
-    CupfoxStreamPlugin,
-    PassthroughStreamPlugin,
-    QqllStreamPlugin,
-)
 from ad_filter import api as ad_api
 from ad_filter import close_proxy
 from ad_filter.detector.ocr import OcrDetector
 from ad_filter.remover.delogo import DelogoRemover
+from frontend_loader import FrontendStaticLoader
 from web import api_router
-
-# ---- 流处理自由组合（应用层汇总：base_url → 流插件 + 帧插件 + URL 处理器）----
-# 新增/调整站点只需改这一张表；未匹配的 base_url 走透传（不裁剪、不过滤）。
-# URL 处理器（如 OCR 违规词检测）在源视频缓存阶段过滤分片，命中则拉黑跳过推流。
-STREAM_PIPELINES: Dict[str, Tuple[StreamPlugin, List[FramePlugin], List[UrlHandler]]] = {
-    "https://www.cupfox7.com": (
-        CompositeStreamPlugin([CupfoxStreamPlugin(), BlankInsertStreamPlugin()]),
-        [WatermarkFramePlugin(text="双面酱帧处理"), ShuangmianTextFramePlugin()],
-        [OcrUrlHandler()],
-    ),
-    "https://www.qqll.cc": (
-        CompositeStreamPlugin([QqllStreamPlugin(), BlankInsertStreamPlugin()]),
-        [ShuangmianTextFramePlugin()],
-        [OcrUrlHandler()],
-    ),
-}
-DEFAULT_PIPELINE: Tuple[StreamPlugin, List[FramePlugin], List[UrlHandler]] = (
-    PassthroughStreamPlugin(),
-    [],
-    [],
-)
 
 # ---- 去广告处理自由组合（base_url → 检测器列表 + 去水印器）----
 # 不同资源广告形式/内容不同，站点 → 去广告插件组合在此编排；未匹配走默认（OCR + delogo）。
@@ -85,59 +37,21 @@ def get_ad_pipeline(base_url: str) -> Tuple[List, object]:
 ad_api.set_pipeline_getter(get_ad_pipeline)
 
 
-def build_stream_request(base_url: str, source: StreamSource) -> StreamRequest:
-    """按 ``base_url`` 组合流插件 + 帧插件，合成去广告后的 ``StreamRequest``。"""
-    stream_plugin, frame_plugins, _ = STREAM_PIPELINES.get(base_url, DEFAULT_PIPELINE)
-    return stream_plugin.build_request(source, frame_plugins)
-
-
-def get_url_handlers(base_url: str) -> List[UrlHandler]:
-    """按 ``base_url`` 取该站点的 URL 处理器链（OCR 违规词检测等）。"""
-    _, _, url_handlers = STREAM_PIPELINES.get(base_url, DEFAULT_PIPELINE)
-    return url_handlers
-
-
-class ProcessedStreamRequest(BaseModel):
-    """内部处理入口请求体：``base_url`` 关联站点组合规则；``source`` 为上游播放源。"""
-
-    base_url: str
-    source: StreamSource
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """服务生命周期：启动时自动拉起 mediamtx（RTSP 依赖），退出时停止实例并关闭源视频连接池。"""
-    await ensure_mediamtx()
+    """服务生命周期：退出时关闭去广告模块的长驻连接池。"""
     yield
-    await stop_mediamtx()
-    await close_video_cache()
     await close_proxy()
 
 
 app = FastAPI(title="影视数据源服务", docs_url="/docs", lifespan=lifespan)
 
-# 挂载 API 路由（web 数据源模块 + 流工厂模块）
+# 挂载 API 路由（web 数据源模块 + 去广告模块）
 app.include_router(api_router)
-app.include_router(stream_api_router)
 app.include_router(ad_api.api_router)
-
-# HLS 静态文件（流工厂输出目录；目录由 StreamFactory 单例在导入时创建）
-app.mount("/streams", StaticFiles(directory=HLS_ROOT), name="streams")
 
 # 前端静态资源（web/frontend/ 目录，由 frontend_loader 引擎加载）
 app.add_middleware(FrontendStaticLoader)
-
-
-# 内部处理入口：按 base_url 组合去广告后建流（/api/play 保持不变，此接口为新增内部能力）
-@app.post("/api/stream/processed", tags=["流工厂"])
-async def create_processed_stream(req: ProcessedStreamRequest):
-    """按站点（``base_url``）内化的去广告规则建流，返回会话信息（含 HLS / RTSP 地址）。"""
-    if not req.source.url:
-        raise HTTPException(status_code=400, detail="source.url 不能为空")
-    stream_req = build_stream_request(req.base_url, req.source)
-    url_handlers = get_url_handlers(req.base_url)
-    session = await stream_factory.create_stream(stream_req, url_handlers)
-    return session.to_dict()
 
 
 if __name__ == "__main__":

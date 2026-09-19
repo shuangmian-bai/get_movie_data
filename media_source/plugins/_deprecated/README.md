@@ -14,10 +14,6 @@ mv media_source/plugins/<site> media_source/plugins/_deprecated/<site>
 
 插件内部 import 路径（`media_source.plugins.<site>.*`）**无需修改**——废弃时不会被加载，日后恢复（移回 `plugins/`）时路径自动复原。
 
-> 注意：若该站点还有对应的流插件（`stream_factory/stream_plugins/`），需一并移入
-> `stream_factory/stream_plugins/_deprecated/`，并取消其在 `stream_plugins/__init__.py`、
-> `stream_factory/__init__.py`、`main.py` 中的导出与引用。
-
 ## 如何恢复
 
 把本目录下的 `<site>/` 移回 `media_source/plugins/<site>/`，重启服务即重新扫描加载。

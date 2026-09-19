@@ -1,6 +1,13 @@
-httpx[socks]>=0.27.0
-pydantic>=2.0
-lxml>=5.0
-parsel>=1.8.1
-fastapi>=0.115.0
-uvicorn>=0.30.0
+httpx[socks]
+pydantic
+lxml
+parsel
+fastapi
+uvicorn
+# 视频处理（PyAV 自带 ffmpeg 库，读/写 ts 分片 + 抽帧，无需系统 ffmpeg）
+av
+# 抽帧 + inpaint 去水印（headless 无需 GUI；服务器无 X 环境用此包）
+opencv-python-headless
+numpy
+# 中文 OCR（onnxruntime，纯 Python，替代系统 tesseract）
+rapidocr_onnxruntime

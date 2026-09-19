@@ -12,11 +12,16 @@
 本地只保存「修改了画面的分片」（去水印后的），省磁盘；未修改分片由本服务代理，
 避免前端直拉源站被防盗链（Referer/Cookie）拦截。
 
-## 与 stream_factory 的关系
+## 依赖（纯 Python，pip 安装）
 
-本模块**独立于 `stream_factory`**，不 import 它，也不 import `media_source`。
-只依赖系统二进制 `ffmpeg` / `ffprobe`（抽帧 / delogo 去水印）、可选的
-`tesseract`（OCR 检测；缺失时检测器一律放行，不影响代理透传）与 `httpx`。
+不依赖系统 ffmpeg / tesseract / mediamtx，全部由 Python 库完成：
+
+| 库 | 用途 |
+| --- | --- |
+| `av`（PyAV） | 读/写 .ts 分片、视频帧解码/编码（自带 ffmpeg 库） |
+| `opencv-python-headless` | 抽帧（VideoCapture）、inpaint 去水印 |
+| `rapidocr_onnxruntime` | 中文 OCR 文字识别（onnxruntime） |
+| `httpx` | m3u8 / 分片下载 + 代理转发 |
 
 ## 核心链路
 
@@ -41,10 +46,10 @@ ad_filter/
 ├── m3u8.py              # m3u8 解析（Master/Media、相对/绝对 URI 统一解析）
 ├── detector/            # 检测器插件子包
 │   ├── base.py          # Detector 抽象基类（detect() + fingerprint()）
-│   └── ocr.py           # OcrDetector（抽帧 + tesseract + 分类 + 水印坐标）
+│   └── ocr.py           # OcrDetector（opencv 抽帧 + rapidocr + 分类 + 水印坐标）
 ├── remover/             # 去水印插件子包
 │   ├── base.py          # Remover 抽象基类（remove()）
-│   └── delogo.py        # DelogoRemover（ffmpeg delogo 滤镜）
+│   └── delogo.py        # DelogoRemover（opencv inpaint + PyAV 写回 .ts）
 ├── proxy.py             # 上游 TS 代理（httpx 流式转发 + 防盗链头）
 ├── engine.py            # 编排引擎（process 主流程 + sid 幂等复用）
 └── api.py               # FastAPI 路由
@@ -72,30 +77,30 @@ ad_filter/
 
 ### OCR 检测器分类规则（启发式，阈值可配）
 
-- 均匀抽 `AD_FILTER_OCR_FRAME_COUNT` 帧，tesseract TSV 识别文字；
+- opencv 均匀抽 `AD_FILTER_OCR_FRAME_COUNT` 帧，rapidocr 识别文字（带 bbox）；
 - 命中违规词表（`AD_FILTER_OCR_BLOCKWORDS`）→ 收集命中词的 bbox；
 - 命中帧占比 ≥ `AD_FILTER_FULL_FRAME_RATIO` 且命中区域面积占比 ≥
   `AD_FILTER_FULL_AREA_RATIO` → **full**；
 - 否则命中 → **watermark**（bbox 合并重叠 + 向外扩展 `AD_FILTER_WATERMARK_MARGIN`）；
 - 未命中 / 抽帧或 OCR 失败 → **none**（放行，宁可漏报不可误杀）。
 
-### delogo 去水印说明
+### 去水印说明
 
-`DelogoRemover` 用 ffmpeg `delogo` 滤镜把水印区域用周边像素插值模糊覆盖，
-输出 `libx264` 重编码后的 ts。delogo 是通用「去水印」近似（非还原原画），
-作为内置实现，可替换为其它去水印算法。
+`DelogoRemover` 用 opencv `inpaint`（Telea 算法）把水印区域用周边像素插值填补，
+再用 PyAV 重编码写回 .ts（视频重编码 + 音频 copy）。inpaint 是通用「去水印」近似
+（非还原原画），作为内置实现，可替换为其它去水印算法。
 
 ## 配置项（环境变量）
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `AD_FILTER_OUTPUT_ROOT` | `{项目根}/cache/ad_filter` | 处理结果根目录 |
-| `AD_FILTER_FFMPEG_BIN` / `AD_FILTER_FFPROBE_BIN` | `ffmpeg` / `ffprobe` | 系统二进制路径 |
 | `AD_FILTER_SEGMENT_CONCURRENCY` | `4` | 分片「下载+检测+处理」并发数 |
-| `AD_FILTER_OCR_TESSERACT_BIN` | `tesseract` | tesseract 路径 |
-| `AD_FILTER_OCR_LANG` | `chi_sim` | OCR 语言（需装语言包） |
+| `AD_FILTER_INPAINT_RADIUS` | `3` | opencv inpaint 邻域半径 |
+| `AD_FILTER_OUTPUT_CRF` / `AD_FILTER_OUTPUT_PRESET` | `23` / `veryfast` | 去水印输出编码参数 |
 | `AD_FILTER_OCR_BLOCKWORDS` | `澳门新葡京,新葡京,博彩` | 违规词表（逗号分隔） |
 | `AD_FILTER_OCR_FRAME_COUNT` | `3` | 每个 ts 抽帧数 |
+| `AD_FILTER_OCR_SCORE_THRESHOLD` | `0.5` | OCR 置信度阈值 |
 | `AD_FILTER_OCR_CONCURRENCY` | `2` | OCR 并发数 |
 | `AD_FILTER_FULL_FRAME_RATIO` | `0.6` | 全广告判定：命中帧占比阈值 |
 | `AD_FILTER_FULL_AREA_RATIO` | `0.3` | 全广告判定：命中区域面积占比阈值 |
@@ -104,7 +109,8 @@ ad_filter/
 
 ## 已知限制
 
-- **加密分片（AES-128）**：检测器抽帧依赖明文分片，加密分片抽帧失败会自动放行
+- **加密分片（AES-128）**：opencv/PyAV 无法直接解码加密分片，抽帧失败会自动放行
   （走代理透传，不丢内容、不误杀）；暂不做解密后检测。
 - **丢弃分片的时间轴**：移除分片会使相邻段之间出现时间跳变，hls.js 通常能容忍。
 - **代理带宽**：正常分片经本服务转发，占服务出口带宽（这是省盘的取舍）。
+- **rapidocr 首次加载**：模型初始化较慢（首次请求会稍慢），之后复用；识别失败一律放行。
