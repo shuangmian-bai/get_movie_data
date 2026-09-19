@@ -45,6 +45,7 @@ class DelogoRemover(Remover):
     def _remove(self, segment_path: str, boxes: List[Box], out_path: str) -> str:
         """同步处理体（在线程池中执行）：视频 inpaint 重编码 + 音频 copy。"""
         import av  # PyAV 仅在本方法内按需导入，避免无此库时影响模块加载
+        av.logging.set_level(av.logging.ERROR)  # 抑制 h264 解码的警告日志（POCs/mmco 等）
 
         inp = av.open(segment_path)
         out = av.open(out_path, "w", format="mpegts")
