@@ -18,6 +18,7 @@ from typing import Callable, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
 
 from ad_filter import config, engine, proxy
 from ad_filter.detector.ocr import OcrDetector
@@ -108,6 +109,23 @@ async def dynamic_segment(sid: str, name: str):
     return StreamingResponse(
         proxy.stream_bytes(url, meta.get("headers") or {}), media_type="video/mp2t"
     )
+
+
+class ProgressReport(BaseModel):
+    """播放进度上报：当前播放时间（秒），用于 seek 优先调度预取。"""
+
+    time: float = 0.0
+
+
+@api_router.post("/ad_filter/{sid}/progress", summary="上报播放位置")
+async def report_progress(sid: str, body: ProgressReport):
+    """前端上报播放时间：更新预取位置（seek 后立即从新位置开始预取）。"""
+    meta = engine.load_meta(sid)
+    if not meta:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    detectors, remover = _resolve(meta.get("base_url", ""))
+    idx = engine.set_position(sid, body.time, detectors, remover)
+    return {"sid": sid, "index": idx, "time": body.time}
 
 
 @api_router.get("/ad_filter/{sid}/file/{name}")

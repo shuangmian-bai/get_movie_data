@@ -60,6 +60,7 @@ class _Session:
     sid: str
     segments: List[_Segment]
     headers: Dict[str, str]
+    position: int = 0  # 播放位置（当前分片索引），由前端进度上报驱动预取
 
 
 # 会话缓存（重启后靠 meta.json 重建）
@@ -290,7 +291,10 @@ async def handle_segment(
     cached = _read_result(cdir)
     if cached is not None:
         if not prefetch:
-            _schedule_prefetch(sid, name, detectors, remover)
+            idx = _index_of(sess, name)
+            if idx is not None and sess.position < idx:
+                sess.position = idx
+            _ensure_advance(sid, detectors, remover)
         return cached
 
     lock = await _get_seg_lock(key)
@@ -301,7 +305,10 @@ async def handle_segment(
         else:
             result = await _process_segment(seg, sess.headers, detectors, remover, cdir)
     if not prefetch:
-        _schedule_prefetch(sid, name, detectors, remover)
+        idx = _index_of(sess, name)
+        if idx is not None and sess.position < idx:
+            sess.position = idx  # 用户直接拉到这里：从该片往后推进
+        _ensure_advance(sid, detectors, remover)
     return result
 
 
@@ -319,35 +326,111 @@ def _get_process_sem() -> asyncio.Semaphore:
     return _process_sem
 
 
-def _schedule_prefetch(sid: str, current_name: str, detectors: List, remover) -> None:
-    """播放到某分片时，后台预取其后 lookahead 个分片（让播放跟上，减少卡顿）。"""
-    sess = _sessions.get(sid)
-    if sess is None or config.PREFETCH_LOOKAHEAD <= 0:
-        return
-    names = [s.name for s in sess.segments]
-    try:
-        idx = names.index(current_name)
-    except ValueError:
-        return
-    # 顺手清理已完成任务，避免字典无限增长
-    for key in [k for k, t in _prefetch_tasks.items() if t.done()]:
-        _prefetch_tasks.pop(key, None)
-    for nxt in names[idx + 1 : idx + 1 + config.PREFETCH_LOOKAHEAD]:
-        task_key = f"{sid}:{nxt}"
-        existing = _prefetch_tasks.get(task_key)
-        if existing is not None and not existing.done():
-            continue
-        _prefetch_tasks[task_key] = asyncio.create_task(
-            _prefetch_one(sid, nxt, detectors, remover)
-        )
-
-
 async def _prefetch_one(sid: str, name: str, detectors: List, remover) -> None:
     """后台预取单个分片（受全局处理闸门限制，失败静默）。"""
     try:
         await handle_segment(sid, name, detectors, remover, prefetch=True)
     except Exception as exc:  # noqa: BLE001 - 预取失败不影响播放
         logger.debug("预取失败 %s：%s", name, exc)
+
+
+def _extinf_seconds(tags: List[str]) -> float:
+    """从分片标签里解析 #EXTINF 时长（秒），解析不到按 4 秒估算。"""
+    for tag in tags:
+        if tag.startswith("#EXTINF:"):
+            try:
+                return float(tag.split(":", 1)[1].split(",", 1)[0])
+            except (ValueError, IndexError):
+                return 4.0
+    return 4.0
+
+
+def segment_index_by_time(sess: _Session, seconds: float) -> int:
+    """把播放时间（秒）换算成分片索引（按 #EXTINF 累计时长）。"""
+    if not sess.segments:
+        return 0
+    t = 0.0
+    for idx, seg in enumerate(sess.segments):
+        dur = _extinf_seconds(seg.tags)
+        if seconds < t + dur:
+            return idx
+        t += dur
+    return len(sess.segments) - 1
+
+
+def _index_of(sess: _Session, name: str) -> Optional[int]:
+    return next((i for i, s in enumerate(sess.segments) if s.name == name), None)
+
+
+_advance_tasks: Dict[str, asyncio.Task] = {}
+
+
+def _ensure_advance(sid: str, detectors: List, remover) -> None:
+    """确保该会话有一个“从当前播放位置继续往后处理”的后台任务。"""
+    task = _advance_tasks.get(sid)
+    if task is not None and not task.done():
+        return
+    _advance_tasks[sid] = asyncio.create_task(_advance_loop(sid, detectors, remover))
+
+
+async def _advance_loop(sid: str, detectors: List, remover) -> None:
+    """持续从会话位置往后处理，直到末尾。
+
+    用户播到哪，后台就从哪往后逐片处理（不拉进度条就一路处理到底）；
+    seek 时 set_position 更新位置，循环下一轮自动从新位置继续。
+    处理速度受全局闸门限制，不会打满 CPU。
+    """
+    try:
+        meta = load_meta(sid)
+        if not meta:
+            return
+        sess = await _ensure_session(sid, meta)
+        total = len(sess.segments)
+        while True:
+            idx = sess.position
+            if idx >= total:
+                logger.info("会话 %s 已推进到末尾（%d 片）", sid, total)
+                return
+            seg = sess.segments[idx]
+            key = segment_cache_key(seg.abs_url, detectors)
+            if _read_result(segment_cache_dir(key)) is None:
+                try:
+                    await handle_segment(sid, seg.name, detectors, remover, prefetch=True)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - 单分片失败不中断推进
+                    logger.debug("推进处理失败 %s：%s", seg.name, exc)
+            # 若期间发生 seek（位置被改），按新位置继续；否则前进一格
+            if sess.position == idx:
+                sess.position = idx + 1
+            await asyncio.sleep(0.05)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("推进任务异常 %s：%s", sid, exc)
+
+
+def set_position(
+    sid: str, seconds: float, detectors: List, remover
+) -> Optional[int]:
+    """前端上报播放时间：更新位置并按 seek 优先调度预取。返回换算的分片索引。"""
+    sess = _sessions.get(sid)
+    if sess is None:
+        meta = load_meta(sid)
+        if not meta:
+            return None
+        # 同步重建（事件循环内，开销可忽略）
+        raw = meta.get("segments") or []
+        segs = []
+        for item in raw:
+            if isinstance(item, dict):
+                segs.append(_Segment(item.get("name", ""), item.get("url", ""), list(item.get("tags") or [])))
+        sess = _Session(sid=sid, segments=segs, headers=meta.get("headers") or {})
+        _sessions[sid] = sess
+    idx = segment_index_by_time(sess, max(0.0, float(seconds)))
+    sess.position = idx
+    _ensure_advance(sid, detectors, remover)
+    return idx
 
 
 async def _process_segment(
