@@ -30,13 +30,13 @@
 
 ## 前端
 
-前端静态资源位于本模块 `frontend/` 目录，由 `frontend_loader` 引擎加载：
+前端静态资源位于本模块 `frontend/` 目录，由 fastapi-ui 前端加载引擎（`vendor/fastapi-ui`，git submodule）托管：
 
 - 访问根路径 `/` 返回 `frontend/index.html`（含搜索框，前端通过 fetch 调用 `/api/*`）；
 - 搜索结果**分页展示**：每页 5 条（改小分页以降低爬虫压力、加快响应），提供「上一页 / 下一页 / 页码」；翻页时才请求对应页（透传 `start`/`count`），按需爬取、减少引擎压力；翻过头自动停留在上一页并禁用「下一页」；
 - 搜索框下方提供**数据源多选**（复选框，默认全选）：勾选后仅请求所选源（透传 `base_urls`），可规避某个慢站点拖慢整体；全不勾选则提示「请至少选择一个数据源」；
 - 详情页在选集上方提供播放器容器；点选集后前端经 `/api/play` 取原始播放地址，**直接用原生播放器**播放原始 m3u8/mp4（hls.js 播 m3u8、`<video>` 直连 mp4），不走转流/缓存/去广告（遇防盗链可能失败）；
-- 前端已拆分为 `index.html`（结构）+ `index.css`（样式）+ `index.js`（逻辑）三个文件，均从 `frontend/` 目录由 `frontend_loader` 提供（静态资源白名单含 `.html/.css/.js`）。
+- 前端已拆分为 `index.html`（结构）+ `index.css`（样式）+ `index.js`（逻辑）三个文件，均从 `frontend/` 目录由 fastapi-ui 提供（静态资源白名单覆盖 html/css/js 及图片等 30 项扩展名）。
 
 ## 启动
 

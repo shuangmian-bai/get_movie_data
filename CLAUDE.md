@@ -20,11 +20,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 一个 FastAPI Web 应用，对外暴露**插件化多源影视数据源模块**（`media_source/`）。每个已接入站点（茶杯狐 / cupfox7.com、奇奇影视 / qqll.cc）都是独立 Python 包，实现三段链路：关键词搜索 → 详情获取 → 分集播放地址（m3u8/mp4）。
 
-- `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 去广告路由 + 前端加载中间件。
+- `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 去广告路由 + 前端加载引擎（fastapi-ui）。
 - `web/` — Web 服务模块（属应用层：REST API sources/search/info/play + `frontend/` 前端资源）。
 - `media_source/` — 可复用的插件框架 + 站点插件 + 文件缓存。
 - `ad_filter/` — 插件化去广告处理模块（逐分片抽帧检测广告：全广告丢弃 / 水印广告去水印 / 正常分片代理，产出处理后 m3u8）。
-- `frontend_loader/` — 前端静态资源加载引擎（默认从 `web/frontend/` 提供文件）。
+- `vendor/fastapi-ui/` — 前端加载引擎（git submodule，来自 `shuangmian-bai/fastapi-ui`；因包声明 requires-python>=3.9 而本项目为 3.8，不走 pip 安装，由 `main.py` 直引其 `src/` 目录）。
 - `requirements.txt` — 运行依赖（`media_source` 数据源 + FastAPI Web 服务 + PyAV/opencv/rapidocr）。
 
 ## 常用命令
@@ -33,7 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 安装运行依赖（含视频处理 / OCR，全 pip 安装，无需系统 ffmpeg / tesseract）
 pip install -r requirements.txt
 
-# 启动 Web 服务（uvicorn，热重载；前端由 frontend_loader 从 web/frontend/ 提供）
+# 启动 Web 服务（uvicorn，热重载；前端由 fastapi-ui 从 web/frontend/ 提供）
 python main.py
 # 需要显式代理时：python main.py --proxy http://127.0.0.1:7890
 # 默认自动检测系统代理（HTTP_PROXY/HTTPS_PROXY/ALL_PROXY）；显式代理（MEDIA_SOURCE_HTTP_PROXY / AD_FILTER_HTTP_PROXY）优先

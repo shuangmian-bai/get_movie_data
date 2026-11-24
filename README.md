@@ -48,7 +48,7 @@
 - `web/`：HTTP 接口层
 - `media_source/`：插件框架、模型、缓存和数据源实现
 - `ad_filter/`：插件化去广告处理（逐分片检测 → 丢弃/去水印/代理 → 处理后 m3u8）
-- `frontend_loader/`：前端静态资源加载中间件
+- `vendor/fastapi-ui/`：前端静态资源加载引擎（git submodule，来自 shuangmian-bai/fastapi-ui）
 - `view/`：演示页面
 - `cache/`：统一运行时缓存目录
 
