@@ -159,6 +159,21 @@ def _jsonl_update(kind: str, record_id: str, status: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 
+def init_db() -> bool:
+    """启动时初始化：MySQL 可用则建表；不可用返回 False（后续走 JSONL）。"""
+    if not _db_enabled():
+        logger.info("未配置 CONTRIBUTE_DB_USER，投稿使用 JSONL")
+        return False
+    try:
+        conn = _connect()
+        conn.close()
+        logger.info("MySQL 投稿表已就绪（%s/%s）", _DB_HOST, _DB_NAME)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("MySQL 初始化失败，投稿走 JSONL：%s", exc)
+        return False
+
+
 def append(kind: str, payload: dict, status: str = "pending") -> dict:
     """追加一条投稿记录，返回带 id/status/created_at 的完整记录。"""
     record = {
