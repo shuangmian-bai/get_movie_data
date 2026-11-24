@@ -1,7 +1,8 @@
 """应用入口 —— 编排汇总各功能模块
 
-组装 FastAPI 应用：挂载 web 模块的 API 路由 + 去广告模块路由 + 前端中间件。
-各功能模块（media_source / web / ad_filter）互不直接调用，统一在此编排。
+组装 FastAPI 应用：挂载 web 模块的 API 路由 + 去广告模块路由 + 投稿模块路由，
+并由 fastapi-ui 托管 React 构建产物（项目根 ``view/``）。
+各功能模块（media_source / web / ad_filter / contribute）互不直接调用，统一在此编排。
 
 去广告规则是系统内部知识：此处按 ``base_url`` 把站点映射到「检测器 + 去水印器」组合，
 调用方只传 ``base_url`` 与源，无需关心检测/去水印细节。
@@ -17,7 +18,10 @@ from fastapi import FastAPI
 from ad_filter import api as ad_api
 from ad_filter import close_proxy
 from ad_filter.detector.ocr import OcrDetector
+from ad_filter.detector.top_banner import TopBannerDetector
 from ad_filter.remover.delogo import DelogoRemover
+from ad_filter.remover.top_banner import TopBannerRemover
+from contribute import api_router as contribute_router
 from web import api_router
 
 # ---- 前端加载引擎（fastapi-ui，git submodule 引入）----
@@ -33,9 +37,11 @@ from fastapi_ui import mount_webui, view_dir_of  # noqa: E402  # 依赖上面的
 
 # ---- 去广告处理自由组合（base_url → 检测器列表 + 去水印器）----
 # 不同资源广告形式/内容不同，站点 → 去广告插件组合在此编排；未匹配走默认（OCR + delogo）。
+# 优质资源库（1080zyk6）：广告是顶部弹幕/跑马灯/静态赞助条 → 顶部条带检测 + 条带清除。
 AD_FILTER_PIPELINES: Dict[str, Tuple[List, object]] = {
     "https://www.cupfox7.com": ([OcrDetector()], DelogoRemover()),
     "https://www.qqll.cc": ([OcrDetector()], DelogoRemover()),
+    "https://1080zyk6.com": ([TopBannerDetector()], TopBannerRemover()),
 }
 AD_FILTER_DEFAULT: Tuple[List, object] = ([OcrDetector()], DelogoRemover())
 
@@ -58,15 +64,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="影视数据源服务", docs_url="/docs", lifespan=lifespan)
 
-# 挂载 API 路由（web 数据源模块 + 去广告模块）
+# 挂载 API 路由（web 数据源模块 + 去广告模块 + 投稿模块）
 app.include_router(api_router)
 app.include_router(ad_api.api_router)
+app.include_router(contribute_router)
 
-# 前端静态资源（web/frontend/ 目录，由 fastapi-ui 前端加载引擎托管）
+# 前端静态资源（项目根 view/，React 构建产物由 fastapi-ui 托管）
 # view_dir 按模块文件定位，不受启动时工作目录影响；spa_fallback 供前端路由深链刷新使用。
 mount_webui(
     app,
-    view_dir_of(__file__, "web", "frontend"),
+    view_dir_of(__file__, "view"),
     spa_fallback=True,
 )
 

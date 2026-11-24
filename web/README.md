@@ -30,13 +30,17 @@
 
 ## 前端
 
-前端静态资源位于本模块 `frontend/` 目录，由 fastapi-ui 前端加载引擎（`vendor/fastapi-ui`，git submodule）托管：
+前端源码在独立工作区 `$DISK_ROOT/react_data/get_movie_data_web`（React + Vite + TypeScript + Sass），
+构建产物 `view/` 由 fastapi-ui 托管（`mount_webui(app, "view")`）。
 
-- 访问根路径 `/` 返回 `frontend/index.html`（含搜索框，前端通过 fetch 调用 `/api/*`）；
-- 搜索结果**分页展示**：每页 5 条（改小分页以降低爬虫压力、加快响应），提供「上一页 / 下一页 / 页码」；翻页时才请求对应页（透传 `start`/`count`），按需爬取、减少引擎压力；翻过头自动停留在上一页并禁用「下一页」；
-- 搜索框下方提供**数据源多选**（复选框，默认全选）：勾选后仅请求所选源（透传 `base_urls`），可规避某个慢站点拖慢整体；全不勾选则提示「请至少选择一个数据源」；
-- 详情页在选集上方提供播放器容器；点选集后前端经 `/api/play` 取原始播放地址，**直接用原生播放器**播放原始 m3u8/mp4（hls.js 播 m3u8、`<video>` 直连 mp4），不走转流/缓存/去广告（遇防盗链可能失败）；
-- 前端已拆分为 `index.html`（结构）+ `index.css`（样式）+ `index.js`（逻辑）三个文件，均从 `frontend/` 目录由 fastapi-ui 提供（静态资源白名单覆盖 html/css/js 及图片等 30 项扩展名）。
+- 访问根路径 `/` 返回 `view/index.html`，React 应用包含三个功能：搜索、详情播放、投稿；
+- 构建：在 react_data 工作区执行 `npm run build`（先 `tsc -b` 再 `vite build`），
+  产物通过 `build.outDir` 直接输出到本项目 `view/`，不手工拷文件；
+- `view/` 是构建产物，已 gitignore，**不手工修改**（改了下次构建就被覆盖）；
+- 前端功能目录见 `react_data/get_movie_data_web/src/features/`，每个功能含 `README.md` 与统一出口
+  `index.ts`；跨功能只从出口 import；
+- 前端功能与旧内联页面对齐：搜索分页（每页 5 条）、数据源多选、详情选集、
+  播放器支持「原生直连 / 去广告播放」；新增「投稿」页（数据源与广告信息）。
 
 ## 启动
 

@@ -3,6 +3,10 @@
 ``DelogoRemover``：用 opencv ``inpaint`` 把水印区域用周边像素插值填补，再用 PyAV
 重编码写回 .ts 分片（视频重编码 + 音频 copy）。不依赖系统 ffmpeg 二进制（PyAV
 自带 ffmpeg 库），去水印为通用近似（非还原原画），作为内置实现可替换。
+
+工程约束（实测 av 12.3.0）：同一容器 ``decode()`` 后再 ``demux()`` 会在关闭时段错误，
+且先写完视频包再写音频包会让 MPEG-TS 时间戳乱序、产物无法解码。因此视频与音频
+分两个容器打开，音视频包按秒级 dts 交错 mux。
 """
 import logging
 import os
@@ -30,6 +34,16 @@ def _build_mask(boxes: List[Box], width: int, height: int) -> np.ndarray:
     return mask
 
 
+def _pkt_seconds(pkt) -> float:
+    """把包 dts 换算成秒，用于音视频交错排序（无 dts 时按 0）。"""
+    if pkt is None or pkt.dts is None or pkt.time_base is None:
+        return 0.0
+    try:
+        return float(pkt.dts * pkt.time_base)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 class DelogoRemover(Remover):
     """opencv inpaint 去水印 + PyAV 重编码写回 .ts。"""
 
@@ -47,12 +61,15 @@ class DelogoRemover(Remover):
         import av  # PyAV 仅在本方法内按需导入，避免无此库时影响模块加载
         av.logging.set_level(av.logging.ERROR)  # 抑制 h264 解码的警告日志（POCs/mmco 等）
 
-        inp = av.open(segment_path)
+        # 视频与音频分别打开两个容器：同一容器 decode 后再 demux 会触发 av 12.3.0 段错误
+        vin = av.open(segment_path)
+        ain = av.open(segment_path)
         out = av.open(out_path, "w", format="mpegts")
         try:
-            in_v = inp.streams.video[0]
+            in_v = vin.streams.video[0]
             width, height = in_v.width, in_v.height
             mask = _build_mask(boxes, width, height)
+            in_a = ain.streams.audio[0] if ain.streams.audio else None
 
             rate = in_v.average_rate or in_v.base_rate or 25
             out_v = out.add_stream("libx264", rate=rate)
@@ -64,8 +81,9 @@ class DelogoRemover(Remover):
                 "crf": config.OUTPUT_CRF,
             }
 
-            # 视频：逐帧 inpaint 后重编码
-            for frame in inp.decode(in_v):
+            # 1) 视频：逐帧 inpaint 后重编码并收集包（带秒级 dts）
+            video_packets = []
+            for frame in vin.decode(in_v):
                 img = frame.to_ndarray(format="bgr24")
                 img = cv2.inpaint(
                     img, mask, config.INPAINT_RADIUS, cv2.INPAINT_TELEA
@@ -74,22 +92,32 @@ class DelogoRemover(Remover):
                 new_frame.pts = frame.pts
                 new_frame.time_base = frame.time_base
                 for pkt in out_v.encode(new_frame):
-                    out.mux(pkt)
+                    video_packets.append((_pkt_seconds(pkt), pkt))
             for pkt in out_v.encode(None):
-                out.mux(pkt)
+                video_packets.append((_pkt_seconds(pkt), pkt))
 
-            # 音频：remux（copy，不改动）
-            in_a = inp.streams.audio[0] if inp.streams.audio else None
+            # 2) 音频：remux（copy）并收集包
+            out_a = None
+            audio_packets = []
             if in_a is not None:
                 out_a = out.add_stream(template=in_a)
-                for packet in inp.demux(in_a):
-                    if packet.dts is None:
+                for pkt in ain.demux(in_a):
+                    if pkt.dts is None:
                         continue
-                    packet.stream = out_a
-                    out.mux(packet)
+                    audio_packets.append((_pkt_seconds(pkt), pkt))
+
+            # 3) 音视频按时间交错 mux（先视频后音频会时间戳乱序，产物不可解码）
+            merged = [(t, p, out_v) for t, p in video_packets]
+            if out_a is not None:
+                merged += [(t, p, out_a) for t, p in audio_packets]
+            merged.sort(key=lambda item: item[0])
+            for _, pkt, stream in merged:
+                pkt.stream = stream
+                out.mux(pkt)
         finally:
             out.close()
-            inp.close()
+            vin.close()
+            ain.close()
 
         if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
             raise RuntimeError("去水印写回失败")

@@ -9,9 +9,9 @@
 """
 from ad_filter import config, engine
 from ad_filter.api import api_router, set_pipeline_getter
-from ad_filter.detector import Detector, OcrDetector
+from ad_filter.detector import Detector, OcrDetector, TopBannerDetector
 from ad_filter.proxy import close as close_proxy
-from ad_filter.remover import DelogoRemover, Remover
+from ad_filter.remover import DelogoRemover, Remover, TopBannerRemover
 
 __all__ = [
     "config",
@@ -20,7 +20,9 @@ __all__ = [
     "set_pipeline_getter",
     "Detector",
     "OcrDetector",
+    "TopBannerDetector",
     "Remover",
     "DelogoRemover",
+    "TopBannerRemover",
     "close_proxy",
 ]
