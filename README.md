@@ -34,6 +34,7 @@
 
 ### 文档
 
+- [系统整体设计（多源接入 + 去广告引擎 + 缓存机制）](./docs/整体设计.md)
 - [媒体数据源模块说明](./media_source/README.md)
 - [缓存模块说明](./media_source/cache.md)
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
