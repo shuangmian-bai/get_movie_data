@@ -33,7 +33,7 @@ HTTP_PROXY: str = os.getenv("AD_FILTER_HTTP_PROXY", "")
 # ---- 分片处理 ----
 
 # 分片「下载 + 检测 + 处理」并发数
-SEGMENT_CONCURRENCY: int = int(os.getenv("AD_FILTER_SEGMENT_CONCURRENCY", "4"))
+SEGMENT_CONCURRENCY: int = int(os.getenv("AD_FILTER_SEGMENT_CONCURRENCY", "2"))
 
 # ---- 去水印（opencv inpaint + PyAV 重编码）----
 
