@@ -294,7 +294,7 @@ async def handle_segment(
             idx = _index_of(sess, name)
             if idx is not None and sess.position < idx:
                 sess.position = idx
-            _ensure_advance(sid, detectors, remover)
+            ensure_advance(sid, detectors, remover)
         return cached
 
     lock = await _get_seg_lock(key)
@@ -308,7 +308,7 @@ async def handle_segment(
         idx = _index_of(sess, name)
         if idx is not None and sess.position < idx:
             sess.position = idx  # 用户直接拉到这里：从该片往后推进
-        _ensure_advance(sid, detectors, remover)
+        ensure_advance(sid, detectors, remover)
     return result
 
 
@@ -364,8 +364,30 @@ def _index_of(sess: _Session, name: str) -> Optional[int]:
 
 _advance_tasks: Dict[str, asyncio.Task] = {}
 
+# 会话最后心跳时间（WS 保活）；长时间无心跳视为用户已离开
+_last_seen: Dict[str, float] = {}
 
-def _ensure_advance(sid: str, detectors: List, remover) -> None:
+
+def touch(sid: str) -> None:
+    """刷新会话心跳时间。"""
+    _last_seen[sid] = time.time()
+
+
+def is_alive(sid: str, timeout: float = 30.0) -> bool:
+    """最近 timeout 秒内是否有心跳。"""
+    return (time.time() - _last_seen.get(sid, 0.0)) < timeout
+
+
+def cancel_advance(sid: str) -> None:
+    """取消该会话的后台推进任务（用户离开/心跳超时）。"""
+    task = _advance_tasks.pop(sid, None)
+    if task is not None and not task.done():
+        task.cancel()
+    _last_seen.pop(sid, None)
+    logger.info("会话 %s 停止后台处理（无用户心跳）", sid)
+
+
+def ensure_advance(sid: str, detectors: List, remover) -> None:
     """确保该会话有一个“从当前播放位置继续往后处理”的后台任务。"""
     task = _advance_tasks.get(sid)
     if task is not None and not task.done():
@@ -387,6 +409,10 @@ async def _advance_loop(sid: str, detectors: List, remover) -> None:
         sess = await _ensure_session(sid, meta)
         total = len(sess.segments)
         while True:
+            # 用户已离开（心跳超时）→ 停止处理，避免浪费资源
+            if not is_alive(sid):
+                logger.info("会话 %s 心跳超时，停止推进", sid)
+                return
             idx = sess.position
             if idx >= total:
                 logger.info("会话 %s 已推进到末尾（%d 片）", sid, total)
@@ -429,7 +455,8 @@ def set_position(
         _sessions[sid] = sess
     idx = segment_index_by_time(sess, max(0.0, float(seconds)))
     sess.position = idx
-    _ensure_advance(sid, detectors, remover)
+    touch(sid)
+    ensure_advance(sid, detectors, remover)
     return idx
 
 
