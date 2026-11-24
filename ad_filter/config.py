@@ -69,7 +69,7 @@ WATERMARK_MARGIN: int = int(os.getenv("AD_FILTER_WATERMARK_MARGIN", "10"))
 # 顶部条带高度占画面高度的比例（1280x720 下 0.12 约 86px，覆盖 y=15~55 的广告文字）
 TOP_BANNER_RATIO: float = float(os.getenv("AD_FILTER_TOP_BANNER_RATIO", "0.12"))
 # 每个分片抽帧数（顶部条带 OCR）
-TOP_BANNER_FRAME_COUNT: int = int(os.getenv("AD_FILTER_TOP_BANNER_FRAME_COUNT", "5"))
+TOP_BANNER_FRAME_COUNT: int = int(os.getenv("AD_FILTER_TOP_BANNER_FRAME_COUNT", "3"))
 # 命中帧占比阈值：达到即判为水印广告（顶部条带）
 TOP_BANNER_HIT_RATIO: float = float(os.getenv("AD_FILTER_TOP_BANNER_HIT_RATIO", "0.5"))
 # 顶部条幅违规词表（逗号分隔；专指顶部赞助/博彩类文字，与全屏 OCR 词表分开）
@@ -87,3 +87,10 @@ TOP_BANNER_BLUR_STRENGTH: float = float(
 TOP_BANNER_INPAINT_RADIUS: int = int(os.getenv("AD_FILTER_TOP_BANNER_INPAINT_RADIUS", "5"))
 # inpaint 模式：文字掩码膨胀核大小（覆盖白字黑描边）
 TOP_BANNER_TEXT_DILATE: int = int(os.getenv("AD_FILTER_TOP_BANNER_TEXT_DILATE", "9"))
+
+# ---- 分片按需处理（渐进式）----
+
+# 预取窗口：播放某分片时，后台提前处理其后 N 个分片（让播放跟上，减少卡顿）
+PREFETCH_LOOKAHEAD: int = int(os.getenv("AD_FILTER_PREFETCH_LOOKAHEAD", "3"))
+# 预取并发数（OCR/去水印较重，默认低并发避免打满 CPU）
+PREFETCH_CONCURRENCY: int = int(os.getenv("AD_FILTER_PREFETCH_CONCURRENCY", "2"))
