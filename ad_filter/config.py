@@ -33,15 +33,15 @@ HTTP_PROXY: str = os.getenv("AD_FILTER_HTTP_PROXY", "")
 # ---- 分片处理 ----
 
 # 分片「下载 + 检测 + 处理」并发数
-SEGMENT_CONCURRENCY: int = int(os.getenv("AD_FILTER_SEGMENT_CONCURRENCY", "2"))
+SEGMENT_CONCURRENCY: int = int(os.getenv("AD_FILTER_SEGMENT_CONCURRENCY", "4"))
 
 # ---- 去水印（opencv inpaint + PyAV 重编码）----
 
 # opencv inpaint 邻域半径（越大填补越「平滑」，但可能糊掉细节）
 INPAINT_RADIUS: int = int(os.getenv("AD_FILTER_INPAINT_RADIUS", "3"))
 # 输出视频编码参数（PyAV/libx264）
-OUTPUT_CRF: str = os.getenv("AD_FILTER_OUTPUT_CRF", "23")
-OUTPUT_PRESET: str = os.getenv("AD_FILTER_OUTPUT_PRESET", "veryfast")
+OUTPUT_CRF: str = os.getenv("AD_FILTER_OUTPUT_CRF", "26")
+OUTPUT_PRESET: str = os.getenv("AD_FILTER_OUTPUT_PRESET", "ultrafast")
 
 # ---- OCR 检测（rapidocr）----
 
@@ -50,7 +50,7 @@ OCR_BLOCKWORDS: str = os.getenv(
     "AD_FILTER_OCR_BLOCKWORDS", "澳门新葡京,新葡京,博彩"
 )
 # 每个 ts 分片抽帧数（均匀取点）
-OCR_FRAME_COUNT: int = int(os.getenv("AD_FILTER_OCR_FRAME_COUNT", "3"))
+OCR_FRAME_COUNT: int = int(os.getenv("AD_FILTER_OCR_FRAME_COUNT", "2"))
 # OCR 识别置信度阈值（低于此值的文字忽略）
 OCR_SCORE_THRESHOLD: float = float(os.getenv("AD_FILTER_OCR_SCORE_THRESHOLD", "0.5"))
 # OCR 并发数（onnxruntime 推理较重，默认低并发）
@@ -94,3 +94,6 @@ TOP_BANNER_TEXT_DILATE: int = int(os.getenv("AD_FILTER_TOP_BANNER_TEXT_DILATE", 
 PREFETCH_LOOKAHEAD: int = int(os.getenv("AD_FILTER_PREFETCH_LOOKAHEAD", "3"))
 # 预取并发数（OCR/去水印较重，默认低并发避免打满 CPU）
 PREFETCH_CONCURRENCY: int = int(os.getenv("AD_FILTER_PREFETCH_CONCURRENCY", "2"))
+
+# 后台推进的并行度：同时处理多少个分片（与全局闸门共同生效）
+ADVANCE_CONCURRENCY: int = int(os.getenv("AD_FILTER_ADVANCE_CONCURRENCY", "3"))
