@@ -186,6 +186,40 @@ def _probe_video_size(segment_path: str) -> Tuple[int, int]:
         return 0, 0
 
 
+def skip_stats(sid: str, detectors: List) -> Optional[dict]:
+    """统计已确认的广告分片：full（整屏跳过）数量与秒数、watermark（去水印）数量。
+
+    用于前端提示「已跳过 N 段广告（X 秒）」，让用户理解进度为何前移。
+    """
+    meta = load_meta(sid)
+    if not meta:
+        return None
+    total = int(meta.get("total", 0))
+    full = 0
+    full_seconds = 0.0
+    watermark = 0
+    for item in meta.get("segments") or []:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url", "")
+        if not url:
+            continue
+        cached = _read_result(segment_cache_dir(segment_cache_key(url, detectors)))
+        if cached is None:
+            continue
+        if cached[0] == "full":
+            full += 1
+            full_seconds += _extinf_seconds(list(item.get("tags") or []))
+        elif cached[0] == "watermark":
+            watermark += 1
+    return {
+        "total": total,
+        "full": full,
+        "full_seconds": round(full_seconds, 1),
+        "watermark": watermark,
+    }
+
+
 def render_playlist(sid: str, detectors: List) -> Optional[str]:
     """按当前缓存状态渲染 playlist：已确认 full（整屏广告）的分片直接移除。
 

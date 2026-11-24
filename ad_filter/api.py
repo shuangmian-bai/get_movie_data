@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from typing import Callable, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
@@ -152,6 +153,22 @@ async def ad_heartbeat_ws(websocket: WebSocket, sid: str):
     detectors, remover = _resolve(meta.get("base_url", ""))
     engine.touch(sid)
     engine.ensure_advance(sid, detectors, remover)
+    last_stats = 0.0
+
+    async def _push_stats() -> None:
+        nonlocal last_stats
+        now = time.time()
+        if now - last_stats < 5:
+            return
+        last_stats = now
+        stats = engine.skip_stats(sid, detectors)
+        if stats is not None:
+            try:
+                await websocket.send_text(json.dumps({"type": "stats", **stats}))
+            except Exception:  # noqa: BLE001 - 连接已断
+                pass
+
+    await _push_stats()
     try:
         while True:
             try:
@@ -169,6 +186,7 @@ async def ad_heartbeat_ws(websocket: WebSocket, sid: str):
                     engine.set_position(sid, float(data.get("time", 0)), detectors, remover)
                 except (TypeError, ValueError):
                     pass
+            await _push_stats()
     except WebSocketDisconnect:
         pass
     finally:
@@ -177,6 +195,19 @@ async def ad_heartbeat_ws(websocket: WebSocket, sid: str):
             await websocket.close()
         except Exception:  # noqa: BLE001 - 已断开
             pass
+
+
+@api_router.get("/ad_filter/{sid}/stats", summary="广告处理统计")
+async def session_stats(sid: str):
+    """返回已确认的广告分片统计（整屏跳过数量/秒数、去水印数量）。"""
+    meta = engine.load_meta(sid)
+    if not meta:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    detectors, _ = _resolve(meta.get("base_url", ""))
+    stats = engine.skip_stats(sid, detectors)
+    if stats is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return stats
 
 
 @api_router.get("/ad_filter/{sid}/file/{name}")
