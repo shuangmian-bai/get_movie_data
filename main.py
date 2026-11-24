@@ -10,6 +10,29 @@
 import os
 import sys
 from contextlib import asynccontextmanager
+
+
+def _load_env_file(path: str) -> None:
+    """加载项目根 ``.env``（KEY=VALUE，# 注释；不覆盖已存在的环境变量）。
+
+    放在业务模块 import 之前执行：``config.py`` 等模块在 import 时读取环境变量，
+    因此必须先注入再导入。
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key:
+                    os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+    except OSError:
+        pass
+
+
+_load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 from typing import Dict, List, Tuple
 
 import uvicorn
@@ -62,7 +85,13 @@ ad_api.set_pipeline_getter(get_ad_pipeline)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """服务生命周期：退出时关闭去广告模块的长驻连接池。"""
+    """服务生命周期：启动时初始化存储（MySQL 建表），退出时关闭长驻连接池。"""
+    try:
+        from contribute.store import init_db
+
+        init_db()
+    except Exception:  # noqa: BLE001 - 存储初始化失败不阻断服务（走降级）
+        pass
     yield
     await close_proxy()
 

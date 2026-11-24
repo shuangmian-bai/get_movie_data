@@ -467,12 +467,26 @@ _last_seen: Dict[str, float] = {}
 
 
 def touch(sid: str) -> None:
-    """刷新会话心跳时间。"""
+    """刷新会话心跳（内存 + Redis，Redis 不可用只写内存）。"""
     _last_seen[sid] = time.time()
+    try:
+        from ad_filter import redis_store
+
+        redis_store.set_alive(sid)
+    except Exception:  # noqa: BLE001 - Redis 异常不影响主流程
+        pass
 
 
 def is_alive(sid: str, timeout: float = 30.0) -> bool:
-    """最近 timeout 秒内是否有心跳。"""
+    """最近 timeout 秒内是否有心跳（优先 Redis，不可用回退内存）。"""
+    try:
+        from ad_filter import redis_store
+
+        alive = redis_store.is_alive(sid)
+        if alive is not None:
+            return alive
+    except Exception:  # noqa: BLE001
+        pass
     return (time.time() - _last_seen.get(sid, 0.0)) < timeout
 
 
@@ -482,6 +496,12 @@ def cancel_advance(sid: str) -> None:
     if task is not None and not task.done():
         task.cancel()
     _last_seen.pop(sid, None)
+    try:
+        from ad_filter import redis_store
+
+        redis_store.clear(sid)
+    except Exception:  # noqa: BLE001
+        pass
     logger.info("会话 %s 停止后台处理（无用户心跳）", sid)
 
 
@@ -506,6 +526,7 @@ async def _advance_loop(sid: str, detectors: List, remover) -> None:
             return
         sess = await _ensure_session(sid, meta)
         total = len(sess.segments)
+        concurrency = max(1, config.ADVANCE_CONCURRENCY)
         while True:
             # 用户已离开（心跳超时）→ 停止处理，避免浪费资源
             if not is_alive(sid):
@@ -515,19 +536,33 @@ async def _advance_loop(sid: str, detectors: List, remover) -> None:
             if idx >= total:
                 logger.info("会话 %s 已推进到末尾（%d 片）", sid, total)
                 return
-            seg = sess.segments[idx]
-            key = segment_cache_key(seg.abs_url, detectors)
-            if _read_result(segment_cache_dir(key)) is None:
-                try:
-                    await handle_segment(sid, seg.name, detectors, remover, prefetch=True)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:  # noqa: BLE001 - 单分片失败不中断推进
-                    logger.debug("推进处理失败 %s：%s", seg.name, exc)
-            # 若期间发生 seek（位置被改），按新位置继续；否则前进一格
+            # 从当前位置起收集一批未处理分片，**并行**处理（串行会导致处理速度跟不上播放）
+            batch = []
+            scan = idx
+            while scan < total and len(batch) < concurrency:
+                seg = sess.segments[scan]
+                key = segment_cache_key(seg.abs_url, detectors)
+                if _read_result(segment_cache_dir(key)) is None:
+                    batch.append(seg)
+                scan += 1
+            if not batch:
+                sess.position = scan
+                await asyncio.sleep(0.05)
+                continue
+            try:
+                await asyncio.gather(
+                    *[
+                        handle_segment(sid, seg.name, detectors, remover, prefetch=True)
+                        for seg in batch
+                    ],
+                    return_exceptions=True,
+                )
+            except asyncio.CancelledError:
+                raise
+            # 若期间发生 seek（位置被改），按新位置继续；否则前进到扫描位置
             if sess.position == idx:
-                sess.position = idx + 1
-            await asyncio.sleep(0.05)
+                sess.position = scan
+            await asyncio.sleep(0.02)
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -553,6 +588,12 @@ def set_position(
         _sessions[sid] = sess
     idx = segment_index_by_time(sess, max(0.0, float(seconds)))
     sess.position = idx
+    try:
+        from ad_filter import redis_store
+
+        redis_store.set_position(sid, idx)
+    except Exception:  # noqa: BLE001
+        pass
     touch(sid)
     ensure_advance(sid, detectors, remover)
     return idx
@@ -570,9 +611,25 @@ async def _process_segment(
         return await _process_segment_inner(seg, headers, detectors, remover, cdir)
 
 
+def _disk_ok() -> bool:
+    """磁盘水位保护：剩余空间低于 10% 时拒绝新增处理（降级代理），避免撑爆磁盘。"""
+    try:
+        usage = shutil.disk_usage(config.OUTPUT_ROOT)
+        if usage.total > 0 and usage.free / usage.total < 0.10:
+            logger.warning(
+                "磁盘剩余不足 10%%（free=%dMB），跳过处理降级代理", usage.free // (1024 * 1024)
+            )
+            return False
+    except OSError:
+        pass
+    return True
+
+
 async def _process_segment_inner(
     seg: _Segment, headers: Dict[str, str], detectors: List, remover, cdir: str
 ) -> Tuple[str, Optional[str]]:
+    if not _disk_ok():
+        return ("none", None)
     client = _get_client()
     os.makedirs(cdir, exist_ok=True)
     suffix = os.path.splitext(seg.name)[1] or ".ts"
