@@ -17,8 +17,6 @@ import logging
 import os
 from typing import List, Optional
 
-import cv2
-
 from ad_filter import config
 from ad_filter._compat import to_thread
 from ad_filter.detector.base import Detector
@@ -130,23 +128,10 @@ class TopBannerDetector(Detector):
         )
 
     def _extract_frames(self, segment_path: str) -> List:
-        """opencv 均匀抽若干帧，返回 BGR numpy 数组列表。"""
-        cap = cv2.VideoCapture(segment_path)
-        try:
-            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if total <= 0:
-                return []
-            n = min(self.frame_count, max(1, total))
-            frames = []
-            for i in range(n):
-                idx = int(total * (i + 1) / (n + 1))
-                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                ok, frame = cap.read()
-                if ok and frame is not None:
-                    frames.append(frame)
-            return frames
-        finally:
-            cap.release()
+        """抽帧：统一走 PyAV（opencv 对部分 H.264 分片读不出帧，会导致永远放行）。"""
+        from ad_filter.detector.frames import extract_frames
+
+        return extract_frames(segment_path, self.frame_count)
 
     def _ocr_top(self, image) -> List:
         """对顶部条带做 OCR，返回 [(text, score, y2)]（y2 为文本框底边坐标）。"""

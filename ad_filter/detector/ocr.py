@@ -144,6 +144,9 @@ class OcrDetector(Detector):
             return DetectionResult()
 
         width, height = await self._probe_size(segment_path)
+        if width <= 0 or height <= 0:
+            # 元数据拿不到时用已抽帧的尺寸兜底，保证面积占比可算
+            height, width = frames[0].shape[:2]
 
         hit_frames = 0
         boxes: List[Box] = []
@@ -180,27 +183,10 @@ class OcrDetector(Detector):
         )
 
     async def _extract_frames(self, segment_path: str) -> List[np.ndarray]:
-        """opencv 均匀抽若干帧，返回 BGR numpy 数组列表。"""
+        """抽帧：统一走 PyAV（opencv 对部分 H.264 分片读不出帧，会导致永远放行）。"""
+        from ad_filter.detector.frames import extract_frames
 
-        def _run() -> List[np.ndarray]:
-            cap = cv2.VideoCapture(segment_path)
-            try:
-                total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                if total <= 0:
-                    return []
-                n = min(self.frame_count, max(1, total))
-                frames: List[np.ndarray] = []
-                for i in range(n):
-                    idx = int(total * (i + 1) / (n + 1))
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                    ok, frame = cap.read()
-                    if ok and frame is not None:
-                        frames.append(frame)
-                return frames
-            finally:
-                cap.release()
-
-        return await to_thread(_run)
+        return await to_thread(extract_frames, segment_path, self.frame_count)
 
     async def _ocr_words(
         self, frame: np.ndarray
