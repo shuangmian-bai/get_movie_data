@@ -23,18 +23,29 @@
 | `rapidocr_onnxruntime` | 中文 OCR 文字识别（onnxruntime） |
 | `httpx` | m3u8 / 分片下载 + 代理转发 |
 
-## 核心链路
+## 核心链路（渐进式：秒回 + 分片按需处理）
 
 ```
 POST /api/ad_filter/process { m3u8_url, headers?, base_url? }
   └─ 下载 m3u8（Master 选最高带宽 variant；相对/绝对分片 URI 统一 urljoin 解析）
-  └─ 逐分片（并发）：下载到临时目录 → 检测器链 detect()
-        ├─ full      → 丢弃（m3u8 不输出该块）
-        ├─ watermark → remover.remove() 落盘 {sid}/segment_XXXX.ts，引用 file/…
-        └─ none      → 删临时文件，引用 proxy/…（本服务代理）
-  └─ 重写 index.m3u8 → 写 meta.json（分片名→上游URL 映射）→ 返回 { sid, playlist_url, stats }
-前端：playHls(playlist_url)
+  └─ 生成分片清单 → 写 index.m3u8（分片指向 segment/{name}）→ 写 meta.json
+  └─ 立即返回 { sid, playlist_url, stats.total }        ← 不处理任何分片，起播不再等整片
+
+GET /ad_filter/{sid}/segment/{name}                     ← 播放器按需拉取
+  ├─ 已缓存 + full      → 返回极短空白 ts（无缝跳过）
+  ├─ 已缓存 + watermark → 返回缓存中的去水印文件
+  ├─ 已缓存 + none      → 代理透传上游
+  └─ 未处理 → 下载 → 检测器链 detect() → 处理 → 写分片缓存 → 返回
+        ├─ full      → 记录 full（后续返回空白 ts）
+        ├─ watermark → remover.remove() 落盘分片缓存
+        └─ none      → 记录 none（代理）
+  └─ 处理失败 → 降级代理，不阻断播放
+
+分片缓存：{OUTPUT_ROOT}/segments/md5(URL+检测器指纹)/（result.json + 去水印文件）
+预取：播放某分片时后台预取其后 PREFETCH_LOOKAHEAD 个（并发 PREFETCH_CONCURRENCY）
 ```
+
+前端：拿到 `playlist_url` 直接 `playHls`，播放器拉哪个分片就处理哪个。
 
 ## 目录结构
 
@@ -63,10 +74,11 @@ ad_filter/
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/ad_filter/process` | 去广告处理，body `{ m3u8_url, headers?, base_url? }` |
-| GET | `/ad_filter/{sid}/index.m3u8` | 处理后播放列表 |
-| GET | `/ad_filter/{sid}/file/{name}` | 本地去水印后的分片 |
-| GET | `/ad_filter/{sid}/proxy/{name}` | 代理上游分片 |
+| POST | `/api/ad_filter/process` | 解析 m3u8 并秒回播放列表地址（分片按需处理），body `{ m3u8_url, headers?, base_url? }` |
+| GET | `/ad_filter/{sid}/index.m3u8` | 处理后播放列表（分片指向 `segment/{name}`） |
+| GET | `/ad_filter/{sid}/segment/{name}` | 动态分片端点：按需检测/去水印/代理，结果缓存 |
+| GET | `/ad_filter/{sid}/file/{name}` | 旧会话的本地去水印分片（兼容保留） |
+| GET | `/ad_filter/{sid}/proxy/{name}` | 旧会话的代理分片（兼容保留） |
 
 ## 插件化
 
@@ -127,7 +139,7 @@ ad_filter/
 | `AD_FILTER_FULL_AREA_RATIO` | `0.3` | 全广告判定：命中区域面积占比阈值 |
 | `AD_FILTER_WATERMARK_MARGIN` | `10` | 水印区域向外扩展边距（像素） |
 | `AD_FILTER_TOP_BANNER_RATIO` | `0.12` | 顶部条带高度占画面比例 |
-| `AD_FILTER_TOP_BANNER_FRAME_COUNT` | `5` | 顶部条带抽帧数 |
+| `AD_FILTER_TOP_BANNER_FRAME_COUNT` | `3` | 顶部条带抽帧数 |
 | `AD_FILTER_TOP_BANNER_HIT_RATIO` | `0.5` | 顶部条幅命中帧占比阈值 |
 | `AD_FILTER_TOP_BANNER_BLOCKWORDS` | `澳门,威尼斯人,116.am,新葡京,博彩,娱乐城,独家赞助` | 顶部条幅违规词表 |
 | `AD_FILTER_TOP_BANNER_REMOVE_MODE` | `inpaint` | 去除模式：inpaint（画面完整）/ crop / blur / black |
@@ -136,6 +148,8 @@ ad_filter/
 | `AD_FILTER_TOP_BANNER_TEXT_DILATE` | `9` | inpaint 文字掩码膨胀核（覆盖白字黑描边） |
 | `AD_FILTER_HTTP_TIMEOUT` / `AD_FILTER_HTTP_TRUST_ENV` | `15` / `1` | HTTP 超时 / 是否自动检测系统代理 |
 | `AD_FILTER_HTTP_PROXY` | `""`（空） | 显式代理地址（http/https/socks5），空则自动检测系统代理 |
+| `AD_FILTER_PREFETCH_LOOKAHEAD` | `3` | 预取窗口：当前分片之后提前处理 N 个 |
+| `AD_FILTER_PREFETCH_CONCURRENCY` | `2` | 预取并发数 |
 
 ## 已知限制
 

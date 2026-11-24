@@ -71,10 +71,13 @@ app.include_router(contribute_router)
 
 # 前端静态资源（项目根 view/，React 构建产物由 fastapi-ui 托管）
 # view_dir 按模块文件定位，不受启动时工作目录影响；spa_fallback 供前端路由深链刷新使用。
+# 注意：/ad_filter/ 与 /api/ 必须排除在 SPA 回退之外——“.m3u8/.ts” 不在静态扩展名白名单里，
+# 不排除会被当成页面路由回退成 index.html（接口链路静默失效）。
 mount_webui(
     app,
     view_dir_of(__file__, "view"),
     spa_fallback=True,
+    spa_exclude=("/api/", "/docs", "/redoc", "/openapi.json", "/ad_filter/"),
 )
 
 

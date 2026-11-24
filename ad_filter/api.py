@@ -1,9 +1,13 @@
 """ad_filter REST API
 
-- ``POST /api/ad_filter/process``：去广告处理，返回处理后 m3u8 地址；
+渐进式去广告：
+
+- ``POST /api/ad_filter/process``：解析 m3u8 并**秒回**处理后播放列表地址
+  （分片指向动态端点，播放时才处理）；
 - ``GET /ad_filter/{sid}/index.m3u8``：处理后播放列表；
-- ``GET /ad_filter/{sid}/file/{name}``：本地去水印后的分片；
-- ``GET /ad_filter/{sid}/proxy/{name}``：代理上游分片（带防盗链头）。
+- ``GET /ad_filter/{sid}/segment/{name}``：动态分片端点（按需检测/去水印/代理，结果缓存）；
+- ``GET /ad_filter/{sid}/file/{name}``：旧会话的本地去水印分片（兼容保留）；
+- ``GET /ad_filter/{sid}/proxy/{name}``：旧会话的代理分片（兼容保留）。
 
 站点 → 检测器/去水印器组合由应用层通过 :func:`set_pipeline_getter` 注入，
 本模块不依赖 ``main.py``（守「低耦合 + 应用层编排」）。
@@ -43,7 +47,7 @@ def _resolve(base_url: str) -> Tuple[List, object]:
 
 @api_router.post("/api/ad_filter/process", response_model=ProcessResult)
 async def process(req: ProcessRequest):
-    """去广告处理：返回处理后 m3u8 地址与统计。"""
+    """解析 m3u8 并立即返回播放列表地址（分片按需处理，起播不再等整片）。"""
     if not req.m3u8_url:
         raise HTTPException(status_code=400, detail="m3u8_url 不能为空")
     detectors, remover = _resolve(req.base_url)
@@ -59,14 +63,57 @@ async def playlist(sid: str):
     """处理后播放列表。"""
     path = os.path.join(config.OUTPUT_ROOT, sid, "index.m3u8")
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="会话不存在或尚未处理完成")
+        raise HTTPException(status_code=404, detail="会话不存在")
     return FileResponse(path, media_type="application/vnd.apple.mpegurl")
+
+
+@api_router.get("/ad_filter/{sid}/segment/{name}")
+async def dynamic_segment(sid: str, name: str):
+    """动态分片端点：已处理命中缓存；未处理则同步处理；失败降级代理。"""
+    name = os.path.basename(name)  # 防目录穿越
+    meta = engine.load_meta(sid)
+    if not meta:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    detectors, remover = _resolve(meta.get("base_url", ""))
+    try:
+        result = await engine.handle_segment(sid, name, detectors, remover)
+    except Exception as exc:  # noqa: BLE001 - 任何异常降级代理，不阻断播放
+        logger.warning("分片处理异常，降级代理：%s（%s）", name, exc)
+        result = ("none", None)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="分片不存在")
+
+    kind, path = result
+    if kind == "full":
+        # 全广告：给一段极短空白 ts，播放器无缝跳过（比 204 兼容性好）
+        return FileResponse(engine.blank_ts_path(), media_type="video/mp2t")
+    if kind == "watermark" and path and os.path.exists(path):
+        return FileResponse(path, media_type="video/mp2t")
+
+    # none / 降级代理：透传上游（带防盗链头）
+    seg_map = {
+        item.get("name"): item.get("url")
+        for item in (meta.get("segments") or [])
+        if isinstance(item, dict)
+    }
+    url = seg_map.get(name)
+    if url is None:
+        # 旧格式 meta：segments 是 {name: url}
+        legacy = meta.get("segments")
+        if isinstance(legacy, dict):
+            url = legacy.get(name)
+    if not url:
+        raise HTTPException(status_code=404, detail="分片映射不存在")
+    return StreamingResponse(
+        proxy.stream_bytes(url, meta.get("headers") or {}), media_type="video/mp2t"
+    )
 
 
 @api_router.get("/ad_filter/{sid}/file/{name}")
 async def local_file(sid: str, name: str):
-    """本地去水印后的分片。"""
-    name = os.path.basename(name)  # 防目录穿越
+    """本地去水印后的分片（旧会话兼容）。"""
+    name = os.path.basename(name)
     path = os.path.join(config.OUTPUT_ROOT, sid, name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="分片不存在")
@@ -75,15 +122,20 @@ async def local_file(sid: str, name: str):
 
 @api_router.get("/ad_filter/{sid}/proxy/{name}")
 async def proxy_segment(sid: str, name: str):
-    """代理上游分片（带防盗链头）。"""
+    """代理上游分片（旧会话兼容）。"""
     name = os.path.basename(name)
     meta = engine.load_meta(sid)
     if not meta:
         raise HTTPException(status_code=404, detail="会话不存在")
-    url = meta.get("segments", {}).get(name)
+    segments = meta.get("segments") or {}
+    if isinstance(segments, dict):
+        url = segments.get(name)
+    else:
+        url = next(
+            (item.get("url") for item in segments if isinstance(item, dict) and item.get("name") == name),
+            None,
+        )
     if not url:
         raise HTTPException(status_code=404, detail="分片映射不存在")
     headers = meta.get("headers", {})
-    return StreamingResponse(
-        proxy.stream_bytes(url, headers), media_type="video/mp2t"
-    )
+    return StreamingResponse(proxy.stream_bytes(url, headers), media_type="video/mp2t")

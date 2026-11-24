@@ -1,16 +1,16 @@
-"""去广告处理引擎
+"""去广告处理引擎（分片级按需处理）
 
-把「传入 m3u8 → 逐分片检测 → 丢弃 / 去水印 / 代理 → 重写 m3u8」串起来，
-并按内容寻址做结果幂等复用（同一源 + 同一检测器配置 → 同一 sid → 复用结果）。
+渐进式：``process`` **秒回** m3u8（所有分片指向动态端点 ``segment/{name}``），
+播放器拉哪个分片就处理哪个；已处理分片按内容寻址缓存，跨会话复用。
+不再等整片处理完才起播。
 
-- 下载 m3u8（Master 选最高带宽 variant；分片 URI 相对/绝对由 ``m3u8`` 模块统一解析）；
-- 逐分片下载到临时目录 → 检测器分类 → 按类处理：
-  - ``full`` → 丢弃（重写后的 m3u8 不输出该分片块）；
-  - ``watermark`` → 去水印器落盘到 ``{sid}/`` 目录，引用 ``file/{name}``；
-  - ``none`` → 不落盘，引用 ``proxy/{name}``（本服务代理上游，带防盗链头）；
-- 写 ``index.m3u8`` + ``meta.json``（分片名 → 上游 URL 映射，供代理查询）。
+- 全广告（full）→ 动态端点返回一段极短空白 ts（播放器无缝跳过）；
+- 水印（watermark）→ 去水印后落盘分片缓存，动态端点返回该文件；
+- 正常（none）→ 动态端点代理透传上游；
+- 处理失败 → 降级代理（不阻断播放）。
 
-本地只保存「修改了画面的分片」（去水印后的），符合省盘目标。
+分片缓存键 = ``md5(分片绝对 URL + 检测器指纹)``，目录
+``{OUTPUT_ROOT}/segments/{key}/``（``result.json`` + 去水印文件）。
 """
 import asyncio
 import hashlib
@@ -20,6 +20,7 @@ import os
 import shutil
 import tempfile
 import time
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 
@@ -37,9 +38,49 @@ from ad_filter.proxy import _get_client
 
 logger = logging.getLogger("ad_filter.engine")
 
-# per-sid 并发锁（避免同一内容并发重复处理）
+
+# ---------------------------------------------------------------------------
+# 会话结构
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _Segment:
+    """一个分片：名称、上游绝对 URL、原始 m3u8 标签行。"""
+
+    name: str
+    abs_url: str
+    tags: List[str] = field(default_factory=list)
+
+
+@dataclass
+class _Session:
+    """会话内存态（可随时从 meta.json 重建）。"""
+
+    sid: str
+    segments: List[_Segment]
+    headers: Dict[str, str]
+
+
+# 会话缓存（重启后靠 meta.json 重建）
+_sessions: Dict[str, _Session] = {}
+_sessions_guard = asyncio.Lock()
+
+# per-sid 锁（同一内容并发只解析一次）
 _locks: Dict[str, asyncio.Lock] = {}
 _locks_guard = asyncio.Lock()
+
+# per-分片锁（同一分片并发只处理一次）
+_seg_locks: Dict[str, asyncio.Lock] = {}
+_seg_locks_guard = asyncio.Lock()
+
+# 空白 ts（full 分片占位）缓存路径
+_blank_path: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# 基础工具
+# ---------------------------------------------------------------------------
 
 
 def compute_sid(req: ProcessRequest, detectors: List) -> str:
@@ -50,12 +91,12 @@ def compute_sid(req: ProcessRequest, detectors: List) -> str:
 
 
 def sid_dir(sid: str) -> str:
-    """会话输出目录：``{OUTPUT_ROOT}/{sid}/``。"""
+    """会话目录：``{OUTPUT_ROOT}/{sid}/``。"""
     return os.path.join(config.OUTPUT_ROOT, sid)
 
 
 def load_meta(sid: str) -> Optional[dict]:
-    """读取会话元数据（供代理端点查询分片 URL）。"""
+    """读取会话元数据（分片清单 / headers / base_url）。"""
     try:
         with open(os.path.join(sid_dir(sid), "meta.json"), "r", encoding="utf-8") as f:
             return json.load(f)
@@ -63,8 +104,19 @@ def load_meta(sid: str) -> Optional[dict]:
         return None
 
 
+def segment_cache_dir(key: str) -> str:
+    """分片缓存目录：``{OUTPUT_ROOT}/segments/{key}/``。"""
+    return os.path.join(config.OUTPUT_ROOT, "segments", key)
+
+
+def segment_cache_key(abs_url: str, detectors: List) -> str:
+    """分片缓存键：分片绝对 URL + 检测器配置指纹。"""
+    fp = "|".join(d.fingerprint() for d in detectors)
+    raw = f"{abs_url}\n{fp}"
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()
+
+
 async def _get_lock(sid: str) -> asyncio.Lock:
-    """获取 per-sid 并发锁（用 ``_locks_guard`` 保护字典并发读写）。"""
     async with _locks_guard:
         lock = _locks.get(sid)
         if lock is None:
@@ -73,24 +125,67 @@ async def _get_lock(sid: str) -> asyncio.Lock:
         return lock
 
 
+async def _get_seg_lock(key: str) -> asyncio.Lock:
+    async with _seg_locks_guard:
+        lock = _seg_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _seg_locks[key] = lock
+        return lock
+
+
+def blank_ts_path() -> str:
+    """生成（并缓存）一段极短空白 ts：全广告分片用它占位，播放器无缝跳过。
+
+    相比返回 204，部分 HLS 播放器会把 204 当加载错误；给一段 0.1s 黑帧更稳。
+    """
+    global _blank_path
+    if _blank_path and os.path.exists(_blank_path):
+        return _blank_path
+    import av  # 按需导入，避免无 av 时影响模块加载
+    import numpy as np
+
+    av.logging.set_level(av.logging.ERROR)
+    os.makedirs(config.OUTPUT_ROOT, exist_ok=True)
+    path = os.path.join(config.OUTPUT_ROOT, "_blank.ts")
+    out = av.open(path, "w", format="mpegts")
+    try:
+        stream = out.add_stream("libx264", rate=25)
+        stream.width, stream.height, stream.pix_fmt = 320, 180, "yuv420p"
+        stream.options = {"preset": "ultrafast", "crf": "51"}
+        frame = av.VideoFrame.from_ndarray(
+            np.zeros((180, 320, 3), dtype=np.uint8), format="bgr24"
+        )
+        frame.pts = 0
+        for packet in stream.encode(frame):
+            out.mux(packet)
+        for packet in stream.encode(None):
+            out.mux(packet)
+    finally:
+        out.close()
+    _blank_path = path
+    return path
+
+
+# ---------------------------------------------------------------------------
+# 会话准备（秒回）
+# ---------------------------------------------------------------------------
+
+
 async def process(req: ProcessRequest, detectors: List, remover) -> ProcessResult:
-    """处理一次去广告请求，返回处理结果（含处理后 m3u8 地址）。"""
+    """解析 m3u8 并**立即返回**播放列表地址；分片处理延迟到播放时按需进行。"""
     sid = compute_sid(req, detectors)
     dir_ = sid_dir(sid)
     os.makedirs(dir_, exist_ok=True)
 
     lock = await _get_lock(sid)
     async with lock:
-        # 幂等复用：已有处理结果直接返回
         meta = load_meta(sid)
-        if meta and os.path.exists(os.path.join(dir_, "index.m3u8")):
-            return _result(req, sid, ProcessStats(**meta.get("stats", {})))
-        meta = await _run(req, sid, dir_, detectors, remover)
-    return _result(req, sid, ProcessStats(**meta["stats"]))
+        index = os.path.join(dir_, "index.m3u8")
+        if not (meta and os.path.exists(index)):
+            meta = await _prepare(req, sid, dir_)
 
-
-def _result(req: ProcessRequest, sid: str, stats: ProcessStats) -> ProcessResult:
-    """组装处理结果（playlist_url 为同源相对路径，前端可直接播）。"""
+    stats = ProcessStats(total=int(meta.get("total", 0)))
     return ProcessResult(
         sid=sid,
         playlist_url=f"/ad_filter/{sid}/index.m3u8",
@@ -98,8 +193,243 @@ def _result(req: ProcessRequest, sid: str, stats: ProcessStats) -> ProcessResult
     )
 
 
+async def _prepare(req: ProcessRequest, sid: str, dir_: str) -> dict:
+    """下载播放列表、生成会话与动态分片 index.m3u8，写 meta。"""
+    client = _get_client()
+    playlist_url = req.m3u8_url
+    text = await _fetch_text(client, playlist_url, req.headers)
+    if m3u8_parser.is_master(text):
+        variants = m3u8_parser.extract_variants(text.splitlines())
+        if not variants:
+            raise RuntimeError("Master 播放列表无可用 variant")
+        playlist_url = urljoin(playlist_url, variants[0])
+        text = await _fetch_text(client, playlist_url, req.headers)
+
+    header_lines, segments = m3u8_parser.parse_media(text, playlist_url)
+
+    segs: List[_Segment] = []
+    out_lines = list(header_lines)
+    for idx, (tags, abs_url) in enumerate(segments):
+        ext = os.path.splitext(abs_url.split("?")[0])[1] or ".ts"
+        name = f"segment_{idx:04d}{ext}"
+        segs.append(_Segment(name=name, abs_url=abs_url, tags=list(tags)))
+        out_lines.extend(tags)
+        out_lines.append(f"segment/{name}")
+
+    _write_playlist(dir_, out_lines)
+    meta = {
+        "sid": sid,
+        "m3u8_url": req.m3u8_url,
+        "base_url": req.base_url,
+        "headers": req.headers,
+        "total": len(segs),
+        "segments": [
+            {"name": s.name, "url": s.abs_url, "tags": s.tags} for s in segs
+        ],
+        "ts": time.time(),
+    }
+    _write_meta(dir_, meta)
+
+    async with _sessions_guard:
+        _sessions[sid] = _Session(sid=sid, segments=segs, headers=req.headers)
+    return meta
+
+
+async def _ensure_session(sid: str, meta: dict) -> _Session:
+    """从 meta 重建会话（重启后/多进程场景）。"""
+    async with _sessions_guard:
+        sess = _sessions.get(sid)
+        if sess is not None:
+            return sess
+        raw = meta.get("segments") or []
+        segs: List[_Segment] = []
+        if isinstance(raw, dict):
+            # 旧格式：{name: url}（无 tags）
+            for name, url in raw.items():
+                segs.append(_Segment(name=name, abs_url=url, tags=[]))
+        else:
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                segs.append(
+                    _Segment(
+                        name=item.get("name", ""),
+                        abs_url=item.get("url", ""),
+                        tags=list(item.get("tags") or []),
+                    )
+                )
+        sess = _Session(sid=sid, segments=segs, headers=meta.get("headers") or {})
+        _sessions[sid] = sess
+        return sess
+
+
+# ---------------------------------------------------------------------------
+# 分片按需处理与缓存
+# ---------------------------------------------------------------------------
+
+
+async def handle_segment(
+    sid: str, name: str, detectors: List, remover, prefetch: bool = False
+) -> Optional[Tuple[str, Optional[str]]]:
+    """处理（或复用缓存）单个分片。
+
+    :param prefetch: True 表示由预取任务调用（不再级联触发新的预取）。
+    :return: ``("full", None)`` / ``("watermark", 本地路径)`` / ``("none", None)``；
+             会话或分片不存在返回 ``None``。
+    """
+    meta = load_meta(sid)
+    if not meta:
+        return None
+    sess = await _ensure_session(sid, meta)
+    seg = next((s for s in sess.segments if s.name == name), None)
+    if seg is None:
+        return None
+
+    key = segment_cache_key(seg.abs_url, detectors)
+    cdir = segment_cache_dir(key)
+    cached = _read_result(cdir)
+    if cached is not None:
+        if not prefetch:
+            _schedule_prefetch(sid, name, detectors, remover)
+        return cached
+
+    lock = await _get_seg_lock(key)
+    async with lock:
+        cached = _read_result(cdir)
+        if cached is not None:
+            result = cached
+        else:
+            result = await _process_segment(seg, sess.headers, detectors, remover, cdir)
+    if not prefetch:
+        _schedule_prefetch(sid, name, detectors, remover)
+    return result
+
+
+# 预取任务（避免同一分片重复排队）与并发闸门
+_prefetch_tasks: Dict[str, asyncio.Task] = {}
+_prefetch_sem: Optional[asyncio.Semaphore] = None
+
+
+def _get_prefetch_sem() -> asyncio.Semaphore:
+    global _prefetch_sem
+    if _prefetch_sem is None:
+        _prefetch_sem = asyncio.Semaphore(config.PREFETCH_CONCURRENCY)
+    return _prefetch_sem
+
+
+def _schedule_prefetch(sid: str, current_name: str, detectors: List, remover) -> None:
+    """播放到某分片时，后台预取其后 lookahead 个分片（让播放跟上，减少卡顿）。"""
+    sess = _sessions.get(sid)
+    if sess is None or config.PREFETCH_LOOKAHEAD <= 0:
+        return
+    names = [s.name for s in sess.segments]
+    try:
+        idx = names.index(current_name)
+    except ValueError:
+        return
+    # 顺手清理已完成任务，避免字典无限增长
+    for key in [k for k, t in _prefetch_tasks.items() if t.done()]:
+        _prefetch_tasks.pop(key, None)
+    for nxt in names[idx + 1 : idx + 1 + config.PREFETCH_LOOKAHEAD]:
+        task_key = f"{sid}:{nxt}"
+        existing = _prefetch_tasks.get(task_key)
+        if existing is not None and not existing.done():
+            continue
+        _prefetch_tasks[task_key] = asyncio.create_task(
+            _prefetch_one(sid, nxt, detectors, remover)
+        )
+
+
+async def _prefetch_one(sid: str, name: str, detectors: List, remover) -> None:
+    """后台预取单个分片（受并发闸门限制，失败静默）。"""
+    sem = _get_prefetch_sem()
+    async with sem:
+        try:
+            await handle_segment(sid, name, detectors, remover, prefetch=True)
+        except Exception as exc:  # noqa: BLE001 - 预取失败不影响播放
+            logger.debug("预取失败 %s：%s", name, exc)
+
+
+async def _process_segment(
+    seg: _Segment, headers: Dict[str, str], detectors: List, remover, cdir: str
+) -> Tuple[str, Optional[str]]:
+    """下载 → 检测 → 按类型处理 → 写分片缓存。失败降级代理。"""
+    client = _get_client()
+    os.makedirs(cdir, exist_ok=True)
+    suffix = os.path.splitext(seg.name)[1] or ".ts"
+    fd, tmp = tempfile.mkstemp(prefix="adseg_", suffix=suffix)
+    os.close(fd)
+    try:
+        try:
+            await _download(client, seg.abs_url, headers, tmp)
+        except Exception as exc:  # noqa: BLE001 - 下载失败降级代理
+            logger.warning("分片下载失败，降级代理：%s（%s）", seg.abs_url, exc)
+            return ("none", None)  # 不写缓存，下次重试
+
+        try:
+            result = await _detect_any(detectors, tmp, seg.abs_url)
+        except Exception as exc:  # noqa: BLE001 - 检测异常放行
+            logger.warning("分片检测异常，放行：%s（%s）", seg.abs_url, exc)
+            result = DetectionResult()
+
+        if result.ad_type == "full":
+            _write_result(cdir, {"ad_type": "full"})
+            return ("full", None)
+
+        if result.ad_type == "watermark":
+            out = os.path.join(cdir, seg.name)
+            try:
+                await remover.remove(tmp, result.boxes, out)
+            except Exception as exc:  # noqa: BLE001 - 去除失败降级代理
+                logger.warning("去水印失败，降级代理：%s（%s）", seg.abs_url, exc)
+                return ("none", None)
+            _write_result(cdir, {"ad_type": "watermark", "file": seg.name})
+            return ("watermark", out)
+
+        _write_result(cdir, {"ad_type": "none"})
+        return ("none", None)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def _read_result(cdir: str) -> Optional[Tuple[str, Optional[str]]]:
+    """读分片缓存；水印文件缺失时视为未命中（重处理）。"""
+    path = os.path.join(cdir, "result.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    ad_type = data.get("ad_type")
+    if ad_type == "watermark":
+        fname = data.get("file") or ""
+        fpath = os.path.join(cdir, fname)
+        if fname and os.path.exists(fpath):
+            return ("watermark", fpath)
+        return None
+    if ad_type in ("full", "none"):
+        return (ad_type, None)
+    return None
+
+
+def _write_result(cdir: str, data: dict) -> None:
+    tmp = os.path.join(cdir, "result.json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, os.path.join(cdir, "result.json"))
+
+
+# ---------------------------------------------------------------------------
+# 下载与检测辅助
+# ---------------------------------------------------------------------------
+
+
 async def _fetch_text(client: httpx.AsyncClient, url: str, headers: Dict[str, str]) -> str:
-    """下载 m3u8 文本。"""
     resp = await client.get(url, headers=headers)
     resp.raise_for_status()
     return resp.text
@@ -145,97 +475,7 @@ def _write_playlist(dir_: str, lines: List[str]) -> None:
 
 
 def _write_meta(dir_: str, meta: dict) -> None:
-    """原子写会话元数据。"""
     tmp = os.path.join(dir_, "meta.json.tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False)
     os.replace(tmp, os.path.join(dir_, "meta.json"))
-
-
-async def _run(
-    req: ProcessRequest, sid: str, dir_: str, detectors: List, remover
-) -> dict:
-    """执行一次完整处理，返回元数据 dict。"""
-    client = _get_client()
-
-    # 1) 下载并定位 Media 播放列表（Master 递归选最高带宽 variant）
-    playlist_url = req.m3u8_url
-    text = await _fetch_text(client, playlist_url, req.headers)
-    if m3u8_parser.is_master(text):
-        variants = m3u8_parser.extract_variants(text.splitlines())
-        if not variants:
-            raise RuntimeError("Master 播放列表无可用 variant")
-        playlist_url = urljoin(playlist_url, variants[0])
-        text = await _fetch_text(client, playlist_url, req.headers)
-
-    # 2) 解析 Media 播放列表
-    header_lines, segments = m3u8_parser.parse_media(text, playlist_url)
-
-    stats = ProcessStats(total=len(segments))
-    tmpdir = tempfile.mkdtemp(prefix="adfilter_")
-    try:
-        sem = asyncio.Semaphore(config.SEGMENT_CONCURRENCY)
-
-        async def _handle(idx: int, tags: List[str], abs_url: str):
-            async with sem:
-                ext = os.path.splitext(abs_url.split("?")[0])[1] or ".ts"
-                name = f"segment_{idx:04d}{ext}"
-                local = os.path.join(tmpdir, name)
-                try:
-                    await _download(client, abs_url, req.headers, local)
-                except Exception as exc:  # noqa: BLE001 - 下载失败按正常处理（代理）
-                    logger.warning("分片下载失败，按正常处理（代理）：%s（%s）", abs_url, exc)
-                    return ("proxy", name, abs_url)
-                try:
-                    result = await _detect_any(detectors, local, abs_url)
-                    if result.ad_type == "full":
-                        return (None, name, abs_url)  # 丢弃
-                    if result.ad_type == "watermark":
-                        out = os.path.join(dir_, name)
-                        await remover.remove(local, result.boxes, out)
-                        return ("file", name, abs_url)
-                    return ("proxy", name, abs_url)
-                finally:
-                    try:
-                        os.remove(local)
-                    except OSError:
-                        pass
-
-        results = await asyncio.gather(
-            *[
-                _handle(i, tags, url)
-                for i, (tags, url) in enumerate(segments)
-            ]
-        )
-
-        # 3) 按原顺序重写 m3u8
-        out_lines = list(header_lines)
-        seg_map: Dict[str, str] = {}
-        for (tags, _), (kind, name, abs_url) in zip(segments, results):
-            if kind is None:
-                stats.full += 1
-                continue
-            out_lines.extend(tags)
-            if kind == "file":
-                stats.watermark += 1
-                out_lines.append(f"file/{name}")
-            else:
-                stats.passed += 1
-                out_lines.append(f"proxy/{name}")
-                seg_map[name] = abs_url
-
-        _write_playlist(dir_, out_lines)
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
-
-    # 4) 写会话元数据
-    meta = {
-        "sid": sid,
-        "m3u8_url": req.m3u8_url,
-        "headers": req.headers,
-        "segments": seg_map,
-        "stats": stats.model_dump(),
-        "ts": time.time(),
-    }
-    _write_meta(dir_, meta)
-    return meta
