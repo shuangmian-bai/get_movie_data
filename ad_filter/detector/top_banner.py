@@ -73,7 +73,7 @@ class TopBannerDetector(Detector):
         ).hexdigest()[:12]
         return (
             f"{self.name}:{digest}:{self.top_ratio}:{self.frame_count}:"
-            f"{self.hit_frame_ratio}:{self.score_threshold}"
+            f"{self.hit_frame_ratio}:{self.score_threshold}:frames=pyav"
         )
 
     async def detect(self, segment_path: str, segment_url: str) -> DetectionResult:
