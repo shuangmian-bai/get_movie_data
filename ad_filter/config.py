@@ -77,9 +77,13 @@ TOP_BANNER_BLOCKWORDS: str = os.getenv(
     "AD_FILTER_TOP_BANNER_BLOCKWORDS",
     "澳门,威尼斯人,116.am,新葡京,博彩,娱乐城,独家赞助",
 )
-# 顶部条幅去除模式：crop（裁掉后缩放，广告彻底消失，默认）/ blur（高斯模糊）/ black（纯色填充）
-TOP_BANNER_REMOVE_MODE: str = os.getenv("AD_FILTER_TOP_BANNER_REMOVE_MODE", "crop")
-# 模糊强度：核大小 = 条带高度 * 该系数（取奇数，最小 21）
+# 顶部条幅去除模式：inpaint（文字像素内容修复，画面完整，默认）/ crop（裁切）/ blur / black
+TOP_BANNER_REMOVE_MODE: str = os.getenv("AD_FILTER_TOP_BANNER_REMOVE_MODE", "inpaint")
+# blur 强度：核大小 = 条带高度 * 该系数（取奇数，最小 21）
 TOP_BANNER_BLUR_STRENGTH: float = float(
     os.getenv("AD_FILTER_TOP_BANNER_BLUR_STRENGTH", "0.5")
 )
+# inpaint 模式：修复邻域半径（opencv Telea）
+TOP_BANNER_INPAINT_RADIUS: int = int(os.getenv("AD_FILTER_TOP_BANNER_INPAINT_RADIUS", "5"))
+# inpaint 模式：文字掩码膨胀核大小（覆盖白字黑描边）
+TOP_BANNER_TEXT_DILATE: int = int(os.getenv("AD_FILTER_TOP_BANNER_TEXT_DILATE", "9"))

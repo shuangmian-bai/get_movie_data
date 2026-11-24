@@ -104,8 +104,8 @@ ad_filter/
 
 1. 检测器只在顶部条带（默认画面高度 12%）内 OCR，命中违规词即判 `watermark`；
 2. 条带高度取命中文字最低点 + 边距（跑马灯只改 x 不改 y），返回**整条**作为处理区域；
-3. 去除器默认 `crop`：裁掉条带后缩放回原尺寸，广告彻底消失、画面轻微纵向拉伸；
-   也可配置 `blur`（模糊，保留构图但有残影）或 `black`（纯色填充）。
+3. 去除器默认 `inpaint`：用周边内容修复**文字像素**，画面完整、不裁剪不模糊；
+   也可配置 `crop`（裁切）、`blur`（模糊）、`black`（纯色填充）。
 
 > 去除器实现约束（实测 av 12.3.0）：同一容器 `decode()` 后再 `demux()` 会在关闭时段错误，
 > 因此视频/音频用两个输入容器；先写完视频包再写音频包会让 MPEG-TS 时间戳乱序、
@@ -130,8 +130,10 @@ ad_filter/
 | `AD_FILTER_TOP_BANNER_FRAME_COUNT` | `5` | 顶部条带抽帧数 |
 | `AD_FILTER_TOP_BANNER_HIT_RATIO` | `0.5` | 顶部条幅命中帧占比阈值 |
 | `AD_FILTER_TOP_BANNER_BLOCKWORDS` | `澳门,威尼斯人,116.am,新葡京,博彩,娱乐城,独家赞助` | 顶部条幅违规词表 |
-| `AD_FILTER_TOP_BANNER_REMOVE_MODE` | `crop` | 去除模式：crop / blur / black |
+| `AD_FILTER_TOP_BANNER_REMOVE_MODE` | `inpaint` | 去除模式：inpaint（画面完整）/ crop / blur / black |
 | `AD_FILTER_TOP_BANNER_BLUR_STRENGTH` | `0.5` | blur 模式核大小系数（×条带高度） |
+| `AD_FILTER_TOP_BANNER_INPAINT_RADIUS` | `5` | inpaint 修复邻域半径（opencv Telea） |
+| `AD_FILTER_TOP_BANNER_TEXT_DILATE` | `9` | inpaint 文字掩码膨胀核（覆盖白字黑描边） |
 | `AD_FILTER_HTTP_TIMEOUT` / `AD_FILTER_HTTP_TRUST_ENV` | `15` / `1` | HTTP 超时 / 是否自动检测系统代理 |
 | `AD_FILTER_HTTP_PROXY` | `""`（空） | 显式代理地址（http/https/socks5），空则自动检测系统代理 |
 

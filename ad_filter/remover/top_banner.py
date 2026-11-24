@@ -1,11 +1,12 @@
 """顶部条幅广告去除器
 
 配合 ``TopBannerDetector``：对检测器给出的顶部条带逐帧处理，再用 PyAV 重编码写回
-（视频重编码 + 音频 copy）。三种模式：
+（视频重编码 + 音频 copy）。四种模式：
 
-- ``blur``（默认）：高斯模糊顶部条带，不改变画面构图，广告文字糊掉；
-- ``black``：纯色填充顶部条带，最彻底但视觉上是黑色硬边；
-- ``crop``：裁掉顶部条带后缩放回原尺寸，广告彻底消失，画面轻微纵向拉伸。
+- ``inpaint``（默认）：用周边内容修复**文字像素**，画面完整、不裁剪不模糊；
+- ``crop``：裁掉顶部条带后缩放回原尺寸，广告彻底消失，画面轻微纵向拉伸；
+- ``blur``：高斯模糊顶部条带，保留构图但有残影；
+- ``black``：纯色填充顶部条带，最彻底但视觉上是黑色硬边。
 
 工程约束（实测 av 12.3.0）：
 
@@ -152,8 +153,29 @@ class TopBannerRemover(Remover):
             region = img[y1:y2, x1:x2]
             if self.mode == "black":
                 img[y1:y2, x1:x2] = 0
+            elif self.mode == "inpaint":
+                # 只把文字像素用周边内容修复：画面完整、不裁不糊
+                mask = self._text_mask(region)
+                if mask is not None and int(mask.sum()) > 0:
+                    img[y1:y2, x1:x2] = cv2.inpaint(
+                        region, mask, config.TOP_BANNER_INPAINT_RADIUS, cv2.INPAINT_TELEA
+                    )
             else:
                 # blur：核大小随区域高度自适应，保证奇数且不小于 21
                 k = max(21, int((y2 - y1) * self.blur_strength) | 1)
                 img[y1:y2, x1:x2] = cv2.GaussianBlur(region, (k, k), 0)
         return img
+
+    def _text_mask(self, region: np.ndarray) -> np.ndarray:
+        """从顶部条带提取广告文字掩码：白字（高亮低饱和）+ 红字（红色区间），
+        再膨胀覆盖白字黑描边。背景大面积高亮/红色可能被纳入，但 inpaint 后仍自然。"""
+        hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        white = ((v > 200) & (s < 90)).astype(np.uint8) * 255
+        red = (((h < 12) | (h > 168)) & (s > 120) & (v > 120)).astype(np.uint8) * 255
+        mask = cv2.bitwise_or(white, red)
+        k = max(3, int(config.TOP_BANNER_TEXT_DILATE) | 1)
+        mask = cv2.dilate(
+            mask, cv2.getStructuringElement(cv2.MORPH_RECT, (k, k)), iterations=2
+        )
+        return mask
