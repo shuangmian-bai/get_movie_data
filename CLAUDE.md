@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **文档同步**：功能或架构变化后，及时同步更新相关 `.md` 文档。
 4. **低耦合 + 应用层汇总**：功能要可复用；各功能模块之间不互相直接调用，统一在应用层（`main.py`）编排汇总。
 5. **模块化 + 模块级文档**：每个模块目录附带一个 `.md`，描述该模块的用途与用法；需要了解模块时优先读其 md，而不是通读源码，以减少上下文压力。
-6. **禁止 git 操作**：Claude 无权也不应执行任何 git 操作（`commit`/`add`/`restore`/`branch` 等），版本管理一律由用户自行处理，不代劳。
+6. **Git 操作遵循 skills 分层授权**：改代码走分支（建分支与分支内提交直接做，分支内随时提交）；合并到主分支、推送远端、PR、仓库设置等动作先报告拿授权，授权按次给。规范见 `/mnt/4t/skills/project-conventions/references/12-Git协作与远端申请.md`。
 
 ## 项目概览
 
