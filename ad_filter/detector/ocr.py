@@ -126,7 +126,7 @@ class OcrDetector(Detector):
         digest = hashlib.md5(
             "|".join(sorted(self.blockwords)).encode("utf-8")
         ).hexdigest()[:12]
-        return f"{self.name}:{digest}:{self.frame_count}:{self.score_threshold}"
+        return f"{self.name}:{digest}:{self.frame_count}:{self.score_threshold}:frames=pyav"
 
     async def detect(self, segment_path: str, segment_url: str) -> DetectionResult:
         """抽帧 + OCR 分类。任何异常一律放行（none），绝不阻断链路。"""
