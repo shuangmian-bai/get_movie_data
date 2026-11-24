@@ -305,16 +305,18 @@ async def handle_segment(
     return result
 
 
-# 预取任务（避免同一分片重复排队）与并发闸门
+# 预取任务（避免同一分片重复排队）
 _prefetch_tasks: Dict[str, asyncio.Task] = {}
-_prefetch_sem: Optional[asyncio.Semaphore] = None
+
+# 全局分片处理闸门：主请求与预取共享，防止并发处理打满 CPU
+_process_sem: Optional[asyncio.Semaphore] = None
 
 
-def _get_prefetch_sem() -> asyncio.Semaphore:
-    global _prefetch_sem
-    if _prefetch_sem is None:
-        _prefetch_sem = asyncio.Semaphore(config.PREFETCH_CONCURRENCY)
-    return _prefetch_sem
+def _get_process_sem() -> asyncio.Semaphore:
+    global _process_sem
+    if _process_sem is None:
+        _process_sem = asyncio.Semaphore(max(1, config.SEGMENT_CONCURRENCY))
+    return _process_sem
 
 
 def _schedule_prefetch(sid: str, current_name: str, detectors: List, remover) -> None:
@@ -341,19 +343,28 @@ def _schedule_prefetch(sid: str, current_name: str, detectors: List, remover) ->
 
 
 async def _prefetch_one(sid: str, name: str, detectors: List, remover) -> None:
-    """后台预取单个分片（受并发闸门限制，失败静默）。"""
-    sem = _get_prefetch_sem()
-    async with sem:
-        try:
-            await handle_segment(sid, name, detectors, remover, prefetch=True)
-        except Exception as exc:  # noqa: BLE001 - 预取失败不影响播放
-            logger.debug("预取失败 %s：%s", name, exc)
+    """后台预取单个分片（受全局处理闸门限制，失败静默）。"""
+    try:
+        await handle_segment(sid, name, detectors, remover, prefetch=True)
+    except Exception as exc:  # noqa: BLE001 - 预取失败不影响播放
+        logger.debug("预取失败 %s：%s", name, exc)
 
 
 async def _process_segment(
     seg: _Segment, headers: Dict[str, str], detectors: List, remover, cdir: str
 ) -> Tuple[str, Optional[str]]:
-    """下载 → 检测 → 按类型处理 → 写分片缓存。失败降级代理。"""
+    """下载 → 检测 → 按类型处理 → 写分片缓存。失败降级代理。
+
+    全局处理闸门（SEGMENT_CONCURRENCY）限制同时处理的分片数：多用户/爬虫并发
+    播放时即使请求量很大，也只会排队，不会把 CPU/内存打满导致整机卡死。
+    """
+    async with _get_process_sem():
+        return await _process_segment_inner(seg, headers, detectors, remover, cdir)
+
+
+async def _process_segment_inner(
+    seg: _Segment, headers: Dict[str, str], detectors: List, remover, cdir: str
+) -> Tuple[str, Optional[str]]:
     client = _get_client()
     os.makedirs(cdir, exist_ok=True)
     suffix = os.path.splitext(seg.name)[1] or ".ts"
