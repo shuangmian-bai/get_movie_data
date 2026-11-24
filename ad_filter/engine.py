@@ -60,6 +60,7 @@ class _Session:
     sid: str
     segments: List[_Segment]
     headers: Dict[str, str]
+    position: int = 0  # 播放位置（当前分片索引），由前端进度上报驱动预取
 
 
 # 会话缓存（重启后靠 meta.json 重建）
@@ -134,27 +135,33 @@ async def _get_seg_lock(key: str) -> asyncio.Lock:
         return lock
 
 
-def blank_ts_path() -> str:
-    """生成（并缓存）一段极短空白 ts：全广告分片用它占位，播放器无缝跳过。
+def blank_ts_path(width: int = 0, height: int = 0) -> str:
+    """生成（并缓存）与主视频同分辨率的 1 帧黑帧 ts。
 
-    相比返回 204，部分 HLS 播放器会把 204 当加载错误；给一段 0.1s 黑帧更稳。
+    full（整屏广告）分片用它占位：**分辨率与主视频一致**，播放器不会因尺寸变化
+    重建解码器；1 帧（约 0.04 秒）视觉上几乎无感。首次播放兜底用；
+    已检测出 full 的分片在 playlist 渲染时会被直接移除（见 render_playlist）。
     """
-    global _blank_path
-    if _blank_path and os.path.exists(_blank_path):
-        return _blank_path
-    import av  # 按需导入，避免无 av 时影响模块加载
+    w = max(2, int(width or 320))
+    h = max(2, int(height or 180))
+    # 编码要求宽高为偶数
+    w -= w % 2
+    h -= h % 2
+    path = os.path.join(config.OUTPUT_ROOT, f"_blank_{w}x{h}.ts")
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        return path
+    import av  # 按需导入
     import numpy as np
 
     av.logging.set_level(av.logging.ERROR)
     os.makedirs(config.OUTPUT_ROOT, exist_ok=True)
-    path = os.path.join(config.OUTPUT_ROOT, "_blank.ts")
     out = av.open(path, "w", format="mpegts")
     try:
         stream = out.add_stream("libx264", rate=25)
-        stream.width, stream.height, stream.pix_fmt = 320, 180, "yuv420p"
-        stream.options = {"preset": "ultrafast", "crf": "51"}
+        stream.width, stream.height, stream.pix_fmt = w, h, "yuv420p"
+        stream.options = {"preset": "ultrafast", "crf": "51", "tune": "zerolatency"}
         frame = av.VideoFrame.from_ndarray(
-            np.zeros((180, 320, 3), dtype=np.uint8), format="bgr24"
+            np.zeros((h, w, 3), dtype=np.uint8), format="bgr24"
         )
         frame.pts = 0
         for packet in stream.encode(frame):
@@ -163,8 +170,100 @@ def blank_ts_path() -> str:
             out.mux(packet)
     finally:
         out.close()
-    _blank_path = path
     return path
+
+
+def _probe_video_size(segment_path: str) -> Tuple[int, int]:
+    """探测分片宽高（失败返回 0,0）。"""
+    try:
+        import av
+
+        av.logging.set_level(av.logging.ERROR)
+        with av.open(segment_path) as c:
+            st = c.streams.video[0]
+            return int(st.width or 0), int(st.height or 0)
+    except Exception:  # noqa: BLE001
+        return 0, 0
+
+
+def skip_stats(sid: str, detectors: List) -> Optional[dict]:
+    """统计已确认的广告分片：full（整屏跳过）数量与秒数、watermark（去水印）数量。
+
+    用于前端提示「已跳过 N 段广告（X 秒）」，让用户理解进度为何前移。
+    """
+    meta = load_meta(sid)
+    if not meta:
+        return None
+    total = int(meta.get("total", 0))
+    full = 0
+    full_seconds = 0.0
+    watermark = 0
+    for item in meta.get("segments") or []:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url", "")
+        if not url:
+            continue
+        cached = _read_result(segment_cache_dir(segment_cache_key(url, detectors)))
+        if cached is None:
+            continue
+        if cached[0] == "full":
+            full += 1
+            full_seconds += _extinf_seconds(list(item.get("tags") or []))
+        elif cached[0] == "watermark":
+            watermark += 1
+    return {
+        "total": total,
+        "full": full,
+        "full_seconds": round(full_seconds, 1),
+        "watermark": watermark,
+    }
+
+
+def render_playlist(sid: str, detectors: List) -> Optional[str]:
+    """按当前缓存状态渲染 playlist：已确认 full（整屏广告）的分片直接移除。
+
+    首次播放时多数分片还没检测，playlist 含全部分片（播放到广告片由端点兜底）；
+    第二次播放（或后台推进检测完成后）再请求，广告分片已被剔除，播放器直接跳过，
+    没有黑帧、没有时间轴跳变。
+    """
+    meta = load_meta(sid)
+    if not meta:
+        return None
+    raw = meta.get("segments") or []
+    header_lines: List[str] = []
+    # 保留原 m3u8 头（EXT-X-VERSION/TARGETDURATION 等），从旧 index 里取；取不到用默认
+    index = os.path.join(sid_dir(sid), "index.m3u8")
+    try:
+        with open(index, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line.startswith("#EXT-X-ENDLIST"):
+                    break
+                if line.startswith("#EXTINF") or line.startswith("segment/"):
+                    break
+                header_lines.append(line)
+    except OSError:
+        header_lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-PLAYLIST-TYPE:VOD"]
+
+    out_lines = list(header_lines)
+    # 去掉可能重复的 PLAYLIST-TYPE（保留一份）
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name", "")
+        url = item.get("url", "")
+        tags = list(item.get("tags") or [])
+        if not name or not url:
+            continue
+        key = segment_cache_key(url, detectors)
+        cached = _read_result(segment_cache_dir(key))
+        if cached is not None and cached[0] == "full":
+            continue  # 已确认整屏广告：从 playlist 移除
+        out_lines.extend(tags)
+        out_lines.append(f"segment/{name}")
+    out_lines.append("#EXT-X-ENDLIST")
+    return "".join(line + "\n" for line in out_lines)
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +389,10 @@ async def handle_segment(
     cached = _read_result(cdir)
     if cached is not None:
         if not prefetch:
-            _schedule_prefetch(sid, name, detectors, remover)
+            idx = _index_of(sess, name)
+            if idx is not None and sess.position < idx:
+                sess.position = idx
+            ensure_advance(sid, detectors, remover)
         return cached
 
     lock = await _get_seg_lock(key)
@@ -301,7 +403,10 @@ async def handle_segment(
         else:
             result = await _process_segment(seg, sess.headers, detectors, remover, cdir)
     if not prefetch:
-        _schedule_prefetch(sid, name, detectors, remover)
+        idx = _index_of(sess, name)
+        if idx is not None and sess.position < idx:
+            sess.position = idx  # 用户直接拉到这里：从该片往后推进
+        ensure_advance(sid, detectors, remover)
     return result
 
 
@@ -319,35 +424,138 @@ def _get_process_sem() -> asyncio.Semaphore:
     return _process_sem
 
 
-def _schedule_prefetch(sid: str, current_name: str, detectors: List, remover) -> None:
-    """播放到某分片时，后台预取其后 lookahead 个分片（让播放跟上，减少卡顿）。"""
-    sess = _sessions.get(sid)
-    if sess is None or config.PREFETCH_LOOKAHEAD <= 0:
-        return
-    names = [s.name for s in sess.segments]
-    try:
-        idx = names.index(current_name)
-    except ValueError:
-        return
-    # 顺手清理已完成任务，避免字典无限增长
-    for key in [k for k, t in _prefetch_tasks.items() if t.done()]:
-        _prefetch_tasks.pop(key, None)
-    for nxt in names[idx + 1 : idx + 1 + config.PREFETCH_LOOKAHEAD]:
-        task_key = f"{sid}:{nxt}"
-        existing = _prefetch_tasks.get(task_key)
-        if existing is not None and not existing.done():
-            continue
-        _prefetch_tasks[task_key] = asyncio.create_task(
-            _prefetch_one(sid, nxt, detectors, remover)
-        )
-
-
 async def _prefetch_one(sid: str, name: str, detectors: List, remover) -> None:
     """后台预取单个分片（受全局处理闸门限制，失败静默）。"""
     try:
         await handle_segment(sid, name, detectors, remover, prefetch=True)
     except Exception as exc:  # noqa: BLE001 - 预取失败不影响播放
         logger.debug("预取失败 %s：%s", name, exc)
+
+
+def _extinf_seconds(tags: List[str]) -> float:
+    """从分片标签里解析 #EXTINF 时长（秒），解析不到按 4 秒估算。"""
+    for tag in tags:
+        if tag.startswith("#EXTINF:"):
+            try:
+                return float(tag.split(":", 1)[1].split(",", 1)[0])
+            except (ValueError, IndexError):
+                return 4.0
+    return 4.0
+
+
+def segment_index_by_time(sess: _Session, seconds: float) -> int:
+    """把播放时间（秒）换算成分片索引（按 #EXTINF 累计时长）。"""
+    if not sess.segments:
+        return 0
+    t = 0.0
+    for idx, seg in enumerate(sess.segments):
+        dur = _extinf_seconds(seg.tags)
+        if seconds < t + dur:
+            return idx
+        t += dur
+    return len(sess.segments) - 1
+
+
+def _index_of(sess: _Session, name: str) -> Optional[int]:
+    return next((i for i, s in enumerate(sess.segments) if s.name == name), None)
+
+
+_advance_tasks: Dict[str, asyncio.Task] = {}
+
+# 会话最后心跳时间（WS 保活）；长时间无心跳视为用户已离开
+_last_seen: Dict[str, float] = {}
+
+
+def touch(sid: str) -> None:
+    """刷新会话心跳时间。"""
+    _last_seen[sid] = time.time()
+
+
+def is_alive(sid: str, timeout: float = 30.0) -> bool:
+    """最近 timeout 秒内是否有心跳。"""
+    return (time.time() - _last_seen.get(sid, 0.0)) < timeout
+
+
+def cancel_advance(sid: str) -> None:
+    """取消该会话的后台推进任务（用户离开/心跳超时）。"""
+    task = _advance_tasks.pop(sid, None)
+    if task is not None and not task.done():
+        task.cancel()
+    _last_seen.pop(sid, None)
+    logger.info("会话 %s 停止后台处理（无用户心跳）", sid)
+
+
+def ensure_advance(sid: str, detectors: List, remover) -> None:
+    """确保该会话有一个“从当前播放位置继续往后处理”的后台任务。"""
+    task = _advance_tasks.get(sid)
+    if task is not None and not task.done():
+        return
+    _advance_tasks[sid] = asyncio.create_task(_advance_loop(sid, detectors, remover))
+
+
+async def _advance_loop(sid: str, detectors: List, remover) -> None:
+    """持续从会话位置往后处理，直到末尾。
+
+    用户播到哪，后台就从哪往后逐片处理（不拉进度条就一路处理到底）；
+    seek 时 set_position 更新位置，循环下一轮自动从新位置继续。
+    处理速度受全局闸门限制，不会打满 CPU。
+    """
+    try:
+        meta = load_meta(sid)
+        if not meta:
+            return
+        sess = await _ensure_session(sid, meta)
+        total = len(sess.segments)
+        while True:
+            # 用户已离开（心跳超时）→ 停止处理，避免浪费资源
+            if not is_alive(sid):
+                logger.info("会话 %s 心跳超时，停止推进", sid)
+                return
+            idx = sess.position
+            if idx >= total:
+                logger.info("会话 %s 已推进到末尾（%d 片）", sid, total)
+                return
+            seg = sess.segments[idx]
+            key = segment_cache_key(seg.abs_url, detectors)
+            if _read_result(segment_cache_dir(key)) is None:
+                try:
+                    await handle_segment(sid, seg.name, detectors, remover, prefetch=True)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - 单分片失败不中断推进
+                    logger.debug("推进处理失败 %s：%s", seg.name, exc)
+            # 若期间发生 seek（位置被改），按新位置继续；否则前进一格
+            if sess.position == idx:
+                sess.position = idx + 1
+            await asyncio.sleep(0.05)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("推进任务异常 %s：%s", sid, exc)
+
+
+def set_position(
+    sid: str, seconds: float, detectors: List, remover
+) -> Optional[int]:
+    """前端上报播放时间：更新位置并按 seek 优先调度预取。返回换算的分片索引。"""
+    sess = _sessions.get(sid)
+    if sess is None:
+        meta = load_meta(sid)
+        if not meta:
+            return None
+        # 同步重建（事件循环内，开销可忽略）
+        raw = meta.get("segments") or []
+        segs = []
+        for item in raw:
+            if isinstance(item, dict):
+                segs.append(_Segment(item.get("name", ""), item.get("url", ""), list(item.get("tags") or [])))
+        sess = _Session(sid=sid, segments=segs, headers=meta.get("headers") or {})
+        _sessions[sid] = sess
+    idx = segment_index_by_time(sess, max(0.0, float(seconds)))
+    sess.position = idx
+    touch(sid)
+    ensure_advance(sid, detectors, remover)
+    return idx
 
 
 async def _process_segment(
@@ -385,7 +593,8 @@ async def _process_segment_inner(
 
         if result.ad_type == "full":
             _write_result(cdir, {"ad_type": "full"})
-            return ("full", None)
+            w, h = _probe_video_size(tmp)
+            return ("full", blank_ts_path(w, h))
 
         if result.ad_type == "watermark":
             out = os.path.join(cdir, seg.name)

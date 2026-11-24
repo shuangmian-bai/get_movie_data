@@ -12,12 +12,16 @@
 站点 → 检测器/去水印器组合由应用层通过 :func:`set_pipeline_getter` 注入，
 本模块不依赖 ``main.py``（守「低耦合 + 应用层编排」）。
 """
+import asyncio
+import json
 import logging
 import os
+import time
 from typing import Callable, List, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from pydantic import BaseModel
 
 from ad_filter import config, engine, proxy
 from ad_filter.detector.ocr import OcrDetector
@@ -60,11 +64,15 @@ async def process(req: ProcessRequest):
 
 @api_router.get("/ad_filter/{sid}/index.m3u8")
 async def playlist(sid: str):
-    """处理后播放列表。"""
-    path = os.path.join(config.OUTPUT_ROOT, sid, "index.m3u8")
-    if not os.path.exists(path):
+    """处理后播放列表（按当前缓存状态渲染：已确认的整屏广告分片直接移除）。"""
+    meta = engine.load_meta(sid)
+    if not meta:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return FileResponse(path, media_type="application/vnd.apple.mpegurl")
+    detectors, _ = _resolve(meta.get("base_url", ""))
+    text = engine.render_playlist(sid, detectors)
+    if text is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return Response(content=text, media_type="application/vnd.apple.mpegurl")
 
 
 @api_router.get("/ad_filter/{sid}/segment/{name}")
@@ -86,7 +94,9 @@ async def dynamic_segment(sid: str, name: str):
 
     kind, path = result
     if kind == "full":
-        # 全广告：给一段极短空白 ts，播放器无缝跳过（比 204 兼容性好）
+        # 全广告：返回与主视频同分辨率的 1 帧黑帧（几乎无感；已确认的分片会从 playlist 移除）
+        if path and os.path.exists(path):
+            return FileResponse(path, media_type="video/mp2t")
         return FileResponse(engine.blank_ts_path(), media_type="video/mp2t")
     if kind == "watermark" and path and os.path.exists(path):
         return FileResponse(path, media_type="video/mp2t")
@@ -108,6 +118,96 @@ async def dynamic_segment(sid: str, name: str):
     return StreamingResponse(
         proxy.stream_bytes(url, meta.get("headers") or {}), media_type="video/mp2t"
     )
+
+
+class ProgressReport(BaseModel):
+    """播放进度上报：当前播放时间（秒），用于 seek 优先调度预取。"""
+
+    time: float = 0.0
+
+
+@api_router.post("/ad_filter/{sid}/progress", summary="上报播放位置")
+async def report_progress(sid: str, body: ProgressReport):
+    """前端上报播放时间：更新预取位置（seek 后立即从新位置开始预取）。"""
+    meta = engine.load_meta(sid)
+    if not meta:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    detectors, remover = _resolve(meta.get("base_url", ""))
+    idx = engine.set_position(sid, body.time, detectors, remover)
+    return {"sid": sid, "index": idx, "time": body.time}
+
+
+@api_router.websocket("/ad_filter/{sid}/ws")
+async def ad_heartbeat_ws(websocket: WebSocket, sid: str):
+    """去广告播放心跳（WebSocket）。
+
+    - 连接即视为用户在场：刷新心跳并启动/恢复后台推进；
+    - 收到 ``{"type":"progress","time":秒}`` 时更新播放位置（seek 优先）；
+    - 30 秒无消息或连接断开 → 取消该会话后台处理（避免用户关闭页面后继续耗资源）。
+    """
+    await websocket.accept()
+    meta = engine.load_meta(sid)
+    if not meta:
+        await websocket.close(code=4404)
+        return
+    detectors, remover = _resolve(meta.get("base_url", ""))
+    engine.touch(sid)
+    engine.ensure_advance(sid, detectors, remover)
+    last_stats = 0.0
+
+    async def _push_stats() -> None:
+        nonlocal last_stats
+        now = time.time()
+        if now - last_stats < 5:
+            return
+        last_stats = now
+        stats = engine.skip_stats(sid, detectors)
+        if stats is not None:
+            try:
+                await websocket.send_text(json.dumps({"type": "stats", **stats}))
+            except Exception:  # noqa: BLE001 - 连接已断
+                pass
+
+    await _push_stats()
+    try:
+        while True:
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=30)
+            except asyncio.TimeoutError:
+                # 心跳超时：用户可能已关闭页面
+                break
+            engine.touch(sid)
+            try:
+                data = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(data, dict) and data.get("type") == "progress":
+                try:
+                    engine.set_position(sid, float(data.get("time", 0)), detectors, remover)
+                except (TypeError, ValueError):
+                    pass
+            await _push_stats()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        engine.cancel_advance(sid)
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001 - 已断开
+            pass
+
+
+@api_router.get("/ad_filter/{sid}/stats", summary="广告处理统计")
+async def session_stats(sid: str):
+    """返回已确认的广告分片统计（整屏跳过数量/秒数、去水印数量）。"""
+    meta = engine.load_meta(sid)
+    if not meta:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    detectors, _ = _resolve(meta.get("base_url", ""))
+    stats = engine.skip_stats(sid, detectors)
+    if stats is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return stats
 
 
 @api_router.get("/ad_filter/{sid}/file/{name}")
