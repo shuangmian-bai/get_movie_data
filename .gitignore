@@ -8,3 +8,6 @@ __pycache__/
 *.so
 **/*.key
 **/*.crt
+
+# React 构建产物（由 react_data/get_movie_data_web 生成）
+/view/

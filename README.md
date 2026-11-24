@@ -8,7 +8,8 @@
 - 统一输出搜索结果、详情信息、分集列表和播放地址
 - 提供 `FastAPI` Web 接口，便于直接对外调用
 - 内置文件缓存，减少重复抓取
-- 提供前端静态页面加载入口
+- React 前端（源码在 `$DISK_ROOT/react_data/get_movie_data_web`，构建产物由 fastapi-ui 托管）
+- 用户投稿：数据源与广告信息（投稿进待审核队列，审核后用于扩展）
 - 插件化去广告处理（逐分片检测广告：全广告丢弃 / 水印广告去水印 / 正常分片代理）
 
 当前仓库里已经接入的示例站点包括：
@@ -29,6 +30,7 @@
 - 文件缓存与过期控制
 - 插件自动扫描与加载
 - 插件化去广告处理（ad_filter：逐分片抽帧检测，全广告丢弃 / 水印广告去水印 / 正常分片代理）
+- 用户投稿（`contribute/`）：数据源接入线索与站点广告信息，JSONL 落盘、待人工审核
 
 ## 目录导航
 
@@ -45,12 +47,16 @@
 ### 代码
 
 - `main.py`：应用入口
-- `web/`：HTTP 接口层
+- `web/`：HTTP 接口层（数据源/详情/播放）
+- `contribute/`：用户投稿（数据源 + 广告信息，JSONL 存储 + REST）
 - `media_source/`：插件框架、模型、缓存和数据源实现
 - `ad_filter/`：插件化去广告处理（逐分片检测 → 丢弃/去水印/代理 → 处理后 m3u8）
 - `vendor/fastapi-ui/`：前端静态资源加载引擎（git submodule，来自 shuangmian-bai/fastapi-ui）
-- `view/`：演示页面
-- `cache/`：统一运行时缓存目录
+- `view/`：React 构建产物（由 `react_data/get_movie_data_web` 构建输出，gitignore，不手工改）
+- `cache/`：统一运行时缓存目录（含投稿数据 `cache/contributions/`）
+
+> React 源码工程在独立工作区 `$DISK_ROOT/react_data/get_movie_data_web`（受 data-dirs.conf 管理），
+> 不在本仓库内；本仓库只保留构建产物 `view/`。
 
 ## 缓存目录约定
 
@@ -59,22 +65,31 @@
 ```
 cache/
 ├── {站点}/          # media_source 文件缓存（FileCache，按 base_url 分区，JSON）
-└── ad_filter/       # ad_filter 处理结果（处理后的 m3u8 + 去水印分片 + 会话元数据）
+├── ad_filter/       # ad_filter 处理结果（处理后的 m3u8 + 去水印分片 + 会话元数据）
+└── contributions/   # 用户投稿（sources.jsonl / ads.jsonl，追加写）
 ```
 
-- 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`AD_FILTER_OUTPUT_ROOT`（ad_filter 处理结果根目录）。
+- 各模块缓存目录均可通过环境变量覆盖：`MEDIA_SOURCE_CACHE_DIR`（media_source 文件缓存）、`AD_FILTER_OUTPUT_ROOT`（ad_filter 处理结果根目录）、`CONTRIBUTE_DIR`（投稿数据目录）。
 - **新增缓存时同样放入 `cache/` 下**，保持「所有缓存以 cache 为基础路径」这条约定。
 
 ## 环境要求
 
 - **Python 3.8+**（本项目用 pyenv 3.13.13 开发）。
 - **纯 Python 依赖**：视频处理用 PyAV（`av`，自带 ffmpeg 库）、去水印用 `opencv-python-headless`、OCR 用 `rapidocr_onnxruntime`，全部 `pip install -r requirements.txt` 即可，**无需手动安装系统 ffmpeg / tesseract / mediamtx**。
+- **前端构建**：Node.js（Vite），源码在 `$DISK_ROOT/react_data/get_movie_data_web`。
 
 ## 快速开始
 
 ```bash
 pip install -r requirements.txt
 python main.py
+```
+
+前端需先构建（产物输出到本项目 `view/`）：
+
+```bash
+cd $DISK_ROOT/react_data/get_movie_data_web
+npm install && npm run build
 ```
 
 - 默认**自动检测系统代理**（读 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` 环境变量）。
@@ -88,7 +103,8 @@ python main.py --proxy http://127.0.0.1:7890
 
 启动后可访问：
 
-- `http://127.0.0.1:8000/docs`
+- `http://127.0.0.1:9999/`（React 前端）
+- `http://127.0.0.1:9999/docs`（接口文档）
 
 ## 常用接口
 
@@ -97,6 +113,9 @@ python main.py --proxy http://127.0.0.1:7890
 - `GET /api/info?base_url=...&link=...`
 - `GET /api/play?base_url=...&link=...&episode_index=1`
 - `POST /api/ad_filter/process`（去广告处理：返回处理后 m3u8 地址）
+- `POST /api/contribute/source`（投稿数据源）
+- `POST /api/contribute/ad`（投稿广告信息）
+- `GET /api/contribute/list?type=source|ad&limit=N`（查看最近投稿）
 
 ## 开发提示
 
@@ -104,6 +123,7 @@ python main.py --proxy http://127.0.0.1:7890
 - 插件实现只负责输出原始数据
 - 字段映射、默认值和统一结构由基础类完成
 - 去广告处理由 `ad_filter/` 模块提供（opencv 抽帧 + rapidocr 检测 + opencv inpaint 去水印 + PyAV 写回），站点 → 检测器/去水印器组合在 `main.py` 的 `AD_FILTER_PIPELINES` 里编排
+- 前端源码在 `react_data/get_movie_data_web/src/features/`（搜索/详情/投稿），每个功能含 README 与出口；改动后重新 `npm run build`
 
 ## 友情链接
 
