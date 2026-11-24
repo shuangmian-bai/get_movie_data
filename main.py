@@ -73,7 +73,6 @@ mount_webui(
 
 if __name__ == "__main__":
     import argparse
-    import os
 
     parser = argparse.ArgumentParser(description="影视数据源服务")
     parser.add_argument(
@@ -83,6 +82,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--host", default="127.0.0.1", help="监听地址")
     parser.add_argument("--port", type=int, default=9999, help="监听端口")
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="开发模式：文件变更自动重载（生产不要开，重启窗口会导致反代 502）",
+    )
     args = parser.parse_args()
 
     if args.proxy:
@@ -90,4 +94,6 @@ if __name__ == "__main__":
         os.environ["MEDIA_SOURCE_HTTP_PROXY"] = args.proxy
         os.environ["AD_FILTER_HTTP_PROXY"] = args.proxy
 
-    uvicorn.run("main:app", host=args.host, port=args.port, reload=True)
+    # 热重载仅开发用：reload 会在文件变化/worker 退出时重启进程，窗口内端口无监听，
+    # nginx 反代会返回 502；生产默认关闭，需要时显式加 --reload。
+    uvicorn.run("main:app", host=args.host, port=args.port, reload=args.reload)
