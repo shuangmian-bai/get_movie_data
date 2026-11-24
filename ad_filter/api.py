@@ -19,7 +19,7 @@ import os
 from typing import Callable, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from ad_filter import config, engine, proxy
@@ -63,11 +63,15 @@ async def process(req: ProcessRequest):
 
 @api_router.get("/ad_filter/{sid}/index.m3u8")
 async def playlist(sid: str):
-    """处理后播放列表。"""
-    path = os.path.join(config.OUTPUT_ROOT, sid, "index.m3u8")
-    if not os.path.exists(path):
+    """处理后播放列表（按当前缓存状态渲染：已确认的整屏广告分片直接移除）。"""
+    meta = engine.load_meta(sid)
+    if not meta:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return FileResponse(path, media_type="application/vnd.apple.mpegurl")
+    detectors, _ = _resolve(meta.get("base_url", ""))
+    text = engine.render_playlist(sid, detectors)
+    if text is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return Response(content=text, media_type="application/vnd.apple.mpegurl")
 
 
 @api_router.get("/ad_filter/{sid}/segment/{name}")
@@ -89,7 +93,9 @@ async def dynamic_segment(sid: str, name: str):
 
     kind, path = result
     if kind == "full":
-        # 全广告：给一段极短空白 ts，播放器无缝跳过（比 204 兼容性好）
+        # 全广告：返回与主视频同分辨率的 1 帧黑帧（几乎无感；已确认的分片会从 playlist 移除）
+        if path and os.path.exists(path):
+            return FileResponse(path, media_type="video/mp2t")
         return FileResponse(engine.blank_ts_path(), media_type="video/mp2t")
     if kind == "watermark" and path and os.path.exists(path):
         return FileResponse(path, media_type="video/mp2t")

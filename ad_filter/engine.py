@@ -135,27 +135,33 @@ async def _get_seg_lock(key: str) -> asyncio.Lock:
         return lock
 
 
-def blank_ts_path() -> str:
-    """生成（并缓存）一段极短空白 ts：全广告分片用它占位，播放器无缝跳过。
+def blank_ts_path(width: int = 0, height: int = 0) -> str:
+    """生成（并缓存）与主视频同分辨率的 1 帧黑帧 ts。
 
-    相比返回 204，部分 HLS 播放器会把 204 当加载错误；给一段 0.1s 黑帧更稳。
+    full（整屏广告）分片用它占位：**分辨率与主视频一致**，播放器不会因尺寸变化
+    重建解码器；1 帧（约 0.04 秒）视觉上几乎无感。首次播放兜底用；
+    已检测出 full 的分片在 playlist 渲染时会被直接移除（见 render_playlist）。
     """
-    global _blank_path
-    if _blank_path and os.path.exists(_blank_path):
-        return _blank_path
-    import av  # 按需导入，避免无 av 时影响模块加载
+    w = max(2, int(width or 320))
+    h = max(2, int(height or 180))
+    # 编码要求宽高为偶数
+    w -= w % 2
+    h -= h % 2
+    path = os.path.join(config.OUTPUT_ROOT, f"_blank_{w}x{h}.ts")
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        return path
+    import av  # 按需导入
     import numpy as np
 
     av.logging.set_level(av.logging.ERROR)
     os.makedirs(config.OUTPUT_ROOT, exist_ok=True)
-    path = os.path.join(config.OUTPUT_ROOT, "_blank.ts")
     out = av.open(path, "w", format="mpegts")
     try:
         stream = out.add_stream("libx264", rate=25)
-        stream.width, stream.height, stream.pix_fmt = 320, 180, "yuv420p"
-        stream.options = {"preset": "ultrafast", "crf": "51"}
+        stream.width, stream.height, stream.pix_fmt = w, h, "yuv420p"
+        stream.options = {"preset": "ultrafast", "crf": "51", "tune": "zerolatency"}
         frame = av.VideoFrame.from_ndarray(
-            np.zeros((180, 320, 3), dtype=np.uint8), format="bgr24"
+            np.zeros((h, w, 3), dtype=np.uint8), format="bgr24"
         )
         frame.pts = 0
         for packet in stream.encode(frame):
@@ -164,8 +170,66 @@ def blank_ts_path() -> str:
             out.mux(packet)
     finally:
         out.close()
-    _blank_path = path
     return path
+
+
+def _probe_video_size(segment_path: str) -> Tuple[int, int]:
+    """探测分片宽高（失败返回 0,0）。"""
+    try:
+        import av
+
+        av.logging.set_level(av.logging.ERROR)
+        with av.open(segment_path) as c:
+            st = c.streams.video[0]
+            return int(st.width or 0), int(st.height or 0)
+    except Exception:  # noqa: BLE001
+        return 0, 0
+
+
+def render_playlist(sid: str, detectors: List) -> Optional[str]:
+    """按当前缓存状态渲染 playlist：已确认 full（整屏广告）的分片直接移除。
+
+    首次播放时多数分片还没检测，playlist 含全部分片（播放到广告片由端点兜底）；
+    第二次播放（或后台推进检测完成后）再请求，广告分片已被剔除，播放器直接跳过，
+    没有黑帧、没有时间轴跳变。
+    """
+    meta = load_meta(sid)
+    if not meta:
+        return None
+    raw = meta.get("segments") or []
+    header_lines: List[str] = []
+    # 保留原 m3u8 头（EXT-X-VERSION/TARGETDURATION 等），从旧 index 里取；取不到用默认
+    index = os.path.join(sid_dir(sid), "index.m3u8")
+    try:
+        with open(index, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line.startswith("#EXT-X-ENDLIST"):
+                    break
+                if line.startswith("#EXTINF") or line.startswith("segment/"):
+                    break
+                header_lines.append(line)
+    except OSError:
+        header_lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-PLAYLIST-TYPE:VOD"]
+
+    out_lines = list(header_lines)
+    # 去掉可能重复的 PLAYLIST-TYPE（保留一份）
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name", "")
+        url = item.get("url", "")
+        tags = list(item.get("tags") or [])
+        if not name or not url:
+            continue
+        key = segment_cache_key(url, detectors)
+        cached = _read_result(segment_cache_dir(key))
+        if cached is not None and cached[0] == "full":
+            continue  # 已确认整屏广告：从 playlist 移除
+        out_lines.extend(tags)
+        out_lines.append(f"segment/{name}")
+    out_lines.append("#EXT-X-ENDLIST")
+    return "".join(line + "\n" for line in out_lines)
 
 
 # ---------------------------------------------------------------------------
@@ -495,7 +559,8 @@ async def _process_segment_inner(
 
         if result.ad_type == "full":
             _write_result(cdir, {"ad_type": "full"})
-            return ("full", None)
+            w, h = _probe_video_size(tmp)
+            return ("full", blank_ts_path(w, h))
 
         if result.ad_type == "watermark":
             out = os.path.join(cdir, seg.name)
