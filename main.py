@@ -17,6 +17,7 @@ from fastapi import FastAPI
 
 from ad_filter import api as ad_api
 from ad_filter import close_proxy
+from ad_filter.detector.full_ad import FullAdDetector
 from ad_filter.detector.ocr import OcrDetector
 from ad_filter.detector.top_banner import TopBannerDetector
 from ad_filter.remover.delogo import DelogoRemover
@@ -41,7 +42,11 @@ from fastapi_ui import mount_webui, view_dir_of  # noqa: E402  # 依赖上面的
 AD_FILTER_PIPELINES: Dict[str, Tuple[List, object]] = {
     "https://www.cupfox7.com": ([OcrDetector()], DelogoRemover()),
     "https://www.qqll.cc": ([OcrDetector()], DelogoRemover()),
-    "https://1080zyk6.com": ([TopBannerDetector()], TopBannerRemover()),
+    # 1080zyk6：整屏广告（帧帧广告）先判 full 丢弃，顶部条幅再判 watermark 去水印
+    "https://1080zyk6.com": (
+        [FullAdDetector(), TopBannerDetector()],
+        TopBannerRemover(),
+    ),
 }
 AD_FILTER_DEFAULT: Tuple[List, object] = ([OcrDetector()], DelogoRemover())
 
