@@ -17,7 +17,9 @@ from fastapi import FastAPI
 from ad_filter import api as ad_api
 from ad_filter import close_proxy
 from ad_filter.detector.ocr import OcrDetector
+from ad_filter.detector.top_banner import TopBannerDetector
 from ad_filter.remover.delogo import DelogoRemover
+from ad_filter.remover.top_banner import TopBannerRemover
 from web import api_router
 
 # ---- 前端加载引擎（fastapi-ui，git submodule 引入）----
@@ -33,9 +35,11 @@ from fastapi_ui import mount_webui, view_dir_of  # noqa: E402  # 依赖上面的
 
 # ---- 去广告处理自由组合（base_url → 检测器列表 + 去水印器）----
 # 不同资源广告形式/内容不同，站点 → 去广告插件组合在此编排；未匹配走默认（OCR + delogo）。
+# 优质资源库（1080zyk6）：广告是顶部弹幕/跑马灯/静态赞助条 → 顶部条带检测 + 条带清除。
 AD_FILTER_PIPELINES: Dict[str, Tuple[List, object]] = {
     "https://www.cupfox7.com": ([OcrDetector()], DelogoRemover()),
     "https://www.qqll.cc": ([OcrDetector()], DelogoRemover()),
+    "https://1080zyk6.com": ([TopBannerDetector()], TopBannerRemover()),
 }
 AD_FILTER_DEFAULT: Tuple[List, object] = ([OcrDetector()], DelogoRemover())
 

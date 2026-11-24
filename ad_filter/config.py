@@ -63,3 +63,23 @@ FULL_FRAME_RATIO: float = float(os.getenv("AD_FILTER_FULL_FRAME_RATIO", "0.6"))
 FULL_AREA_RATIO: float = float(os.getenv("AD_FILTER_FULL_AREA_RATIO", "0.3"))
 # 水印区域向外扩展的边距（像素），避免 inpaint 遮不完整
 WATERMARK_MARGIN: int = int(os.getenv("AD_FILTER_WATERMARK_MARGIN", "10"))
+
+# ---- 顶部条幅广告（弹幕 / 跑马灯 / 静态赞助条）----
+
+# 顶部条带高度占画面高度的比例（1280x720 下 0.12 约 86px，覆盖 y=15~55 的广告文字）
+TOP_BANNER_RATIO: float = float(os.getenv("AD_FILTER_TOP_BANNER_RATIO", "0.12"))
+# 每个分片抽帧数（顶部条带 OCR）
+TOP_BANNER_FRAME_COUNT: int = int(os.getenv("AD_FILTER_TOP_BANNER_FRAME_COUNT", "5"))
+# 命中帧占比阈值：达到即判为水印广告（顶部条带）
+TOP_BANNER_HIT_RATIO: float = float(os.getenv("AD_FILTER_TOP_BANNER_HIT_RATIO", "0.5"))
+# 顶部条幅违规词表（逗号分隔；专指顶部赞助/博彩类文字，与全屏 OCR 词表分开）
+TOP_BANNER_BLOCKWORDS: str = os.getenv(
+    "AD_FILTER_TOP_BANNER_BLOCKWORDS",
+    "澳门,威尼斯人,116.am,新葡京,博彩,娱乐城,独家赞助",
+)
+# 顶部条幅去除模式：crop（裁掉后缩放，广告彻底消失，默认）/ blur（高斯模糊）/ black（纯色填充）
+TOP_BANNER_REMOVE_MODE: str = os.getenv("AD_FILTER_TOP_BANNER_REMOVE_MODE", "crop")
+# 模糊强度：核大小 = 条带高度 * 该系数（取奇数，最小 21）
+TOP_BANNER_BLUR_STRENGTH: float = float(
+    os.getenv("AD_FILTER_TOP_BANNER_BLUR_STRENGTH", "0.5")
+)

@@ -48,10 +48,12 @@ ad_filter/
 ├── DESIGN.md            # 按需去广告调度设计（快速起播 / seek 优先 / 分片级复用，待实现）
 ├── detector/            # 检测器插件子包
 │   ├── base.py          # Detector 抽象基类（detect() + fingerprint()）
-│   └── ocr.py           # OcrDetector（opencv 抽帧 + rapidocr + 分类 + 水印坐标）
+│   ├── ocr.py           # OcrDetector（opencv 抽帧 + rapidocr + 分类 + 水印坐标）
+│   └── top_banner.py    # TopBannerDetector（顶部条带 OCR，弹幕/跑马灯/静态条）
 ├── remover/             # 去水印插件子包
 │   ├── base.py          # Remover 抽象基类（remove()）
-│   └── delogo.py        # DelogoRemover（opencv inpaint + PyAV 写回 .ts）
+│   ├── delogo.py        # DelogoRemover（opencv inpaint + PyAV 写回 .ts）
+│   └── top_banner.py    # TopBannerRemover（顶部条带 crop/blur/black）
 ├── proxy.py             # 上游 TS 代理（httpx 流式转发 + 防盗链头）
 ├── engine.py            # 编排引擎（process 主流程 + sid 幂等复用）
 └── api.py               # FastAPI 路由
@@ -69,9 +71,11 @@ ad_filter/
 ## 插件化
 
 - **`Detector`（检测器）**：`detect(segment_path, segment_url) -> DetectionResult`，
-  判定 `none` / `full` / `watermark` 并给出水印区域。内置 `OcrDetector`。
+  判定 `none` / `full` / `watermark` 并给出水印区域。内置 `OcrDetector`（全帧 OCR）
+  与 `TopBannerDetector`（顶部条带 OCR，专治弹幕/跑马灯/静态赞助条）。
 - **`Remover`（去水印器）**：`remove(segment_path, boxes, out_path) -> str`，
-  输出处理后的分片。内置 `DelogoRemover`。
+  输出处理后的分片。内置 `DelogoRemover`（inpaint 去水印）与 `TopBannerRemover`
+  （顶部条带 crop/blur/black）。
 
 不同资源有不同的广告形式与内容，站点 → 插件组合关系在应用层 `main.py` 的
 `AD_FILTER_PIPELINES` 里编排（`base_url → (检测器列表, 去水印器)`），并经
@@ -92,6 +96,21 @@ ad_filter/
 再用 PyAV 重编码写回 .ts（视频重编码 + 音频 copy）。inpaint 是通用「去水印」近似
 （非还原原画），作为内置实现，可替换为其它去水印算法。
 
+### 顶部条幅广告（弹幕/跑马灯/静态赞助条）
+
+以优质资源库（1080zyk6.com）为例：广告文字固定在画面顶部条带内，有静态居中
+（「本节目由 XX 独家赞助播出」）与从右向左滚动两种。组合为
+`TopBannerDetector` + `TopBannerRemover`：
+
+1. 检测器只在顶部条带（默认画面高度 12%）内 OCR，命中违规词即判 `watermark`；
+2. 条带高度取命中文字最低点 + 边距（跑马灯只改 x 不改 y），返回**整条**作为处理区域；
+3. 去除器默认 `crop`：裁掉条带后缩放回原尺寸，广告彻底消失、画面轻微纵向拉伸；
+   也可配置 `blur`（模糊，保留构图但有残影）或 `black`（纯色填充）。
+
+> 去除器实现约束（实测 av 12.3.0）：同一容器 `decode()` 后再 `demux()` 会在关闭时段错误，
+> 因此视频/音频用两个输入容器；先写完视频包再写音频包会让 MPEG-TS 时间戳乱序、
+> 产物不可解码，因此音视频包按秒级 dts 交错 mux。
+
 ## 配置项（环境变量）
 
 | 变量 | 默认值 | 说明 |
@@ -107,6 +126,12 @@ ad_filter/
 | `AD_FILTER_FULL_FRAME_RATIO` | `0.6` | 全广告判定：命中帧占比阈值 |
 | `AD_FILTER_FULL_AREA_RATIO` | `0.3` | 全广告判定：命中区域面积占比阈值 |
 | `AD_FILTER_WATERMARK_MARGIN` | `10` | 水印区域向外扩展边距（像素） |
+| `AD_FILTER_TOP_BANNER_RATIO` | `0.12` | 顶部条带高度占画面比例 |
+| `AD_FILTER_TOP_BANNER_FRAME_COUNT` | `5` | 顶部条带抽帧数 |
+| `AD_FILTER_TOP_BANNER_HIT_RATIO` | `0.5` | 顶部条幅命中帧占比阈值 |
+| `AD_FILTER_TOP_BANNER_BLOCKWORDS` | `澳门,威尼斯人,116.am,新葡京,博彩,娱乐城,独家赞助` | 顶部条幅违规词表 |
+| `AD_FILTER_TOP_BANNER_REMOVE_MODE` | `crop` | 去除模式：crop / blur / black |
+| `AD_FILTER_TOP_BANNER_BLUR_STRENGTH` | `0.5` | blur 模式核大小系数（×条带高度） |
 | `AD_FILTER_HTTP_TIMEOUT` / `AD_FILTER_HTTP_TRUST_ENV` | `15` / `1` | HTTP 超时 / 是否自动检测系统代理 |
 | `AD_FILTER_HTTP_PROXY` | `""`（空） | 显式代理地址（http/https/socks5），空则自动检测系统代理 |
 
