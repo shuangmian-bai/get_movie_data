@@ -14,17 +14,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **文档同步**：功能或架构变化后，及时同步更新相关 `.md` 文档。
 4. **低耦合 + 应用层汇总**：功能要可复用；各功能模块之间不互相直接调用，统一在应用层（`main.py`）编排汇总。
 5. **模块化 + 模块级文档**：每个模块目录附带一个 `.md`，描述该模块的用途与用法；需要了解模块时优先读其 md，而不是通读源码，以减少上下文压力。
-6. **禁止 git 操作**：Claude 无权也不应执行任何 git 操作（`commit`/`add`/`restore`/`branch` 等），版本管理一律由用户自行处理，不代劳。
+6. **Git 操作遵循 skills 分层授权**：改代码走分支（建分支与分支内提交直接做，分支内随时提交）；合并到主分支、推送远端、PR、仓库设置等动作先报告拿授权，授权按次给。规范见 `/mnt/4t/skills/project-conventions/references/12-Git协作与远端申请.md`。
 
 ## 项目概览
 
 一个 FastAPI Web 应用，对外暴露**插件化多源影视数据源模块**（`media_source/`）。每个已接入站点（茶杯狐 / cupfox7.com、奇奇影视 / qqll.cc）都是独立 Python 包，实现三段链路：关键词搜索 → 详情获取 → 分集播放地址（m3u8/mp4）。
 
-- `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 去广告路由 + 前端加载中间件。
+- `main.py` — 应用入口（应用层），编排各模块：挂载 `web` 路由 + 去广告路由 + 前端加载引擎（fastapi-ui）。
 - `web/` — Web 服务模块（属应用层：REST API sources/search/info/play + `frontend/` 前端资源）。
 - `media_source/` — 可复用的插件框架 + 站点插件 + 文件缓存。
 - `ad_filter/` — 插件化去广告处理模块（逐分片抽帧检测广告：全广告丢弃 / 水印广告去水印 / 正常分片代理，产出处理后 m3u8）。
-- `frontend_loader/` — 前端静态资源加载引擎（默认从 `web/frontend/` 提供文件）。
+- `vendor/fastapi-ui/` — 前端加载引擎（git submodule，来自 `shuangmian-bai/fastapi-ui`；因包声明 requires-python>=3.9 而本项目为 3.8，不走 pip 安装，由 `main.py` 直引其 `src/` 目录）。
 - `requirements.txt` — 运行依赖（`media_source` 数据源 + FastAPI Web 服务 + PyAV/opencv/rapidocr）。
 
 ## 常用命令
@@ -33,7 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 安装运行依赖（含视频处理 / OCR，全 pip 安装，无需系统 ffmpeg / tesseract）
 pip install -r requirements.txt
 
-# 启动 Web 服务（uvicorn，热重载；前端由 frontend_loader 从 web/frontend/ 提供）
+# 启动 Web 服务（uvicorn，热重载；前端由 fastapi-ui 从 web/frontend/ 提供）
 python main.py
 # 需要显式代理时：python main.py --proxy http://127.0.0.1:7890
 # 默认自动检测系统代理（HTTP_PROXY/HTTPS_PROXY/ALL_PROXY）；显式代理（MEDIA_SOURCE_HTTP_PROXY / AD_FILTER_HTTP_PROXY）优先

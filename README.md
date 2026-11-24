@@ -34,6 +34,7 @@
 
 ### 文档
 
+- [系统整体设计（多源接入 + 去广告引擎 + 缓存机制）](./docs/整体设计.md)
 - [媒体数据源模块说明](./media_source/README.md)
 - [缓存模块说明](./media_source/cache.md)
 - [插件开发指南](./media_source/docs/PLUGIN_DEV_GUIDE.md)
@@ -47,7 +48,7 @@
 - `web/`：HTTP 接口层
 - `media_source/`：插件框架、模型、缓存和数据源实现
 - `ad_filter/`：插件化去广告处理（逐分片检测 → 丢弃/去水印/代理 → 处理后 m3u8）
-- `frontend_loader/`：前端静态资源加载中间件
+- `vendor/fastapi-ui/`：前端静态资源加载引擎（git submodule，来自 shuangmian-bai/fastapi-ui）
 - `view/`：演示页面
 - `cache/`：统一运行时缓存目录
 

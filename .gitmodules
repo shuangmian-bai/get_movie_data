@@ -1,0 +1,3 @@
+[submodule "vendor/fastapi-ui"]
+	path = vendor/fastapi-ui
+	url = https://github.com/shuangmian-bai/fastapi-ui.git

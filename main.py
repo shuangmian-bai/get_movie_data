@@ -6,6 +6,8 @@
 去广告规则是系统内部知识：此处按 ``base_url`` 把站点映射到「检测器 + 去水印器」组合，
 调用方只传 ``base_url`` 与源，无需关心检测/去水印细节。
 """
+import os
+import sys
 from contextlib import asynccontextmanager
 from typing import Dict, List, Tuple
 
@@ -16,8 +18,18 @@ from ad_filter import api as ad_api
 from ad_filter import close_proxy
 from ad_filter.detector.ocr import OcrDetector
 from ad_filter.remover.delogo import DelogoRemover
-from frontend_loader import FrontendStaticLoader
 from web import api_router
+
+# ---- 前端加载引擎（fastapi-ui，git submodule 引入）----
+# 包声明 requires-python>=3.9，而本项目运行环境为 Python 3.8，pip 安装会被元数据检查拒绝；
+# 源码实测在 3.8 可正常导入（类型注解全部惰性化），故按子模块方式直引 src 目录，不走安装。
+_VENDOR_UI_SRC = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "vendor", "fastapi-ui", "src"
+)
+if _VENDOR_UI_SRC not in sys.path:
+    sys.path.insert(0, _VENDOR_UI_SRC)
+
+from fastapi_ui import mount_webui, view_dir_of  # noqa: E402  # 依赖上面的 sys.path 注入
 
 # ---- 去广告处理自由组合（base_url → 检测器列表 + 去水印器）----
 # 不同资源广告形式/内容不同，站点 → 去广告插件组合在此编排；未匹配走默认（OCR + delogo）。
@@ -50,8 +62,13 @@ app = FastAPI(title="影视数据源服务", docs_url="/docs", lifespan=lifespan
 app.include_router(api_router)
 app.include_router(ad_api.api_router)
 
-# 前端静态资源（web/frontend/ 目录，由 frontend_loader 引擎加载）
-app.add_middleware(FrontendStaticLoader)
+# 前端静态资源（web/frontend/ 目录，由 fastapi-ui 前端加载引擎托管）
+# view_dir 按模块文件定位，不受启动时工作目录影响；spa_fallback 供前端路由深链刷新使用。
+mount_webui(
+    app,
+    view_dir_of(__file__, "web", "frontend"),
+    spa_fallback=True,
+)
 
 
 if __name__ == "__main__":
