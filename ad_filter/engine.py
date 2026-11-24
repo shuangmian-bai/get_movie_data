@@ -467,12 +467,26 @@ _last_seen: Dict[str, float] = {}
 
 
 def touch(sid: str) -> None:
-    """刷新会话心跳时间。"""
+    """刷新会话心跳（内存 + Redis，Redis 不可用只写内存）。"""
     _last_seen[sid] = time.time()
+    try:
+        from ad_filter import redis_store
+
+        redis_store.set_alive(sid)
+    except Exception:  # noqa: BLE001 - Redis 异常不影响主流程
+        pass
 
 
 def is_alive(sid: str, timeout: float = 30.0) -> bool:
-    """最近 timeout 秒内是否有心跳。"""
+    """最近 timeout 秒内是否有心跳（优先 Redis，不可用回退内存）。"""
+    try:
+        from ad_filter import redis_store
+
+        alive = redis_store.is_alive(sid)
+        if alive is not None:
+            return alive
+    except Exception:  # noqa: BLE001
+        pass
     return (time.time() - _last_seen.get(sid, 0.0)) < timeout
 
 
@@ -482,6 +496,12 @@ def cancel_advance(sid: str) -> None:
     if task is not None and not task.done():
         task.cancel()
     _last_seen.pop(sid, None)
+    try:
+        from ad_filter import redis_store
+
+        redis_store.clear(sid)
+    except Exception:  # noqa: BLE001
+        pass
     logger.info("会话 %s 停止后台处理（无用户心跳）", sid)
 
 
@@ -568,6 +588,12 @@ def set_position(
         _sessions[sid] = sess
     idx = segment_index_by_time(sess, max(0.0, float(seconds)))
     sess.position = idx
+    try:
+        from ad_filter import redis_store
+
+        redis_store.set_position(sid, idx)
+    except Exception:  # noqa: BLE001
+        pass
     touch(sid)
     ensure_advance(sid, detectors, remover)
     return idx

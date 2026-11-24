@@ -150,6 +150,8 @@ ad_filter/
 | `AD_FILTER_HTTP_PROXY` | `""`（空） | 显式代理地址（http/https/socks5），空则自动检测系统代理 |
 | `AD_FILTER_PREFETCH_LOOKAHEAD` | `3` | 预取窗口：当前分片之后提前处理 N 个 |
 | `AD_FILTER_PREFETCH_CONCURRENCY` | `2` | 预取并发数 |
+| `AD_FILTER_ADVANCE_CONCURRENCY` | `3` | 后台推进并行度 |
+| `AD_FILTER_REDIS_URL` | `""`（空） | 会话心跳/播放位置的 Redis 地址（空则用内存态） |
 
 ## 已知限制
 

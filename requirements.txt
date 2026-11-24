@@ -11,3 +11,7 @@ opencv-python-headless
 numpy
 # 中文 OCR（onnxruntime，纯 Python，替代系统 tesseract）
 rapidocr_onnxruntime
+# 投稿存储（MySQL 主存，未配置则降级 JSONL）
+pymysql
+# 会话心跳/播放位置（可选，未配置则用内存）
+redis
