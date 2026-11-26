@@ -401,7 +401,9 @@ async def handle_segment(
         if cached is not None:
             result = cached
         else:
-            result = await _process_segment(seg, sess.headers, detectors, remover, cdir)
+            result = await _process_segment(
+                seg, sess.headers, detectors, remover, cdir, prefetch=prefetch
+            )
     if not prefetch:
         idx = _index_of(sess, name)
         if idx is not None and sess.position < idx:
@@ -415,9 +417,16 @@ _prefetch_tasks: Dict[str, asyncio.Task] = {}
 
 # 全局分片处理闸门：主请求与预取共享，防止并发处理打满 CPU
 _process_sem: Optional[asyncio.Semaphore] = None
+_advance_sem: Optional[asyncio.Semaphore] = None
 
 
-def _get_process_sem() -> asyncio.Semaphore:
+def _get_process_sem(prefetch: bool = False) -> asyncio.Semaphore:
+    """处理闸门：所有分片处理共用主闸门（SEGMENT_CONCURRENCY，默认 4）。
+
+    优先级靠"让路"实现，而不是靠多开闸门（实测 4+2=6 任务 × 2 编码线程 = 12 线程
+    争 8 核，单任务被拖慢到 20-25 秒）：后台推进在检测到近期有用户请求时主动暂停，
+    把槽全部让给用户；用户离开后再继续补进度。
+    """
     global _process_sem
     if _process_sem is None:
         _process_sem = asyncio.Semaphore(max(1, config.SEGMENT_CONCURRENCY))
@@ -600,14 +609,19 @@ def set_position(
 
 
 async def _process_segment(
-    seg: _Segment, headers: Dict[str, str], detectors: List, remover, cdir: str
+    seg: _Segment,
+    headers: Dict[str, str],
+    detectors: List,
+    remover,
+    cdir: str,
+    prefetch: bool = False,
 ) -> Tuple[str, Optional[str]]:
     """下载 → 检测 → 按类型处理 → 写分片缓存。失败降级代理。
 
     全局处理闸门（SEGMENT_CONCURRENCY）限制同时处理的分片数：多用户/爬虫并发
     播放时即使请求量很大，也只会排队，不会把 CPU/内存打满导致整机卡死。
     """
-    async with _get_process_sem():
+    async with _get_process_sem(prefetch):
         return await _process_segment_inner(seg, headers, detectors, remover, cdir)
 
 
