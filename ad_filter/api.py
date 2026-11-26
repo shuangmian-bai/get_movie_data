@@ -56,10 +56,17 @@ async def process(req: ProcessRequest):
         raise HTTPException(status_code=400, detail="m3u8_url 不能为空")
     detectors, remover = _resolve(req.base_url)
     try:
-        return await engine.process(req, detectors, remover)
+        result = await engine.process(req, detectors, remover)
     except Exception as exc:  # noqa: BLE001 - 统一转 502
         logger.exception("去广告处理失败：%s", exc)
         raise HTTPException(status_code=502, detail=f"去广告处理失败：{exc}")
+    # 提前启动后台推进：用户还在初始化播放器时就开始处理前几片，缩短起播等待
+    try:
+        engine.touch(result.sid)
+        engine.ensure_advance(result.sid, detectors, remover)
+    except Exception:  # noqa: BLE001 - 预取启动失败不影响返回
+        pass
+    return result
 
 
 @api_router.get("/ad_filter/{sid}/index.m3u8")

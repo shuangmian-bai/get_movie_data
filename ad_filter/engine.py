@@ -470,6 +470,7 @@ def _index_of(sess: _Session, name: str) -> Optional[int]:
 
 
 _advance_tasks: Dict[str, asyncio.Task] = {}
+_priority_tasks: Dict[str, asyncio.Task] = {}
 
 # 会话最后心跳时间（WS 保活）；长时间无心跳视为用户已离开
 _last_seen: Dict[str, float] = {}
@@ -578,6 +579,25 @@ async def _advance_loop(sid: str, detectors: List, remover) -> None:
         logger.warning("推进任务异常 %s：%s", sid, exc)
 
 
+def _schedule_priority(
+    sid: str, index: int, detectors: List, remover
+) -> None:
+    """seek 优先：立即后台处理目标分片（只保留最新一次 seek 的目标）。"""
+    sess = _sessions.get(sid)
+    if sess is None or index < 0 or index >= len(sess.segments):
+        return
+    seg = sess.segments[index]
+    key = segment_cache_key(seg.abs_url, detectors)
+    if _read_result(segment_cache_dir(key)) is not None:
+        return  # 已缓存，命中即秒回
+    old = _priority_tasks.get(sid)
+    if old is not None and not old.done():
+        old.cancel()  # 连续拖动只处理最后一次目标
+    _priority_tasks[sid] = asyncio.create_task(
+        handle_segment(sid, seg.name, detectors, remover, prefetch=False)
+    )
+
+
 def set_position(
     sid: str, seconds: float, detectors: List, remover
 ) -> Optional[int]:
@@ -597,6 +617,7 @@ def set_position(
         _sessions[sid] = sess
     idx = segment_index_by_time(sess, max(0.0, float(seconds)))
     sess.position = idx
+    _schedule_priority(sid, idx, detectors, remover)
     try:
         from ad_filter import redis_store
 
