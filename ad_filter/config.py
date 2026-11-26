@@ -77,7 +77,8 @@ TOP_BANNER_HIT_RATIO: float = float(os.getenv("AD_FILTER_TOP_BANNER_HIT_RATIO", 
 # 顶部条幅违规词表（逗号分隔；专指顶部赞助/博彩类文字，与全屏 OCR 词表分开）
 TOP_BANNER_BLOCKWORDS: str = os.getenv(
     "AD_FILTER_TOP_BANNER_BLOCKWORDS",
-    "澳门,威尼斯人,116.am,新葡京,博彩,娱乐城,独家赞助",
+    "澳门,威尼斯人,新葡京,博彩,娱乐城,六合彩,时时彩,百家乐,棋牌,真人娱乐,"
+    "现场直播,女优,AV女优,先发牌,后下注,以小博大,提款,返水,首存,洗码,注册送,官网",
 )
 # 顶部条幅去除模式：inpaint（文字像素内容修复，画面完整，默认）/ crop（裁切）/ blur / black
 TOP_BANNER_REMOVE_MODE: str = os.getenv("AD_FILTER_TOP_BANNER_REMOVE_MODE", "inpaint")
