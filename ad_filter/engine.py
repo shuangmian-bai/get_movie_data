@@ -383,6 +383,9 @@ async def handle_segment(
     seg = next((s for s in sess.segments if s.name == name), None)
     if seg is None:
         return None
+    if not prefetch:
+        global _last_user_request
+        _last_user_request = time.time()
 
     key = segment_cache_key(seg.abs_url, detectors)
     cdir = segment_cache_dir(key)
@@ -418,20 +421,17 @@ _prefetch_tasks: Dict[str, asyncio.Task] = {}
 # 全局分片处理闸门：主请求与预取共享，防止并发处理打满 CPU
 _process_sem: Optional[asyncio.Semaphore] = None
 _advance_sem: Optional[asyncio.Semaphore] = None
+_last_user_request: float = 0.0  # 最近一次用户实时请求时间（预取据此让路）
 
 
 def _get_process_sem(prefetch: bool = False) -> asyncio.Semaphore:
-    """处理闸门：用户实时请求与后台预取**分开计数**。
+    """处理闸门：所有分片处理共用主闸门（SEGMENT_CONCURRENCY，默认 4）。
 
-    - 用户请求走主闸门（SEGMENT_CONCURRENCY，默认 4）；
-    - 后台推进走独立闸门（ADVANCE_CONCURRENCY，默认 2），避免占满主闸门
-      导致用户拉分片时排队等待（真实踩过：预取占满 4 个槽，用户请求要等 13-15 秒）。
+    优先级靠"让路"实现，而不是靠多开闸门（实测 4+2=6 任务 × 2 编码线程 = 12 线程
+    争 8 核，单任务被拖慢到 20-25 秒）：后台推进在检测到近期有用户请求时主动暂停，
+    把槽全部让给用户；用户离开后再继续补进度。
     """
-    global _process_sem, _advance_sem
-    if prefetch:
-        if _advance_sem is None:
-            _advance_sem = asyncio.Semaphore(max(1, config.ADVANCE_CONCURRENCY))
-        return _advance_sem
+    global _process_sem
     if _process_sem is None:
         _process_sem = asyncio.Semaphore(max(1, config.SEGMENT_CONCURRENCY))
     return _process_sem
@@ -549,6 +549,10 @@ async def _advance_loop(sid: str, detectors: List, remover) -> None:
             if idx >= total:
                 logger.info("会话 %s 已推进到末尾（%d 片）", sid, total)
                 return
+            # 用户正在观看（最近 5 秒有实时请求）→ 预取让路，避免挤占用户的分片处理
+            if time.time() - _last_user_request < 5.0:
+                await asyncio.sleep(1.0)
+                continue
             # 从当前位置起收集一批未处理分片，**并行**处理（串行会导致处理速度跟不上播放）
             batch = []
             scan = idx
