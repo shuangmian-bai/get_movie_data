@@ -73,6 +73,7 @@ class DelogoRemover(Remover):
 
             rate = in_v.average_rate or in_v.base_rate or 25
             out_v = out.add_stream("libx264", rate=rate)
+            out_v.thread_count = max(1, config.OUTPUT_THREADS)
             out_v.width = width
             out_v.height = height
             out_v.pix_fmt = "yuv420p"

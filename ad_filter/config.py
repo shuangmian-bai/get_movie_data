@@ -42,6 +42,8 @@ INPAINT_RADIUS: int = int(os.getenv("AD_FILTER_INPAINT_RADIUS", "3"))
 # 输出视频编码参数（PyAV/libx264）
 OUTPUT_CRF: str = os.getenv("AD_FILTER_OUTPUT_CRF", "26")
 OUTPUT_PRESET: str = os.getenv("AD_FILTER_OUTPUT_PRESET", "ultrafast")
+# 每个处理任务的编码线程数：多任务并行时限制线程可减少争抢（8 核 / 4 任务 ≈ 2）
+OUTPUT_THREADS: int = int(os.getenv("AD_FILTER_OUTPUT_THREADS", "2"))
 
 # ---- OCR 检测（rapidocr）----
 
