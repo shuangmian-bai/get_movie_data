@@ -33,7 +33,7 @@ HTTP_PROXY: str = os.getenv("AD_FILTER_HTTP_PROXY", "")
 # ---- 分片处理 ----
 
 # 分片「下载 + 检测 + 处理」并发数
-SEGMENT_CONCURRENCY: int = int(os.getenv("AD_FILTER_SEGMENT_CONCURRENCY", "4"))
+SEGMENT_CONCURRENCY: int = int(os.getenv("AD_FILTER_SEGMENT_CONCURRENCY", "1"))
 
 # ---- 去水印（opencv inpaint + PyAV 重编码）----
 
@@ -56,7 +56,7 @@ OCR_FRAME_COUNT: int = int(os.getenv("AD_FILTER_OCR_FRAME_COUNT", "2"))
 # OCR 识别置信度阈值（低于此值的文字忽略）
 OCR_SCORE_THRESHOLD: float = float(os.getenv("AD_FILTER_OCR_SCORE_THRESHOLD", "0.5"))
 # OCR 并发数（onnxruntime 推理较重，默认低并发）
-OCR_CONCURRENCY: int = int(os.getenv("AD_FILTER_OCR_CONCURRENCY", "2"))
+OCR_CONCURRENCY: int = int(os.getenv("AD_FILTER_OCR_CONCURRENCY", "4"))
 
 # ---- 广告分类阈值 ----
 
@@ -98,4 +98,4 @@ PREFETCH_LOOKAHEAD: int = int(os.getenv("AD_FILTER_PREFETCH_LOOKAHEAD", "3"))
 PREFETCH_CONCURRENCY: int = int(os.getenv("AD_FILTER_PREFETCH_CONCURRENCY", "2"))
 
 # 后台推进的并行度：同时处理多少个分片（与全局闸门共同生效）
-ADVANCE_CONCURRENCY: int = int(os.getenv("AD_FILTER_ADVANCE_CONCURRENCY", "3"))
+ADVANCE_CONCURRENCY: int = int(os.getenv("AD_FILTER_ADVANCE_CONCURRENCY", "1"))

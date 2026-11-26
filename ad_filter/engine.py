@@ -383,9 +383,6 @@ async def handle_segment(
     seg = next((s for s in sess.segments if s.name == name), None)
     if seg is None:
         return None
-    if not prefetch:
-        global _last_user_request
-        _last_user_request = time.time()
 
     key = segment_cache_key(seg.abs_url, detectors)
     cdir = segment_cache_dir(key)
@@ -421,7 +418,6 @@ _prefetch_tasks: Dict[str, asyncio.Task] = {}
 # 全局分片处理闸门：主请求与预取共享，防止并发处理打满 CPU
 _process_sem: Optional[asyncio.Semaphore] = None
 _advance_sem: Optional[asyncio.Semaphore] = None
-_last_user_request: float = 0.0  # 最近一次用户实时请求时间（预取据此让路）
 
 
 def _get_process_sem(prefetch: bool = False) -> asyncio.Semaphore:
@@ -549,10 +545,6 @@ async def _advance_loop(sid: str, detectors: List, remover) -> None:
             if idx >= total:
                 logger.info("会话 %s 已推进到末尾（%d 片）", sid, total)
                 return
-            # 用户正在观看（最近 5 秒有实时请求）→ 预取让路，避免挤占用户的分片处理
-            if time.time() - _last_user_request < 5.0:
-                await asyncio.sleep(1.0)
-                continue
             # 从当前位置起收集一批未处理分片，**并行**处理（串行会导致处理速度跟不上播放）
             batch = []
             scan = idx
