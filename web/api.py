@@ -27,7 +27,21 @@ def _get_plugin(base_url: str):
 def _search_cache_key(key: str, start: int, count: Optional[int]) -> str:
     """构造搜索缓存 key（含分页维度，不同分页参数不共享缓存）。"""
     count_str = "all" if count is None else str(count)
-    return f"search:{key}:{start}:{count_str}"
+    return f"search:v2:{key}:{start}:{count_str}"
+
+
+# 站点把下架影片的标题改成「该内容已下架」等文案（软下架，HTTP 仍 200/403），
+# 只能按标题识别并从结果里剔除；缓存键带 v2 版本，避免复用修剪前的旧缓存。
+_REMOVED_KEYWORDS = ("已下架", "该内容已下架", "内容已下架", "视频已删除", "资源已失效")
+
+
+def _is_removed(item: SearchItem) -> bool:
+    name = (item.name or "").strip()
+    return any(word in name for word in _REMOVED_KEYWORDS)
+
+
+def _prune_removed(items: List[SearchItem]) -> List[SearchItem]:
+    return [item for item in items if not _is_removed(item)]
 
 
 async def _search_one(
@@ -45,7 +59,7 @@ async def _search_one(
         items = await plugin.search_page(
             key, start=start, count=count, page_concurrency=page_concurrency
         )
-        return [item.model_dump() for item in items]
+        return [item.model_dump() for item in _prune_removed(items)]
 
     data = await file_cache.get_or_fetch(
         namespace, cache_key, config.SEARCH_CACHE_TTL, fetch
@@ -65,7 +79,7 @@ async def _search_batch(
         items = await plugin_manager.batch_search(
             key, base_urls or [], start=start, count=count, page_concurrency=page_concurrency
         )
-        return [item.model_dump() for item in items]
+        return [item.model_dump() for item in _prune_removed(items)]
 
     srcs = ",".join(sorted(base_urls)) if base_urls else "_all"
     cache_key = f"{_search_cache_key(key, start, count)}:{srcs}"
